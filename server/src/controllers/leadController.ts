@@ -239,71 +239,83 @@ export class LeadController {
       where: { isDefault: true },
     });
 
-    for (const record of records) {
-      try {
+    // Process in chunks of 500 for better DB performance
+    const CHUNK_SIZE = 500;
+    for (let chunk = 0; chunk < records.length; chunk += CHUNK_SIZE) {
+      const batch = records.slice(chunk, chunk + CHUNK_SIZE);
+      const leadsToUpsert: Array<{
+        phone: string;
+        firstName: string;
+        lastName: string;
+        email: string | null;
+        company: string | null;
+        state: string | null;
+        source: string;
+      }> = [];
+
+      // Parse and validate the batch
+      for (const record of batch) {
         const phone = (record.phone || record.Phone || record.PHONE || '').replace(/\D/g, '');
         if (!phone) {
           errors++;
-          errorDetails.push(`Row missing phone number`);
+          errorDetails.push('Row missing phone number');
           continue;
         }
 
         const e164Phone = phone.startsWith('1') ? `+${phone}` : `+1${phone}`;
-
         const firstName = record.firstName || record.first_name || record.FirstName || record.FIRST_NAME || 'Unknown';
         const lastName = record.lastName || record.last_name || record.LastName || record.LAST_NAME || '';
 
-        // Upsert to handle duplicates
-        const result = await prisma.lead.upsert({
-          where: { phone: e164Phone },
-          create: {
-            firstName,
-            lastName,
-            phone: e164Phone,
-            email: record.email || record.Email || record.EMAIL || null,
-            company: record.company || record.Company || record.COMPANY || null,
-            state: record.state || record.State || record.STATE || null,
-            source: record.source || record.Source || 'csv_import',
-          },
-          update: {
-            // Only update empty fields
-            lastName: { set: lastName || undefined },
-            email: record.email || record.Email || undefined,
-            company: record.company || record.Company || undefined,
-          },
+        leadsToUpsert.push({
+          phone: e164Phone,
+          firstName,
+          lastName,
+          email: record.email || record.Email || record.EMAIL || null,
+          company: record.company || record.Company || record.COMPANY || null,
+          state: record.state || record.State || record.STATE || null,
+          source: record.source || record.Source || 'csv_import',
         });
+      }
 
-        // Check if this was a new record or existing
-        const isNew = result.createdAt.getTime() > Date.now() - 5000; // Created in last 5 seconds
-        if (isNew) {
-          imported++;
-
-          // Create pipeline card for new leads (using pre-fetched default stage)
-          if (defaultStage) {
-            await prisma.pipelineCard.upsert({
-              where: { leadId: result.id },
-              create: {
-                leadId: result.id,
-                stageId: defaultStage.id,
+      // Batch upsert leads using a transaction
+      if (leadsToUpsert.length > 0) {
+        const results = await prisma.$transaction(
+          leadsToUpsert.map(lead =>
+            prisma.lead.upsert({
+              where: { phone: lead.phone },
+              create: lead,
+              update: {
+                lastName: { set: lead.lastName || undefined },
+                email: lead.email || undefined,
+                company: lead.company || undefined,
               },
-              update: {},
-            });
-          }
-        } else {
-          duplicates++;
+            })
+          )
+        );
+
+        // Create pipeline cards for new leads in batch
+        const newLeads = results.filter(r => r.createdAt.getTime() > Date.now() - 10000);
+        imported += newLeads.length;
+        duplicates += results.length - newLeads.length;
+
+        if (defaultStage && newLeads.length > 0) {
+          await prisma.pipelineCard.createMany({
+            data: newLeads.map(lead => ({
+              leadId: lead.id,
+              stageId: defaultStage.id,
+            })),
+            skipDuplicates: true,
+          });
         }
-      } catch (error: any) {
-        errors++;
-        errorDetails.push(error.message);
       }
     }
 
-    res.json ({
+    res.json({
       imported,
       duplicates,
       errors,
       total: records.length,
-      errorDetails: errorDetails.slice(0, 10), // First 10 errors
+      errorDetails: errorDetails.slice(0, 10),
     });
   }
 

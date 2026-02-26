@@ -31,7 +31,7 @@ export const config = {
 
   sms: {
     maxDailyPerNumber: parseInt(process.env.MAX_DAILY_MESSAGES_PER_NUMBER || '350', 10),
-    maxPerMinute: parseInt(process.env.MAX_MESSAGES_PER_MINUTE || '60', 10),
+    maxPerMinute: parseInt(process.env.MAX_MESSAGES_PER_MINUTE || '300', 10),
     rampUpEnabled: process.env.RAMP_UP_ENABLED === 'true',
     rampSchedule: [
       parseInt(process.env.RAMP_DAY_1_LIMIT || '50', 10),

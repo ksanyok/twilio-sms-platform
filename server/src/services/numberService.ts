@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import redis from '../config/redis';
 import getTwilioClient from '../config/twilio';
 import { config } from '../config';
 import logger from '../config/logger';
@@ -15,6 +16,62 @@ import { PhoneNumber, NumberStatus } from '@prisma/client';
  * - Daily counters reset at midnight
  */
 export class NumberService {
+
+  private static readonly NUMBERS_CACHE_TTL = 30; // 30 seconds
+
+  /**
+   * Get active numbers with Redis caching (30s TTL)
+   * Avoids querying all numbers on every single message send
+   */
+  private static async getActiveNumbersCached(
+    excludeNumbers: string[] = [],
+    poolId?: string
+  ): Promise<PhoneNumber[]> {
+    const cacheKey = `active-numbers:${poolId || 'all'}`;
+    const cached = await redis.get(cacheKey);
+
+    let numbers: PhoneNumber[];
+    if (cached) {
+      numbers = JSON.parse(cached);
+    } else {
+      const now = new Date();
+      numbers = await prisma.phoneNumber.findMany({
+        where: {
+          status: 'ACTIVE',
+          OR: [
+            { coolingUntil: null },
+            { coolingUntil: { lt: now } },
+          ],
+          ...(poolId && {
+            poolMemberships: {
+              some: { poolId },
+            },
+          }),
+        },
+        orderBy: [
+          { dailySentCount: 'asc' },
+          { deliveryRate: 'desc' },
+          { errorStreak: 'asc' },
+        ],
+      });
+      await redis.setex(cacheKey, this.NUMBERS_CACHE_TTL, JSON.stringify(numbers));
+    }
+
+    // Filter in JS (excludes + daily limit)
+    if (excludeNumbers.length > 0) {
+      numbers = numbers.filter(n => !excludeNumbers.includes(n.phoneNumber));
+    }
+
+    return numbers;
+  }
+
+  /**
+   * Invalidate active numbers cache (call after number changes)
+   */
+  static async invalidateNumbersCache(): Promise<void> {
+    const keys = await redis.keys('active-numbers:*');
+    if (keys.length > 0) await redis.del(...keys);
+  }
   
   /**
    * Get the best available number for sending
@@ -24,38 +81,7 @@ export class NumberService {
     excludeNumbers: string[] = [],
     poolId?: string
   ): Promise<PhoneNumber | null> {
-    const now = new Date();
-
-    const whereClause: any = {
-      status: NumberStatus.ACTIVE,
-      coolingUntil: {
-        OR: [{ equals: null }, { lt: now }],
-      },
-    };
-
-    // Build the query
-    const numbers = await prisma.phoneNumber.findMany({
-      where: {
-        status: 'ACTIVE',
-        OR: [
-          { coolingUntil: null },
-          { coolingUntil: { lt: now } },
-        ],
-        ...(excludeNumbers.length > 0 && {
-          phoneNumber: { notIn: excludeNumbers },
-        }),
-        ...(poolId && {
-          poolMemberships: {
-            some: { poolId },
-          },
-        }),
-      },
-      orderBy: [
-        { dailySentCount: 'asc' },       // Least used first
-        { deliveryRate: 'desc' },          // Best delivery rate
-        { errorStreak: 'asc' },            // Fewest errors
-      ],
-    });
+    const numbers = await this.getActiveNumbersCached(excludeNumbers, poolId);
 
     // Filter by daily limit (considering ramp-up)
     for (const number of numbers) {
@@ -231,6 +257,8 @@ export class NumberService {
       reason,
       coolingUntil,
     });
+
+    await this.invalidateNumbersCache();
   }
 
   /**

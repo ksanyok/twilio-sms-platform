@@ -26,9 +26,9 @@ const smsWorker = new Worker(
   },
   {
     connection: redis,
-    concurrency: 5, // Process 5 messages concurrently
+    concurrency: 15, // Process 15 messages concurrently (safe for 35+ numbers)
     limiter: {
-      max: 60,        // Max 60 per minute (Twilio rate limit safety)
+      max: 300,        // 300/min = 5 msg/sec — safe for 35 A2P 10DLC numbers
       duration: 60000,
     },
   }

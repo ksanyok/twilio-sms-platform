@@ -6,6 +6,8 @@ import { AutomationService } from '../services/automationService';
 import getTwilioClient from '../config/twilio';
 import { config } from '../config';
 import { validateRequest } from 'twilio';
+import { Queue, Worker } from 'bullmq';
+import redis from '../config/redis';
 
 const router = Router();
 
@@ -203,21 +205,47 @@ router.post('/inbound', async (req: Request, res: Response) => {
 });
 
 /**
+ * Status Callback Queue — process webhook asynchronously for instant Twilio response
+ */
+const statusQueue = new Queue('webhook-status', {
+  connection: redis,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 2000 },
+    removeOnComplete: { age: 3600, count: 5000 },
+    removeOnFail: { age: 86400 },
+  },
+});
+
+/**
  * Twilio Status Callback Webhook
- * Updates message delivery status
+ * Returns 200 immediately, processes asynchronously via BullMQ
  */
 router.post('/status', async (req: Request, res: Response) => {
-  try {
-    const {
-      MessageSid,
-      MessageStatus,
-      ErrorCode,
-      ErrorMessage,
-    } = req.body;
+  const { MessageSid, MessageStatus, ErrorCode, ErrorMessage } = req.body;
 
-    logger.debug(`Status callback: ${MessageSid} → ${MessageStatus}`);
+  // Respond immediately — never make Twilio wait
+  res.sendStatus(200);
 
-    // Map Twilio status to our status
+  // Queue for async processing
+  await statusQueue.add('process-status', {
+    messageSid: MessageSid,
+    messageStatus: MessageStatus,
+    errorCode: ErrorCode,
+    errorMessage: ErrorMessage,
+  }).catch(err => logger.error('Failed to queue status webhook:', { error: err.message }));
+});
+
+/**
+ * Status webhook worker — processes delivery updates asynchronously
+ */
+const statusWorker = new Worker(
+  'webhook-status',
+  async (job) => {
+    const { messageSid, messageStatus, errorCode, errorMessage } = job.data;
+
+    logger.debug(`Status callback: ${messageSid} → ${messageStatus}`);
+
     const statusMap: Record<string, string> = {
       queued: 'QUEUED',
       sending: 'SENDING',
@@ -227,97 +255,92 @@ router.post('/status', async (req: Request, res: Response) => {
       undelivered: 'UNDELIVERED',
     };
 
-    const mappedStatus = statusMap[MessageStatus] || MessageStatus.toUpperCase();
-
-    // Check if blocked by carrier
-    const isBlocked = ErrorCode === '30007' || ErrorCode === '30034';
+    const mappedStatus = statusMap[messageStatus] || messageStatus.toUpperCase();
+    const isBlocked = errorCode === '30007' || errorCode === '30034';
     const finalStatus = isBlocked ? 'BLOCKED' : mappedStatus;
 
-    // Update message
     const message = await prisma.message.findFirst({
-      where: { twilioMessageSid: MessageSid },
+      where: { twilioMessageSid: messageSid },
     });
 
-    if (message) {
-      await prisma.message.update({
-        where: { id: message.id },
-        data: {
-          status: finalStatus as any,
-          ...(finalStatus === 'DELIVERED' && { deliveredAt: new Date() }),
-          ...(finalStatus === 'FAILED' || finalStatus === 'UNDELIVERED' || isBlocked
-            ? {
-                failedAt: new Date(),
-                errorCode: ErrorCode,
-                errorMessage: ErrorMessage,
-              }
-            : {}),
-        },
-      });
+    if (!message) return;
 
-      // Update campaign stats if applicable
-      if (message.campaignId) {
-        const updateField =
-          finalStatus === 'DELIVERED'
-            ? 'totalDelivered'
-            : finalStatus === 'FAILED' || finalStatus === 'UNDELIVERED'
-            ? 'totalFailed'
-            : finalStatus === 'BLOCKED'
-            ? 'totalBlocked'
-            : null;
+    await prisma.message.update({
+      where: { id: message.id },
+      data: {
+        status: finalStatus as any,
+        ...(finalStatus === 'DELIVERED' && { deliveredAt: new Date() }),
+        ...(finalStatus === 'FAILED' || finalStatus === 'UNDELIVERED' || isBlocked
+          ? { failedAt: new Date(), errorCode, errorMessage }
+          : {}),
+      },
+    });
 
-        if (updateField) {
-          await prisma.campaign.update({
-            where: { id: message.campaignId },
-            data: { [updateField]: { increment: 1 } },
-          });
-        }
+    // Update campaign stats if applicable
+    if (message.campaignId) {
+      const updateField =
+        finalStatus === 'DELIVERED'
+          ? 'totalDelivered'
+          : finalStatus === 'FAILED' || finalStatus === 'UNDELIVERED'
+          ? 'totalFailed'
+          : finalStatus === 'BLOCKED'
+          ? 'totalBlocked'
+          : null;
 
-        // Update campaign lead status
-        if (message.phoneNumberId) {
-          const conversation = await prisma.conversation.findUnique({
-            where: { id: message.conversationId },
-          });
-
-          if (conversation) {
-            await prisma.campaignLead.updateMany({
-              where: {
-                campaignId: message.campaignId,
-                leadId: conversation.leadId,
-              },
-              data: {
-                status: finalStatus === 'DELIVERED' ? 'DELIVERED' : 'FAILED',
-                ...(finalStatus === 'DELIVERED' && { deliveredAt: new Date() }),
-                ...(ErrorCode && { errorCode: ErrorCode }),
-              },
-            });
-          }
-        }
+      if (updateField) {
+        await prisma.campaign.update({
+          where: { id: message.campaignId },
+          data: { [updateField]: { increment: 1 } },
+        });
       }
 
-      // Update number health stats
       if (message.phoneNumberId) {
-        if (finalStatus === 'DELIVERED') {
-          await prisma.phoneNumber.update({
-            where: { id: message.phoneNumberId },
-            data: { totalDelivered: { increment: 1 } },
-          });
-        } else if (isBlocked) {
-          await prisma.phoneNumber.update({
-            where: { id: message.phoneNumberId },
+        const conversation = await prisma.conversation.findUnique({
+          where: { id: message.conversationId },
+        });
+
+        if (conversation) {
+          await prisma.campaignLead.updateMany({
+            where: {
+              campaignId: message.campaignId,
+              leadId: conversation.leadId,
+            },
             data: {
-              totalBlocked: { increment: 1 },
-              errorStreak: { increment: 1 },
+              status: finalStatus === 'DELIVERED' ? 'DELIVERED' : 'FAILED',
+              ...(finalStatus === 'DELIVERED' && { deliveredAt: new Date() }),
+              ...(errorCode && { errorCode }),
             },
           });
         }
       }
     }
 
-    res.sendStatus(200);
-  } catch (error: any) {
-    logger.error('Status webhook error:', { error: error.message });
-    res.sendStatus(200); // Always return 200 to Twilio
+    // Update number health stats
+    if (message.phoneNumberId) {
+      if (finalStatus === 'DELIVERED') {
+        await prisma.phoneNumber.update({
+          where: { id: message.phoneNumberId },
+          data: { totalDelivered: { increment: 1 } },
+        });
+      } else if (isBlocked) {
+        await prisma.phoneNumber.update({
+          where: { id: message.phoneNumberId },
+          data: {
+            totalBlocked: { increment: 1 },
+            errorStreak: { increment: 1 },
+          },
+        });
+      }
+    }
+  },
+  {
+    connection: redis,
+    concurrency: 10, // Process 10 status updates in parallel
   }
+);
+
+statusWorker.on('failed', (job, err) => {
+  logger.error(`Status webhook processing failed: ${job?.id}`, { error: err.message });
 });
 
 export default router;
