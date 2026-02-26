@@ -1,0 +1,347 @@
+import prisma from '../config/database';
+import getTwilioClient from '../config/twilio';
+import { config } from '../config';
+import logger from '../config/logger';
+import { PhoneNumber, NumberStatus } from '@prisma/client';
+
+/**
+ * NumberService - Manages phone number pool, rotation, reputation & ramp-up
+ * 
+ * Key design decisions for high-volume:
+ * - Numbers are reputation-grouped into pools
+ * - Smart rotation distributes load evenly
+ * - Ramp-up schedule prevents carrier filtering
+ * - Cooling logic removes underperforming numbers temporarily
+ * - Daily counters reset at midnight
+ */
+export class NumberService {
+  
+  /**
+   * Get the best available number for sending
+   * Considers: daily limit, ramp schedule, health, cooling status
+   */
+  static async getBestAvailableNumber(
+    excludeNumbers: string[] = [],
+    poolId?: string
+  ): Promise<PhoneNumber | null> {
+    const now = new Date();
+
+    const whereClause: any = {
+      status: NumberStatus.ACTIVE,
+      coolingUntil: {
+        OR: [{ equals: null }, { lt: now }],
+      },
+    };
+
+    // Build the query
+    const numbers = await prisma.phoneNumber.findMany({
+      where: {
+        status: 'ACTIVE',
+        OR: [
+          { coolingUntil: null },
+          { coolingUntil: { lt: now } },
+        ],
+        ...(excludeNumbers.length > 0 && {
+          phoneNumber: { notIn: excludeNumbers },
+        }),
+        ...(poolId && {
+          poolMemberships: {
+            some: { poolId },
+          },
+        }),
+      },
+      orderBy: [
+        { dailySentCount: 'asc' },       // Least used first
+        { deliveryRate: 'desc' },          // Best delivery rate
+        { errorStreak: 'asc' },            // Fewest errors
+      ],
+    });
+
+    // Filter by daily limit (considering ramp-up)
+    for (const number of numbers) {
+      const limit = this.getDailyLimit(number);
+      if (number.dailySentCount < limit) {
+        return number;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Get daily limit considering ramp-up schedule
+   */
+  static getDailyLimit(number: PhoneNumber): number {
+    if (!number.isRamping || !config.sms.rampUpEnabled) {
+      return number.dailyLimit;
+    }
+
+    const rampDay = Math.min(number.rampDay, config.sms.rampSchedule.length);
+    return config.sms.rampSchedule[rampDay - 1] || number.dailyLimit;
+  }
+
+  /**
+   * Get the sticky sender for a conversation, or assign a new one
+   */
+  static async getStickyNumber(
+    leadPhone: string,
+    repId?: string
+  ): Promise<PhoneNumber | null> {
+    // First, check if there's an existing conversation with a sticky number
+    const conversation = await prisma.conversation.findFirst({
+      where: {
+        lead: { phone: leadPhone },
+        stickyNumberId: { not: null },
+      },
+    });
+
+    if (conversation?.stickyNumberId) {
+      const stickyNumber = await prisma.phoneNumber.findUnique({
+        where: { id: conversation.stickyNumberId },
+      });
+
+      if (stickyNumber && stickyNumber.status === 'ACTIVE') {
+        const limit = this.getDailyLimit(stickyNumber);
+        if (stickyNumber.dailySentCount < limit) {
+          return stickyNumber;
+        }
+      }
+    }
+
+    // If rep has assigned numbers, prefer those
+    if (repId) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const assignment = await prisma.numberAssignment.findFirst({
+        where: {
+          userId: repId,
+          isActive: true,
+          assignedDate: { gte: today },
+        },
+        include: { phoneNumber: true },
+        orderBy: { phoneNumber: { dailySentCount: 'asc' } },
+      });
+
+      if (assignment?.phoneNumber && assignment.phoneNumber.status === 'ACTIVE') {
+        return assignment.phoneNumber;
+      }
+    }
+
+    // Fall back to best available
+    return this.getBestAvailableNumber();
+  }
+
+  /**
+   * Record a send and update number statistics
+   */
+  static async recordSend(
+    phoneNumberId: string,
+    success: boolean,
+    blocked: boolean = false
+  ): Promise<void> {
+    const updates: any = {
+      dailySentCount: { increment: 1 },
+      totalSent: { increment: 1 },
+      lastSentAt: new Date(),
+    };
+
+    if (success) {
+      updates.totalDelivered = { increment: 1 };
+      updates.errorStreak = 0;
+    } else if (blocked) {
+      updates.totalBlocked = { increment: 1 };
+      updates.errorStreak = { increment: 1 };
+    } else {
+      updates.totalFailed = { increment: 1 };
+      updates.errorStreak = { increment: 1 };
+      updates.lastErrorAt = new Date();
+    }
+
+    const number = await prisma.phoneNumber.update({
+      where: { id: phoneNumberId },
+      data: updates,
+    });
+
+    // Check if number needs cooling
+    if (number.errorStreak >= 5) {
+      await this.coolNumber(phoneNumberId, 'High error streak');
+    }
+
+    // Update delivery rate
+    if (number.totalSent > 0) {
+      const deliveryRate = (number.totalDelivered / number.totalSent) * 100;
+      await prisma.phoneNumber.update({
+        where: { id: phoneNumberId },
+        data: { deliveryRate },
+      });
+    }
+
+    // Update daily stats
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    await prisma.dailyNumberStats.upsert({
+      where: {
+        phoneNumberId_date: {
+          phoneNumberId,
+          date: today,
+        },
+      },
+      create: {
+        phoneNumberId,
+        date: today,
+        sent: 1,
+        delivered: success ? 1 : 0,
+        failed: !success && !blocked ? 1 : 0,
+        blocked: blocked ? 1 : 0,
+      },
+      update: {
+        sent: { increment: 1 },
+        ...(success && { delivered: { increment: 1 } }),
+        ...(!success && !blocked && { failed: { increment: 1 } }),
+        ...(blocked && { blocked: { increment: 1 } }),
+      },
+    });
+  }
+
+  /**
+   * Cool down a number temporarily
+   */
+  static async coolNumber(
+    phoneNumberId: string,
+    reason: string,
+    hours: number = 24
+  ): Promise<void> {
+    const coolingUntil = new Date();
+    coolingUntil.setHours(coolingUntil.getHours() + hours);
+
+    await prisma.phoneNumber.update({
+      where: { id: phoneNumberId },
+      data: {
+        status: 'COOLING',
+        coolingUntil,
+        cooldownReason: reason,
+      },
+    });
+
+    logger.warn(`Number ${phoneNumberId} cooled down: ${reason}`, {
+      phoneNumberId,
+      reason,
+      coolingUntil,
+    });
+  }
+
+  /**
+   * Reset daily counters (run at midnight)
+   */
+  static async resetDailyCounters(): Promise<void> {
+    await prisma.phoneNumber.updateMany({
+      data: { dailySentCount: 0 },
+    });
+
+    // Advance ramp day for ramping numbers
+    await prisma.phoneNumber.updateMany({
+      where: { isRamping: true },
+      data: { rampDay: { increment: 1 } },
+    });
+
+    // Graduate numbers that completed ramp-up
+    await prisma.phoneNumber.updateMany({
+      where: {
+        isRamping: true,
+        rampDay: { gt: config.sms.rampSchedule.length },
+      },
+      data: {
+        isRamping: false,
+      },
+    });
+
+    // Restore cooled numbers whose cooling period expired
+    await prisma.phoneNumber.updateMany({
+      where: {
+        status: 'COOLING',
+        coolingUntil: { lt: new Date() },
+      },
+      data: {
+        status: 'ACTIVE',
+        coolingUntil: null,
+        cooldownReason: null,
+        errorStreak: 0,
+      },
+    });
+
+    logger.info('Daily number counters reset');
+  }
+
+  /**
+   * Assign numbers to a rep for the day
+   */
+  static async assignNumbersToRep(
+    repId: string,
+    phoneNumberIds: string[]
+  ): Promise<void> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Deactivate old assignments
+    await prisma.numberAssignment.updateMany({
+      where: {
+        userId: repId,
+        isActive: true,
+      },
+      data: { isActive: false },
+    });
+
+    // Create new assignments
+    await prisma.numberAssignment.createMany({
+      data: phoneNumberIds.map((phoneNumberId) => ({
+        userId: repId,
+        phoneNumberId,
+        assignedDate: today,
+        isActive: true,
+      })),
+      skipDuplicates: true,
+    });
+
+    logger.info(`Assigned ${phoneNumberIds.length} numbers to rep ${repId}`);
+  }
+
+  /**
+   * Get number health overview for monitoring dashboard
+   */
+  static async getNumberHealthOverview() {
+    const numbers = await prisma.phoneNumber.findMany({
+      select: {
+        id: true,
+        phoneNumber: true,
+        status: true,
+        dailySentCount: true,
+        dailyLimit: true,
+        deliveryRate: true,
+        errorStreak: true,
+        isRamping: true,
+        rampDay: true,
+        coolingUntil: true,
+        cooldownReason: true,
+      },
+      orderBy: { phoneNumber: 'asc' },
+    });
+
+    const summary = {
+      total: numbers.length,
+      active: numbers.filter((n) => n.status === 'ACTIVE').length,
+      warming: numbers.filter((n) => n.status === 'WARMING').length,
+      cooling: numbers.filter((n) => n.status === 'COOLING').length,
+      suspended: numbers.filter((n) => n.status === 'SUSPENDED').length,
+      totalCapacity: numbers.reduce((sum, n) => sum + n.dailyLimit, 0),
+      totalUsed: numbers.reduce((sum, n) => sum + n.dailySentCount, 0),
+      avgDeliveryRate:
+        numbers.length > 0
+          ? numbers.reduce((sum, n) => sum + n.deliveryRate, 0) / numbers.length
+          : 0,
+    };
+
+    return { numbers, summary };
+  }
+}

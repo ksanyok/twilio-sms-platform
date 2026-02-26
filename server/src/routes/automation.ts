@@ -1,0 +1,21 @@
+import { Router } from 'express';
+import { AutomationController } from '../controllers/automationController';
+import { authenticate, requireRole } from '../middleware/auth';
+
+const router = Router();
+
+const asyncHandler = (fn: Function) => (req: any, res: any, next: any) =>
+  Promise.resolve(fn(req, res, next)).catch(next);
+
+router.use(authenticate);
+
+router.get('/rules', asyncHandler(AutomationController.listRules));
+router.get('/rules/:id', asyncHandler(AutomationController.getRule));
+router.post('/rules', requireRole('ADMIN', 'MANAGER'), asyncHandler(AutomationController.createRule));
+router.put('/rules/:id', requireRole('ADMIN', 'MANAGER'), asyncHandler(AutomationController.updateRule));
+router.post('/start', requireRole('ADMIN', 'MANAGER'), asyncHandler(AutomationController.startForLead));
+router.post('/start-bulk', requireRole('ADMIN', 'MANAGER'), asyncHandler(AutomationController.startForLeads));
+router.post('/runs/:id/pause', asyncHandler(AutomationController.pauseRun));
+router.post('/runs/:id/resume', asyncHandler(AutomationController.resumeRun));
+
+export default router;
