@@ -134,6 +134,7 @@ export class NumberService {
 
   /**
    * Record a send and update number statistics
+   * NOTE: totalDelivered is updated by the Twilio status webhook, not here
    */
   static async recordSend(
     phoneNumberId: string,
@@ -147,8 +148,8 @@ export class NumberService {
     };
 
     if (success) {
-      updates.totalDelivered = { increment: 1 };
-      updates.errorStreak = 0;
+      // Delivery confirmation comes from Twilio webhook, not here
+      updates.errorStreak = { set: 0 };
     } else if (blocked) {
       updates.totalBlocked = { increment: 1 };
       updates.errorStreak = { increment: 1 };

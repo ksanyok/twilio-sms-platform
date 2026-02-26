@@ -40,7 +40,7 @@ export default function InboxPage() {
   const conversations: Conversation[] = conversationsData?.conversations || [];
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-full min-h-0">
       {/* Conversation List */}
       <div className="w-[380px] flex flex-col border-r border-dark-700/50 bg-dark-900/50">
         {/* Search Header */}

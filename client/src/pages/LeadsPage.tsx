@@ -25,7 +25,7 @@ import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { clsx } from 'clsx';
 
-const STATUSES = ['NEW', 'CONTACTED', 'ENGAGED', 'QUALIFIED', 'CONVERTED', 'DEAD', 'DNC'];
+const STATUSES = ['NEW', 'CONTACTED', 'REPLIED', 'INTERESTED', 'DOCS_REQUESTED', 'SUBMITTED', 'FUNDED', 'NOT_INTERESTED', 'DNC'];
 
 export default function LeadsPage() {
   const [search, setSearch] = useState('');
@@ -50,8 +50,8 @@ export default function LeadsPage() {
   });
 
   const leads = data?.leads || [];
-  const total = data?.total || 0;
-  const totalPages = data?.totalPages || 1;
+  const total = data?.pagination?.total || 0;
+  const totalPages = data?.pagination?.pages || 1;
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -136,9 +136,9 @@ export default function LeadsPage() {
               onChange={(e) => {
                 if (e.target.value) {
                   bulkMutation.mutate({
-                    action: 'changeStatus',
+                    action: 'change_status',
                     leadIds: Array.from(selected),
-                    status: e.target.value,
+                    data: { status: e.target.value },
                   });
                 }
               }}
@@ -314,14 +314,18 @@ function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     NEW: 'bg-blue-500/20 text-blue-300',
     CONTACTED: 'bg-yellow-500/20 text-yellow-300',
-    ENGAGED: 'bg-scl-500/20 text-scl-300',
-    QUALIFIED: 'bg-emerald-500/20 text-emerald-300',
-    CONVERTED: 'bg-green-500/20 text-green-300',
-    DEAD: 'bg-dark-700 text-dark-400',
+    REPLIED: 'bg-scl-500/20 text-scl-300',
+    INTERESTED: 'bg-emerald-500/20 text-emerald-300',
+    DOCS_REQUESTED: 'bg-purple-500/20 text-purple-300',
+    SUBMITTED: 'bg-cyan-500/20 text-cyan-300',
+    FUNDED: 'bg-green-500/20 text-green-300',
+    NOT_INTERESTED: 'bg-dark-700 text-dark-400',
     DNC: 'bg-red-500/20 text-red-300',
   };
   return (
-    <span className={clsx('badge', styles[status] || 'badge-info')}>{status}</span>
+    <span className={clsx('badge', styles[status] || 'badge-info')}>
+      {status?.replace(/_/g, ' ')}
+    </span>
   );
 }
 

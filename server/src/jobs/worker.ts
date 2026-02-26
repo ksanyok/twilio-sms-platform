@@ -1,5 +1,6 @@
 import { Worker, Job } from 'bullmq';
 import redis from '../config/redis';
+import prisma from '../config/database';
 import { SendingEngine } from '../services/sendingEngine';
 import logger from '../config/logger';
 
@@ -76,9 +77,6 @@ const campaignWorker = new Worker(
 );
 
 async function processCampaignStart(campaignId: string, options: any): Promise<void> {
-  const { PrismaClient } = await import('@prisma/client');
-  const prisma = new PrismaClient();
-
   try {
     const campaign = await prisma.campaign.findUnique({
       where: { id: campaignId },
@@ -128,25 +126,19 @@ async function processCampaignStart(campaignId: string, options: any): Promise<v
     });
 
     logger.info(`Campaign ${campaignId} started: ${result.queued} queued, ${result.skipped} skipped`);
-  } finally {
-    await prisma.$disconnect();
+  } catch (error: any) {
+    logger.error(`Campaign ${campaignId} start error:`, { error: error.message });
+    throw error;
   }
 }
 
 async function processCampaignPause(campaignId: string): Promise<void> {
-  const { PrismaClient } = await import('@prisma/client');
-  const prisma = new PrismaClient();
+  await prisma.campaign.update({
+    where: { id: campaignId },
+    data: { status: 'PAUSED' },
+  });
 
-  try {
-    await prisma.campaign.update({
-      where: { id: campaignId },
-      data: { status: 'PAUSED' },
-    });
-
-    logger.info(`Campaign ${campaignId} paused`);
-  } finally {
-    await prisma.$disconnect();
-  }
+  logger.info(`Campaign ${campaignId} paused`);
 }
 
 logger.info('🚀 SMS Queue Worker started');
@@ -157,7 +149,6 @@ process.on('SIGTERM', async () => {
   logger.info('Shutting down workers...');
   await smsWorker.close();
   await campaignWorker.close();
-  process.exit(0);
 });
 
 export { smsWorker, campaignWorker };

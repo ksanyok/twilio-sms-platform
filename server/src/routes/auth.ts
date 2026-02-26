@@ -1,14 +1,25 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/authController';
 import { authenticate, requireRole } from '../middleware/auth';
+import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
 const asyncHandler = (fn: Function) => (req: any, res: any, next: any) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
+// Rate limit login attempts: 10 per 15 minutes per IP
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many login attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+});
+
 // Public
-router.post('/login', asyncHandler(AuthController.login));
+router.post('/login', loginLimiter, asyncHandler(AuthController.login));
 
 // Protected
 router.get('/me', authenticate, asyncHandler(AuthController.getMe));

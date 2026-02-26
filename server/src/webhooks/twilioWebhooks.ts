@@ -5,8 +5,46 @@ import { ComplianceService } from '../services/complianceService';
 import { AutomationService } from '../services/automationService';
 import getTwilioClient from '../config/twilio';
 import { config } from '../config';
+import { validateRequest } from 'twilio';
 
 const router = Router();
+
+/**
+ * Twilio webhook signature validation middleware
+ * Validates that incoming requests are genuinely from Twilio
+ */
+function validateTwilioSignature(req: Request, res: Response, next: Function): void {
+  // Skip validation in development if no auth token configured
+  if (config.env === 'development' && !config.twilio.authToken) {
+    return next();
+  }
+
+  const twilioSignature = req.headers['x-twilio-signature'] as string;
+  if (!twilioSignature) {
+    logger.warn('Missing Twilio signature header');
+    res.status(403).json({ error: 'Missing signature' });
+    return;
+  }
+
+  const url = `${config.webhookBaseUrl}${req.originalUrl}`;
+  const isValid = validateRequest(
+    config.twilio.authToken,
+    twilioSignature,
+    url,
+    req.body
+  );
+
+  if (!isValid) {
+    logger.warn('Invalid Twilio signature', { url, signature: twilioSignature });
+    res.status(403).json({ error: 'Invalid signature' });
+    return;
+  }
+
+  next();
+}
+
+// Apply signature validation to all webhook routes
+router.use(validateTwilioSignature);
 
 /**
  * Twilio Inbound Message Webhook
@@ -97,7 +135,30 @@ router.post('/inbound', async (req: Request, res: Response) => {
         },
       });
 
-      // TODO: Emit Socket.IO event for real-time inbox update
+      // Emit Socket.IO event for real-time inbox update
+      const io = req.app.get('io');
+      if (io) {
+        const updatedConversation = await prisma.conversation.findUnique({
+          where: { id: conversation.id },
+          include: {
+            lead: { select: { id: true, firstName: true, lastName: true, phone: true } },
+            messages: { take: 1, orderBy: { createdAt: 'desc' } },
+          },
+        });
+        // Notify assigned rep
+        if (conversation.assignedRepId) {
+          io.to(`inbox:${conversation.assignedRepId}`).emit('new-message', {
+            conversation: updatedConversation,
+          });
+        }
+        // Notify conversation viewers
+        io.to(`conversation:${conversation.id}`).emit('message', {
+          conversationId: conversation.id,
+          direction: 'INBOUND',
+          body: Body,
+          from: From,
+        });
+      }
     } else {
       // Unknown number - create a lead record
       const newLead = await prisma.lead.create({

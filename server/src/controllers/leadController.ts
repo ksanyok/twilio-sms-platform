@@ -234,6 +234,11 @@ export class LeadController {
     let errors = 0;
     const errorDetails: string[] = [];
 
+    // Query default stage ONCE before the loop
+    const defaultStage = await prisma.pipelineStage.findFirst({
+      where: { isDefault: true },
+    });
+
     for (const record of records) {
       try {
         const phone = (record.phone || record.Phone || record.PHONE || '').replace(/\D/g, '');
@@ -273,11 +278,7 @@ export class LeadController {
         if (isNew) {
           imported++;
 
-          // Create pipeline card for new leads
-          const defaultStage = await prisma.pipelineStage.findFirst({
-            where: { isDefault: true },
-          });
-
+          // Create pipeline card for new leads (using pre-fetched default stage)
           if (defaultStage) {
             await prisma.pipelineCard.upsert({
               where: { leadId: result.id },

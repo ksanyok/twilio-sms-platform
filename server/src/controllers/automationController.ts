@@ -105,9 +105,23 @@ export class AutomationController {
         ...(sendBeforeHour !== undefined && { sendBeforeHour }),
         ...(sendOnWeekends !== undefined && { sendOnWeekends }),
       },
+      include: {
+        templates: { orderBy: { sequenceOrder: 'asc' } },
+      },
     });
 
     res.json({ rule });
+  }
+
+  static async deleteRule(req: AuthRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    // Delete templates first, then runs, then the rule
+    await prisma.automationTemplate.deleteMany({ where: { automationRuleId: id } });
+    await prisma.automationRun.deleteMany({ where: { automationRuleId: id } });
+    await prisma.automationRule.delete({ where: { id } });
+
+    res.json({ message: 'Automation rule deleted' });
   }
 
   static async startForLead(req: AuthRequest, res: Response): Promise<void> {

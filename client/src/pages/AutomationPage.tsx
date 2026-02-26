@@ -4,22 +4,15 @@ import api from '../services/api';
 import {
   Zap,
   Plus,
-  Play,
-  Pause,
   Trash2,
   Edit3,
   Clock,
   MessageSquare,
   Target,
-  Users,
   ChevronDown,
   X,
-  MoreVertical,
-  CheckCircle2,
-  AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
 import { clsx } from 'clsx';
 
 export default function AutomationPage() {
@@ -30,14 +23,14 @@ export default function AutomationPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['automations'],
     queryFn: async () => {
-      const { data } = await api.get('/automation');
+      const { data } = await api.get('/automation/rules');
       return data;
     },
   });
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      api.put(`/automation/${id}`, { isActive }),
+      api.put(`/automation/rules/${id}`, { isActive }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['automations'] });
       toast.success('Rule updated');
@@ -45,7 +38,7 @@ export default function AutomationPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/automation/${id}`),
+    mutationFn: (id: string) => api.delete(`/automation/rules/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['automations'] });
       toast.success('Rule deleted');
@@ -56,7 +49,6 @@ export default function AutomationPage() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-dark-50">Automation</h1>
@@ -73,7 +65,6 @@ export default function AutomationPage() {
         </button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         <div className="stat-card">
           <div className="flex items-center justify-between">
@@ -104,7 +95,6 @@ export default function AutomationPage() {
         </div>
       </div>
 
-      {/* Rules List */}
       <div className="space-y-4">
         {isLoading &&
           [...Array(3)].map((_, i) => (
@@ -118,7 +108,6 @@ export default function AutomationPage() {
           <div key={rule.id} className="card p-5 hover:border-dark-600 transition-colors">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-4">
-                {/* Status Toggle */}
                 <button
                   onClick={() =>
                     toggleMutation.mutate({ id: rule.id, isActive: !rule.isActive })
@@ -141,15 +130,15 @@ export default function AutomationPage() {
                   <div className="flex items-center gap-3 mt-1.5">
                     <span className={clsx(
                       'badge text-[10px]',
-                      rule.trigger === 'LEAD_CREATED'
+                      rule.type === 'LEAD_CREATED'
                         ? 'bg-blue-500/20 text-blue-300'
-                        : rule.trigger === 'STATUS_CHANGED'
+                        : rule.type === 'STATUS_CHANGED'
                         ? 'bg-yellow-500/20 text-yellow-300'
-                        : rule.trigger === 'KEYWORD_RECEIVED'
+                        : rule.type === 'KEYWORD_RECEIVED'
                         ? 'bg-purple-500/20 text-purple-300'
                         : 'bg-dark-700 text-dark-400'
                     )}>
-                      {rule.trigger.replace(/_/g, ' ')}
+                      {(rule.type || 'UNKNOWN').replace(/_/g, ' ')}
                     </span>
                     <span className="text-xs text-dark-500">
                       {rule.templates?.length || 0} steps
@@ -159,22 +148,17 @@ export default function AutomationPage() {
                     </span>
                   </div>
 
-                  {/* Template Sequence Visualization */}
                   {rule.templates?.length > 0 && (
-                    <div className="mt-3 flex items-center gap-2">
+                    <div className="mt-3 flex items-center gap-2 flex-wrap">
                       {rule.templates
-                        .sort((a: any, b: any) => a.stepOrder - b.stepOrder)
+                        .sort((a: any, b: any) => a.sequenceOrder - b.sequenceOrder)
                         .map((t: any, i: number) => (
                           <div key={t.id} className="flex items-center gap-2">
                             <div className="bg-dark-800 rounded-lg px-3 py-1.5 text-xs text-dark-300 border border-dark-700/50">
-                              <span className="text-dark-500 mr-1">Step {t.stepOrder}:</span>
-                              {t.body.slice(0, 40)}...
+                              <span className="text-dark-500 mr-1">Step {t.sequenceOrder}:</span>
+                              {(t.messageTemplate || '').slice(0, 40)}...
                               <span className="text-dark-500 ml-2">
-                                ({t.delayMinutes >= 1440
-                                  ? `${Math.floor(t.delayMinutes / 1440)}d`
-                                  : t.delayMinutes >= 60
-                                  ? `${Math.floor(t.delayMinutes / 60)}h`
-                                  : `${t.delayMinutes}m`})
+                                ({t.delayDays}d)
                               </span>
                             </div>
                             {i < rule.templates.length - 1 && (
@@ -188,10 +172,7 @@ export default function AutomationPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setEditingRule(rule)}
-                  className="btn-ghost p-2"
-                >
+                <button onClick={() => setEditingRule(rule)} className="btn-ghost p-2">
                   <Edit3 className="w-4 h-4" />
                 </button>
                 <button
@@ -216,17 +197,13 @@ export default function AutomationPage() {
             <p className="text-sm text-dark-500 mt-1">
               Create your first rule to automate follow-up sequences
             </p>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="btn-primary mt-4"
-            >
+            <button onClick={() => setShowCreate(true)} className="btn-primary mt-4">
               Create Rule
             </button>
           </div>
         )}
       </div>
 
-      {/* Create/Edit Modal */}
       {(showCreate || editingRule) && (
         <AutomationModal
           rule={editingRule}
@@ -246,21 +223,26 @@ function AutomationModal({ rule, onClose }: { rule?: any; onClose: () => void })
 
   const [form, setForm] = useState({
     name: rule?.name || '',
-    trigger: rule?.trigger || 'LEAD_CREATED',
-    conditions: rule?.conditions || {},
+    type: rule?.type || 'LEAD_CREATED',
+    triggerConfig: rule?.triggerConfig || {},
+    actionConfig: rule?.actionConfig || {},
     isActive: rule?.isActive ?? true,
   });
 
   const [templates, setTemplates] = useState<any[]>(
-    rule?.templates?.sort((a: any, b: any) => a.stepOrder - b.stepOrder).map((t: any) => ({
-      body: t.body,
-      delayMinutes: t.delayMinutes,
-    })) || [{ body: '', delayMinutes: 60 }]
+    rule?.templates
+      ?.sort((a: any, b: any) => a.sequenceOrder - b.sequenceOrder)
+      .map((t: any) => ({
+        messageTemplate: t.messageTemplate,
+        delayDays: t.delayDays,
+      })) || [{ messageTemplate: '', delayDays: 1 }]
   );
 
   const saveMutation = useMutation({
     mutationFn: (data: any) =>
-      isEdit ? api.put(`/automation/${rule.id}`, data) : api.post('/automation', data),
+      isEdit
+        ? api.put(`/automation/rules/${rule.id}`, data)
+        : api.post('/automation/rules', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['automations'] });
       toast.success(isEdit ? 'Rule updated' : 'Rule created');
@@ -271,18 +253,24 @@ function AutomationModal({ rule, onClose }: { rule?: any; onClose: () => void })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || templates.some((t) => !t.body)) {
+    if (!form.name || templates.some((t) => !t.messageTemplate)) {
       toast.error('Fill in all required fields');
       return;
     }
     saveMutation.mutate({
       ...form,
-      templates: templates.map((t, i) => ({ ...t, stepOrder: i + 1 })),
+      templates: templates.map((t, i) => ({
+        messageTemplate: t.messageTemplate,
+        delayDays: t.delayDays,
+        sequenceOrder: i + 1,
+      })),
     });
   };
 
-  const addStep = () => setTemplates([...templates, { body: '', delayMinutes: 1440 }]);
-  const removeStep = (i: number) => setTemplates(templates.filter((_, idx) => idx !== i));
+  const addStep = () =>
+    setTemplates([...templates, { messageTemplate: '', delayDays: 1 }]);
+  const removeStep = (i: number) =>
+    setTemplates(templates.filter((_, idx) => idx !== i));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-8">
@@ -309,11 +297,11 @@ function AutomationModal({ rule, onClose }: { rule?: any; onClose: () => void })
           </div>
 
           <div>
-            <label className="label">Trigger</label>
+            <label className="label">Trigger Type</label>
             <select
               className="input"
-              value={form.trigger}
-              onChange={(e) => setForm({ ...form, trigger: e.target.value })}
+              value={form.type}
+              onChange={(e) => setForm({ ...form, type: e.target.value })}
             >
               <option value="LEAD_CREATED">Lead Created</option>
               <option value="STATUS_CHANGED">Status Changed</option>
@@ -323,20 +311,28 @@ function AutomationModal({ rule, onClose }: { rule?: any; onClose: () => void })
             </select>
           </div>
 
-          {/* Sequence Steps */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <label className="label mb-0">Message Sequence</label>
-              <button type="button" onClick={addStep} className="text-xs text-scl-400 hover:text-scl-300 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={addStep}
+                className="text-xs text-scl-400 hover:text-scl-300 flex items-center gap-1"
+              >
                 <Plus className="w-3 h-3" />
                 Add Step
               </button>
             </div>
             <div className="space-y-3">
               {templates.map((tpl, i) => (
-                <div key={i} className="bg-dark-800/50 rounded-lg p-4 border border-dark-700/50">
+                <div
+                  key={i}
+                  className="bg-dark-800/50 rounded-lg p-4 border border-dark-700/50"
+                >
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold text-dark-400">Step {i + 1}</span>
+                    <span className="text-xs font-semibold text-dark-400">
+                      Step {i + 1}
+                    </span>
                     {templates.length > 1 && (
                       <button
                         type="button"
@@ -350,10 +346,10 @@ function AutomationModal({ rule, onClose }: { rule?: any; onClose: () => void })
                   <textarea
                     className="input min-h-[80px] resize-none text-sm mb-2"
                     placeholder="Message body. Use {{firstName}}, {{lastName}}, etc."
-                    value={tpl.body}
+                    value={tpl.messageTemplate}
                     onChange={(e) => {
                       const next = [...templates];
-                      next[i] = { ...next[i], body: e.target.value };
+                      next[i] = { ...next[i], messageTemplate: e.target.value };
                       setTemplates(next);
                     }}
                   />
@@ -363,18 +359,18 @@ function AutomationModal({ rule, onClose }: { rule?: any; onClose: () => void })
                     <input
                       type="number"
                       className="input w-20 py-1 text-sm"
-                      value={tpl.delayMinutes}
+                      value={tpl.delayDays}
                       onChange={(e) => {
                         const next = [...templates];
-                        next[i] = { ...next[i], delayMinutes: parseInt(e.target.value) || 0 };
+                        next[i] = {
+                          ...next[i],
+                          delayDays: parseInt(e.target.value) || 0,
+                        };
                         setTemplates(next);
                       }}
                       min={0}
                     />
-                    <span className="text-xs text-dark-500">minutes</span>
-                    <span className="text-[10px] text-dark-600 ml-2">
-                      (1440 = 1 day, 60 = 1 hour)
-                    </span>
+                    <span className="text-xs text-dark-500">days</span>
                   </div>
                 </div>
               ))}
@@ -385,8 +381,16 @@ function AutomationModal({ rule, onClose }: { rule?: any; onClose: () => void })
             <button type="button" onClick={onClose} className="btn-ghost">
               Cancel
             </button>
-            <button type="submit" disabled={saveMutation.isPending} className="btn-primary">
-              {saveMutation.isPending ? 'Saving...' : isEdit ? 'Update Rule' : 'Create Rule'}
+            <button
+              type="submit"
+              disabled={saveMutation.isPending}
+              className="btn-primary"
+            >
+              {saveMutation.isPending
+                ? 'Saving...'
+                : isEdit
+                ? 'Update Rule'
+                : 'Create Rule'}
             </button>
           </div>
         </form>

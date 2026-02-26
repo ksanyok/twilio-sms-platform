@@ -38,9 +38,10 @@ describe('Auth API', () => {
   });
 
   afterAll(async () => {
-    // Удаляем зависимые записи перед удалением пользователей
+    // Удаляем только пользователей, созданных ЭТИМ тестовым файлом
+    const ownEmails = ['test-admin@test.com', 'test-rep@test.com', 'test-manager@test.com', 'test-new@test.com'];
     const testUsers = await prisma.user.findMany({
-      where: { email: { startsWith: 'test-' } },
+      where: { email: { in: ownEmails } },
       select: { id: true },
     });
     const userIds = testUsers.map(u => u.id);
@@ -48,7 +49,7 @@ describe('Auth API', () => {
       await prisma.campaign.deleteMany({ where: { createdById: { in: userIds } } });
     }
     await prisma.user.deleteMany({
-      where: { email: { startsWith: 'test-' } },
+      where: { email: { in: ownEmails } },
     });
   });
 

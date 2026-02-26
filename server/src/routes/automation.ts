@@ -13,6 +13,7 @@ router.get('/rules', asyncHandler(AutomationController.listRules));
 router.get('/rules/:id', asyncHandler(AutomationController.getRule));
 router.post('/rules', requireRole('ADMIN', 'MANAGER'), asyncHandler(AutomationController.createRule));
 router.put('/rules/:id', requireRole('ADMIN', 'MANAGER'), asyncHandler(AutomationController.updateRule));
+router.delete('/rules/:id', requireRole('ADMIN', 'MANAGER'), asyncHandler(AutomationController.deleteRule));
 router.post('/start', requireRole('ADMIN', 'MANAGER'), asyncHandler(AutomationController.startForLead));
 router.post('/start-bulk', requireRole('ADMIN', 'MANAGER'), asyncHandler(AutomationController.startForLeads));
 router.post('/runs/:id/pause', asyncHandler(AutomationController.pauseRun));

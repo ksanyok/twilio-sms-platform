@@ -66,7 +66,7 @@ export default function NumbersPage() {
   const coolingCount = numbers.filter((n: any) => n.status === 'COOLING').length;
   const flaggedCount = numbers.filter((n: any) => n.status === 'FLAGGED').length;
   const avgHealth = numbers.length > 0
-    ? Math.round(numbers.reduce((sum: number, n: any) => sum + (n.healthScore || 0), 0) / numbers.length)
+    ? Math.round(numbers.reduce((sum: number, n: any) => sum + (n.deliveryRate || 0), 0) / numbers.length)
     : 0;
 
   return (
@@ -138,7 +138,7 @@ export default function NumbersPage() {
                   </span>
                 </div>
                 <p className="text-xs text-dark-500 mt-1">
-                  {pool._count?.numbers || 0} numbers · {pool.strategy}
+                  {pool._count?.members || 0} numbers
                 </p>
               </div>
             ))}
@@ -182,17 +182,14 @@ export default function NumbersPage() {
                   <td className="table-td">
                     <div className="flex items-center gap-2">
                       <Phone className="w-4 h-4 text-dark-500" />
-                      <span className="text-sm font-mono text-dark-200">{number.phone}</span>
+                      <span className="text-sm font-mono text-dark-200">{number.phoneNumber}</span>
                     </div>
-                    {number.friendlyName && (
-                      <p className="text-xs text-dark-500 mt-0.5 ml-6">{number.friendlyName}</p>
-                    )}
                   </td>
                   <td className="table-td">
                     <NumberStatusBadge status={number.status} />
                   </td>
                   <td className="table-td">
-                    <HealthBar score={number.healthScore} />
+                    <HealthBar score={Math.round(number.deliveryRate || 0)} />
                   </td>
                   <td className="table-td">
                     <span className="text-sm text-dark-300">{number.dailySentCount}</span>
@@ -206,27 +203,21 @@ export default function NumbersPage() {
                       (number.deliveryRate || 0) >= 95 ? 'text-emerald-400' :
                       (number.deliveryRate || 0) >= 85 ? 'text-yellow-400' : 'text-red-400'
                     )}>
-                      {((number.deliveryRate || 0) * 100).toFixed(1)}%
+                      {(number.deliveryRate || 0).toFixed(1)}%
                     </span>
                   </td>
                   <td className="table-td">
                     <span className="text-sm text-dark-400">
-                      Day {number.rampUpDay || 0}
+                      {number.isRamping ? `Day ${number.rampDay || 0}` : 'Done'}
                     </span>
                   </td>
                   <td className="table-td">
-                    {number.assignments?.length > 0 ? (
-                      <span className="text-sm text-dark-300">
-                        {number.assignments[0]?.user?.name || '—'}
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => setShowAssign(number.id)}
-                        className="text-xs text-scl-400 hover:text-scl-300"
-                      >
-                        Assign
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setShowAssign(number.id)}
+                      className="text-xs text-scl-400 hover:text-scl-300"
+                    >
+                      Assign
+                    </button>
                   </td>
                   <td className="table-td">
                     <div className="flex items-center gap-1">
@@ -304,7 +295,7 @@ function AssignModal({ numberId, onClose }: { numberId: string; onClose: () => v
 
   const assignMutation = useMutation({
     mutationFn: (userId: string) =>
-      api.post(`/numbers/${numberId}/assign`, { userId }),
+      api.post('/numbers/assign', { repId: userId, phoneNumberIds: [numberId] }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['numbers'] });
       toast.success('Number assigned');

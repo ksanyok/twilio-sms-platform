@@ -76,7 +76,6 @@ export default function DashboardPage() {
           value={stats?.overview.sentLast24h || 0}
           icon={Send}
           color="indigo"
-          trend={12}
         />
         <StatCard
           label="Total Leads"
@@ -89,7 +88,6 @@ export default function DashboardPage() {
           value={`${stats?.overview.replyRate || 0}%`}
           icon={MessageSquare}
           color="green"
-          trend={3.2}
         />
         <StatCard
           label="Active Automations"

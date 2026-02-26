@@ -227,7 +227,7 @@ function UsersTab() {
 }
 
 function CreateUserModal({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'REP' });
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', role: 'REP' });
   const queryClient = useQueryClient();
 
   const createMutation = useMutation({
@@ -251,9 +251,15 @@ function CreateUserModal({ onClose }: { onClose: () => void }) {
           onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }}
           className="space-y-4"
         >
-          <div>
-            <label className="label">Name</label>
-            <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">First Name</label>
+              <input className="input" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} required />
+            </div>
+            <div>
+              <label className="label">Last Name</label>
+              <input className="input" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
+            </div>
           </div>
           <div>
             <label className="label">Email</label>
@@ -297,14 +303,21 @@ function SuppressionTab() {
   });
 
   const addMutation = useMutation({
-    mutationFn: () =>
-      api.post('/settings/suppression', {
-        phones: phones.split('\n').filter(Boolean).map((p) => p.trim()),
-      }),
+    mutationFn: async () => {
+      const phoneList = phones.split('\n').filter(Boolean).map((p) => p.trim());
+      const results = [];
+      for (const phone of phoneList) {
+        try {
+          await api.post('/settings/suppression', { phone, reason: 'manual' });
+          results.push(phone);
+        } catch { /* skip duplicates */ }
+      }
+      return { added: results.length };
+    },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['suppression'] });
       setPhones('');
-      toast.success(`Added ${res.data.added} to suppression list`);
+      toast.success(`Added ${res.added} to suppression list`);
     },
   });
 
@@ -341,7 +354,7 @@ function SuppressionTab() {
         <ShieldX className="w-5 h-5 text-red-400" />
         <div>
           <p className="text-sm font-medium text-dark-200">
-            {data?.total || 0} suppressed numbers
+            {data?.pagination?.total || 0} suppressed numbers
           </p>
           <p className="text-xs text-dark-500">
             Last 20 shown below
@@ -370,7 +383,7 @@ function SystemTab() {
   const { data } = useQuery({
     queryKey: ['systemSettings'],
     queryFn: async () => {
-      const { data } = await api.get('/settings');
+      const { data } = await api.get('/settings/settings');
       return data;
     },
   });

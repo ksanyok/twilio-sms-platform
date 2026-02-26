@@ -60,7 +60,7 @@ export default function PipelinePage() {
   const { data, isLoading } = useQuery({
     queryKey: ['pipeline'],
     queryFn: async () => {
-      const { data } = await api.get('/pipeline');
+      const { data } = await api.get('/pipeline/stages');
       return data;
     },
   });

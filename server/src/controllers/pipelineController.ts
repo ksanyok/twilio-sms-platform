@@ -138,12 +138,15 @@ export class PipelineController {
   static async reorderStages(req: AuthRequest, res: Response): Promise<void> {
     const { stageOrder } = req.body; // [{ id, order }]
 
-    for (const item of stageOrder) {
-      await prisma.pipelineStage.update({
-        where: { id: item.id },
-        data: { order: item.order },
-      });
-    }
+    // Use transaction for atomic reorder
+    await prisma.$transaction(
+      stageOrder.map((item: { id: string; order: number }) =>
+        prisma.pipelineStage.update({
+          where: { id: item.id },
+          data: { order: item.order },
+        })
+      )
+    );
 
     res.json({ message: 'Stages reordered' });
   }

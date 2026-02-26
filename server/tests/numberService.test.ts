@@ -80,7 +80,8 @@ describe('NumberService', () => {
       });
       expect(numberAfter!.dailySentCount).toBe(countBefore + 1);
       expect(numberAfter!.totalSent).toBeGreaterThan(numberBefore!.totalSent);
-      expect(numberAfter!.totalDelivered).toBeGreaterThan(numberBefore!.totalDelivered);
+      // totalDelivered is now updated by Twilio webhook, not recordSend
+      expect(numberAfter!.errorStreak).toBe(0);
     });
 
     it('увеличивает totalFailed при ошибке', async () => {

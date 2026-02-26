@@ -5,6 +5,11 @@ import prisma from './config/database';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+
+// Import workers so they start with the server
+import './jobs/worker';
+import './jobs/automationWorker';
 
 const httpServer = createServer(app);
 
@@ -32,6 +37,21 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     logger.debug(`Socket disconnected: ${socket.id}`);
   });
+});
+
+// Socket.IO auth middleware
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
+  if (!token) {
+    return next(new Error('Authentication required'));
+  }
+  try {
+    const decoded = jwt.verify(token, config.jwtSecret) as any;
+    (socket as any).userId = decoded.id;
+    next();
+  } catch {
+    next(new Error('Invalid token'));
+  }
 });
 
 // Make io accessible to routes
