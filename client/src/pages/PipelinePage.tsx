@@ -322,10 +322,16 @@ export default function PipelinePage() {
       if (overIdStr.startsWith('stage-')) {
         targetStageId = overIdStr.replace('stage-', '');
       } else {
-        // Dropped on another card — find its stage
-        const overCard = findCard(overIdStr);
-        const overStage = overCard ? findStageByCardId(overIdStr) : undefined;
-        targetStageId = overStage?.id || '';
+        // Check if dropped on a stage droppable zone (raw stage ID without prefix)
+        const droppedOnStage = stages.find(s => s.id === overIdStr);
+        if (droppedOnStage) {
+          targetStageId = droppedOnStage.id;
+        } else {
+          // Dropped on another card — find its stage
+          const overCard = findCard(overIdStr);
+          const overStage = overCard ? findStageByCardId(overIdStr) : undefined;
+          targetStageId = overStage?.id || '';
+        }
       }
 
       if (!targetStageId) return;
