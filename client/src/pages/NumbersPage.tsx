@@ -1,31 +1,67 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import {
   Phone,
   Activity,
-  Thermometer,
   Snowflake,
-  Zap,
-  Users,
-  BarChart3,
-  Shield,
   Plus,
-  MoreVertical,
   RefreshCw,
-  PauseCircle,
   PlayCircle,
   AlertTriangle,
   CheckCircle2,
   X,
+  Trash2,
+  Edit3,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Hash,
+  ArrowUpDown,
+  Signal,
+  CloudDownload,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
 import { clsx } from 'clsx';
 
+/* ─── Types ─── */
+interface PhoneNumberItem {
+  id: string;
+  phoneNumber: string;
+  friendlyName: string | null;
+  twilioSid: string;
+  status: 'ACTIVE' | 'COOLING' | 'WARMING' | 'FLAGGED' | 'DISABLED' | 'SUSPENDED';
+  dailySentCount: number;
+  dailyLimit: number;
+  deliveryRate: number;
+  totalSent: number;
+  totalDelivered: number;
+  totalFailed: number;
+  errorStreak: number;
+  isRamping: boolean;
+  rampDay: number;
+  coolingUntil: string | null;
+  cooldownReason: string | null;
+  createdAt: string;
+  lastSentAt: string | null;
+  assignments: { user: { id: string; firstName: string; lastName: string } }[];
+}
+
+type SortField = 'phoneNumber' | 'status' | 'dailySentCount' | 'deliveryRate' | 'rampDay';
+type SortDir = 'asc' | 'desc';
+
+/* ─── Main Page ─── */
 export default function NumbersPage() {
-  const [showAssign, setShowAssign] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editNumber, setEditNumber] = useState<PhoneNumberItem | null>(null);
+  const [showAssign, setShowAssign] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<PhoneNumberItem | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [sortField, setSortField] = useState<SortField>('phoneNumber');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['numbers'],
@@ -43,6 +79,7 @@ export default function NumbersPage() {
     },
   });
 
+  /* Mutations */
   const coolMutation = useMutation({
     mutationFn: (id: string) => api.post(`/numbers/${id}/cool`, { reason: 'manual', hours: 24 }),
     onSuccess: () => {
@@ -61,15 +98,85 @@ export default function NumbersPage() {
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to activate'),
   });
 
-  const numbers = data?.numbers || [];
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/numbers/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['numbers'] });
+      toast.success('Number deleted');
+      setDeleteConfirm(null);
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to delete'),
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: () => api.post('/numbers/sync-twilio'),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['numbers'] });
+      toast.success(res.data.message);
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Twilio sync failed'),
+  });
+
+  const numbers: PhoneNumberItem[] = data?.numbers || [];
   const pools = poolsData?.pools || [];
 
-  const activeCount = numbers.filter((n: any) => n.status === 'ACTIVE').length;
-  const coolingCount = numbers.filter((n: any) => n.status === 'COOLING').length;
-  const flaggedCount = numbers.filter((n: any) => n.status === 'FLAGGED').length;
+  /* Stats */
+  const activeCount = numbers.filter((n) => n.status === 'ACTIVE').length;
+  const coolingCount = numbers.filter((n) => n.status === 'COOLING').length;
+  const flaggedCount = numbers.filter((n) => n.status === 'FLAGGED').length;
+  const warmingCount = numbers.filter((n) => n.status === 'WARMING').length;
   const avgHealth = numbers.length > 0
-    ? Math.round(numbers.reduce((sum: number, n: any) => sum + (n.deliveryRate || 0), 0) / numbers.length)
+    ? Math.round(numbers.reduce((sum, n) => sum + (n.deliveryRate || 0), 0) / numbers.length)
     : 0;
+  const totalCapacity = numbers.reduce((sum, n) => sum + n.dailyLimit, 0);
+  const totalUsed = numbers.reduce((sum, n) => sum + n.dailySentCount, 0);
+
+  /* Filter & sort */
+  const filteredNumbers = useMemo(() => {
+    let list = [...numbers];
+
+    if (statusFilter !== 'ALL') {
+      list = list.filter((n) => n.status === statusFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (n) =>
+          n.phoneNumber.includes(q) ||
+          (n.friendlyName && n.friendlyName.toLowerCase().includes(q))
+      );
+    }
+
+    list.sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case 'phoneNumber': cmp = a.phoneNumber.localeCompare(b.phoneNumber); break;
+        case 'status': cmp = a.status.localeCompare(b.status); break;
+        case 'dailySentCount': cmp = a.dailySentCount - b.dailySentCount; break;
+        case 'deliveryRate': cmp = a.deliveryRate - b.deliveryRate; break;
+        case 'rampDay': cmp = (a.rampDay || 0) - (b.rampDay || 0); break;
+      }
+      return sortDir === 'desc' ? -cmp : cmp;
+    });
+
+    return list;
+  }, [numbers, statusFilter, search, sortField, sortDir]);
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  }
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 text-dark-600" />;
+    return sortDir === 'asc'
+      ? <ChevronUp className="w-3 h-3 text-scl-400" />
+      : <ChevronDown className="w-3 h-3 text-scl-400" />;
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -77,18 +184,28 @@ export default function NumbersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-dark-50">Phone Numbers</h1>
-          <p className="text-sm text-dark-400 mt-1">{numbers.length} numbers in pool</p>
+          <p className="text-sm text-dark-400 mt-1">
+            {numbers.length} number{numbers.length !== 1 ? 's' : ''} · Capacity: {totalUsed.toLocaleString()}/{totalCapacity.toLocaleString()} today
+          </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending}
+            className="btn-ghost flex items-center gap-2 text-sm"
+          >
+            <CloudDownload className={clsx('w-4 h-4', syncMutation.isPending && 'animate-pulse')} />
+            {syncMutation.isPending ? 'Syncing…' : 'Sync Twilio'}
+          </button>
           <button
             onClick={() => queryClient.invalidateQueries({ queryKey: ['numbers'] })}
-            className="btn-ghost flex items-center gap-2"
+            className="btn-ghost flex items-center gap-2 text-sm"
           >
             <RefreshCw className="w-4 h-4" />
             Refresh
           </button>
           <button
-            onClick={() => toast('Number import coming soon. Add numbers via Twilio Console and they\'ll appear here.', { icon: 'ℹ️' })}
+            onClick={() => setShowAddModal(true)}
             className="btn-primary flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
@@ -97,65 +214,69 @@ export default function NumbersPage() {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-dark-400">Active</span>
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-          </div>
-          <p className="text-2xl font-bold text-dark-50 mt-2">{activeCount}</p>
-        </div>
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-dark-400">Cooling</span>
-            <Snowflake className="w-5 h-5 text-blue-400" />
-          </div>
-          <p className="text-2xl font-bold text-dark-50 mt-2">{coolingCount}</p>
-        </div>
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-dark-400">Flagged</span>
-            <AlertTriangle className="w-5 h-5 text-red-400" />
-          </div>
-          <p className="text-2xl font-bold text-dark-50 mt-2">{flaggedCount}</p>
-        </div>
-        <div className="stat-card">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-dark-400">Avg Health</span>
-            <Activity className="w-5 h-5 text-scl-400" />
-          </div>
-          <p className="text-2xl font-bold text-dark-50 mt-2">{avgHealth}%</p>
-        </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <StatCard label="Active" value={activeCount} icon={<CheckCircle2 className="w-5 h-5" />} color="emerald" />
+        <StatCard label="Warming" value={warmingCount} icon={<Signal className="w-5 h-5" />} color="yellow" />
+        <StatCard label="Cooling" value={coolingCount} icon={<Snowflake className="w-5 h-5" />} color="blue" />
+        <StatCard label="Flagged" value={flaggedCount} icon={<AlertTriangle className="w-5 h-5" />} color="red" />
+        <StatCard label="Avg Health" value={`${avgHealth}%`} icon={<Activity className="w-5 h-5" />} color="scl" />
+        <StatCard label="Sent Today" value={totalUsed.toLocaleString()} icon={<Hash className="w-5 h-5" />} color="purple" />
       </div>
 
-      {/* Number Pools */}
+      {/* Pools Section */}
       {pools.length > 0 && (
         <div className="card p-4">
           <h3 className="text-sm font-semibold text-dark-200 mb-3">Number Pools</h3>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="flex flex-wrap gap-3">
             {pools.map((pool: any) => (
               <div
                 key={pool.id}
-                className="bg-dark-800/50 rounded-lg p-3 border border-dark-700/50"
+                className="bg-dark-800/50 rounded-lg px-4 py-2.5 border border-dark-700/50 flex items-center gap-3"
               >
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-dark-200">{pool.name}</p>
-                  <span className={clsx(
-                    'badge text-[10px]',
-                    pool.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-dark-700 text-dark-400'
-                  )}>
-                    {pool.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <p className="text-xs text-dark-500 mt-1">
-                  {pool._count?.members || 0} numbers
-                </p>
+                <p className="text-sm font-medium text-dark-200">{pool.name}</p>
+                <span className={clsx(
+                  'text-[10px] px-1.5 py-0.5 rounded-full font-medium',
+                  pool.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-dark-700 text-dark-400'
+                )}>
+                  {pool.isActive ? 'Active' : 'Off'}
+                </span>
+                <span className="text-xs text-dark-500">{pool._count?.members || 0} nums</span>
               </div>
             ))}
           </div>
         </div>
       )}
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-500" />
+          <input
+            type="text"
+            placeholder="Search by number or name…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input pl-9 w-full"
+          />
+        </div>
+        <div className="flex items-center gap-1.5">
+          {['ALL', 'ACTIVE', 'WARMING', 'COOLING', 'FLAGGED', 'DISABLED'].map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={clsx(
+                'px-3 py-1.5 text-xs rounded-lg font-medium transition-colors',
+                statusFilter === s
+                  ? 'bg-scl-600/20 text-scl-300 border border-scl-600/40'
+                  : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-dark-200'
+              )}
+            >
+              {s === 'ALL' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase()}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Numbers Table */}
       <div className="card overflow-hidden">
@@ -163,15 +284,25 @@ export default function NumbersPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-dark-700/50">
-                <th className="table-th">Number</th>
-                <th className="table-th">Status</th>
+                <th className="table-th cursor-pointer select-none" onClick={() => toggleSort('phoneNumber')}>
+                  <div className="flex items-center gap-1">Number <SortIcon field="phoneNumber" /></div>
+                </th>
+                <th className="table-th cursor-pointer select-none" onClick={() => toggleSort('status')}>
+                  <div className="flex items-center gap-1">Status <SortIcon field="status" /></div>
+                </th>
                 <th className="table-th">Health</th>
-                <th className="table-th">Sent Today</th>
+                <th className="table-th cursor-pointer select-none" onClick={() => toggleSort('dailySentCount')}>
+                  <div className="flex items-center gap-1">Sent Today <SortIcon field="dailySentCount" /></div>
+                </th>
                 <th className="table-th">Daily Limit</th>
-                <th className="table-th">Delivery Rate</th>
-                <th className="table-th">Ramp Day</th>
+                <th className="table-th cursor-pointer select-none" onClick={() => toggleSort('deliveryRate')}>
+                  <div className="flex items-center gap-1">Delivery <SortIcon field="deliveryRate" /></div>
+                </th>
+                <th className="table-th cursor-pointer select-none" onClick={() => toggleSort('rampDay')}>
+                  <div className="flex items-center gap-1">Ramp <SortIcon field="rampDay" /></div>
+                </th>
                 <th className="table-th">Assigned To</th>
-                <th className="table-th w-20">Actions</th>
+                <th className="table-th w-28 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -185,25 +316,77 @@ export default function NumbersPage() {
                     ))}
                   </tr>
                 ))}
-              {numbers.map((number: any) => (
+
+              {!isLoading && filteredNumbers.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="text-center py-16">
+                    <Phone className="w-10 h-10 text-dark-600 mx-auto mb-3" />
+                    <p className="text-dark-400 text-sm">
+                      {numbers.length === 0 ? 'No phone numbers yet' : 'No numbers match filters'}
+                    </p>
+                    {numbers.length === 0 && (
+                      <div className="flex items-center justify-center gap-3 mt-4">
+                        <button onClick={() => setShowAddModal(true)} className="btn-primary text-sm flex items-center gap-2">
+                          <Plus className="w-4 h-4" /> Add Number
+                        </button>
+                        <button onClick={() => syncMutation.mutate()} className="btn-ghost text-sm flex items-center gap-2">
+                          <CloudDownload className="w-4 h-4" /> Sync from Twilio
+                        </button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              )}
+
+              {filteredNumbers.map((number) => {
+                const assignee = number.assignments?.[0]?.user;
+                const isExpanded = expandedRow === number.id;
+
+                return (
                 <tr
                   key={number.id}
-                  className="border-b border-dark-800/50 hover:bg-dark-800/30 transition-colors"
+                  className={clsx(
+                    'border-b border-dark-800/50 transition-colors',
+                    isExpanded ? 'bg-dark-800/40' : 'hover:bg-dark-800/20'
+                  )}
                 >
                   <td className="table-td">
+                    <button
+                      onClick={() => setExpandedRow(isExpanded ? null : number.id)}
+                      className="flex items-center gap-2 group text-left"
+                    >
+                      <Phone className="w-4 h-4 text-dark-500 group-hover:text-scl-400 transition-colors shrink-0" />
+                      <div>
+                        <span className="text-sm font-mono text-dark-200">{number.phoneNumber}</span>
+                        {number.friendlyName && number.friendlyName !== number.phoneNumber && (
+                          <p className="text-[10px] text-dark-500 leading-tight">{number.friendlyName}</p>
+                        )}
+                      </div>
+                    </button>
+                    {isExpanded && (
+                      <div className="mt-2 pl-6 pb-1 grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                        <div><span className="text-dark-500">SID:</span> <span className="text-dark-300 font-mono">{number.twilioSid?.startsWith('manual_') ? 'Manual' : (number.twilioSid?.length > 20 ? number.twilioSid.slice(0, 20) + '…' : number.twilioSid)}</span></div>
+                        <div><span className="text-dark-500">Created:</span> <span className="text-dark-300">{new Date(number.createdAt).toLocaleDateString()}</span></div>
+                        <div><span className="text-dark-500">Total Sent:</span> <span className="text-dark-300">{(number.totalSent ?? 0).toLocaleString()}</span></div>
+                        <div><span className="text-dark-500">Delivered:</span> <span className="text-dark-300">{(number.totalDelivered ?? 0).toLocaleString()}</span></div>
+                        <div><span className="text-dark-500">Failed:</span> <span className="text-dark-300">{(number.totalFailed ?? 0).toLocaleString()}</span></div>
+                        <div><span className="text-dark-500">Error Streak:</span> <span className={clsx('text-dark-300', (number.errorStreak || 0) > 3 && 'text-red-400')}>{number.errorStreak || 0}</span></div>
+                        {number.coolingUntil && (
+                          <div className="col-span-2"><span className="text-dark-500">Cooling Until:</span> <span className="text-blue-300">{new Date(number.coolingUntil).toLocaleString()}</span> — {number.cooldownReason}</div>
+                        )}
+                        {number.lastSentAt && (
+                          <div><span className="text-dark-500">Last Sent:</span> <span className="text-dark-300">{new Date(number.lastSentAt).toLocaleString()}</span></div>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="table-td"><NumberStatusBadge status={number.status} /></td>
+                  <td className="table-td"><HealthBar score={Math.round(number.deliveryRate || 0)} /></td>
+                  <td className="table-td">
                     <div className="flex items-center gap-2">
-                      <Phone className="w-4 h-4 text-dark-500" />
-                      <span className="text-sm font-mono text-dark-200">{number.phoneNumber}</span>
+                      <span className="text-sm text-dark-300">{number.dailySentCount}</span>
+                      <UsageBar used={number.dailySentCount} limit={number.dailyLimit} />
                     </div>
-                  </td>
-                  <td className="table-td">
-                    <NumberStatusBadge status={number.status} />
-                  </td>
-                  <td className="table-td">
-                    <HealthBar score={Math.round(number.deliveryRate || 0)} />
-                  </td>
-                  <td className="table-td">
-                    <span className="text-sm text-dark-300">{number.dailySentCount}</span>
                   </td>
                   <td className="table-td">
                     <span className="text-sm text-dark-400">{number.dailyLimit}</span>
@@ -218,47 +401,103 @@ export default function NumbersPage() {
                     </span>
                   </td>
                   <td className="table-td">
-                    <span className="text-sm text-dark-400">
-                      {number.isRamping ? `Day ${number.rampDay || 0}` : 'Done'}
+                    <span className={clsx('text-sm', number.isRamping ? 'text-yellow-400' : 'text-dark-500')}>
+                      {number.isRamping ? `Day ${number.rampDay}` : 'Done'}
                     </span>
                   </td>
                   <td className="table-td">
-                    <button
-                      onClick={() => setShowAssign(number.id)}
-                      className="text-xs text-scl-400 hover:text-scl-300"
-                    >
-                      Assign
-                    </button>
+                    {assignee ? (
+                      <span className="text-xs text-dark-300">
+                        {assignee.firstName} {assignee.lastName?.[0]}.
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setShowAssign(number.id)}
+                        className="text-xs text-scl-400 hover:text-scl-300 transition-colors"
+                      >
+                        Assign
+                      </button>
+                    )}
                   </td>
                   <td className="table-td">
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center justify-end gap-1">
                       {number.status === 'ACTIVE' ? (
                         <button
                           onClick={() => coolMutation.mutate(number.id)}
                           className="btn-ghost p-1.5 text-blue-400 hover:text-blue-300"
-                          title="Cool down"
+                          title="Cool down for 24h"
                         >
-                          <Snowflake className="w-4 h-4" />
+                          <Snowflake className="w-3.5 h-3.5" />
                         </button>
-                      ) : (
+                      ) : number.status !== 'DISABLED' ? (
                         <button
                           onClick={() => activateMutation.mutate(number.id)}
                           className="btn-ghost p-1.5 text-emerald-400 hover:text-emerald-300"
                           title="Activate"
                         >
-                          <PlayCircle className="w-4 h-4" />
+                          <PlayCircle className="w-3.5 h-3.5" />
                         </button>
-                      )}
+                      ) : null}
+                      <button
+                        onClick={() => setEditNumber(number)}
+                        className="btn-ghost p-1.5 text-dark-400 hover:text-dark-200"
+                        title="Edit"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(number)}
+                        className="btn-ghost p-1.5 text-dark-500 hover:text-red-400"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
       {showAssign && <AssignModal numberId={showAssign} onClose={() => setShowAssign(null)} />}
+      {showAddModal && <AddNumberModal onClose={() => setShowAddModal(false)} />}
+      {editNumber && <EditNumberModal number={editNumber} onClose={() => setEditNumber(null)} />}
+      {deleteConfirm && (
+        <ConfirmDeleteModal
+          number={deleteConfirm}
+          onConfirm={() => { deleteMutation.mutate(deleteConfirm.id); setDeleteConfirm(null); }}
+          onClose={() => setDeleteConfirm(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Helper Components ─────────────────────────────────── */
+
+function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, color }: { label: string; value: string | number; icon: any; color: string }) {
+  return (
+    <div className="card p-4 flex items-center gap-3">
+      <div className={clsx('w-9 h-9 rounded-lg flex items-center justify-center', color)}>
+        <Icon className="w-4 h-4" />
+      </div>
+      <div>
+        <p className="text-lg font-bold text-dark-100">{value}</p>
+        <p className="text-[11px] text-dark-500 uppercase tracking-wider">{label}</p>
+      </div>
     </div>
   );
 }
@@ -270,6 +509,7 @@ function NumberStatusBadge({ status }: { status: string }) {
     WARMING: 'bg-yellow-500/20 text-yellow-300',
     FLAGGED: 'bg-red-500/20 text-red-300',
     DISABLED: 'bg-dark-700 text-dark-400',
+    SUSPENDED: 'bg-orange-500/20 text-orange-300',
   };
   return <span className={clsx('badge', styles[status] || '')}>{status}</span>;
 }
@@ -282,13 +522,23 @@ function HealthBar({ score }: { score: number }) {
 
   return (
     <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+      <div className="w-14 h-1.5 bg-dark-700 rounded-full overflow-hidden">
         <div
           className={clsx('h-full rounded-full transition-all', color)}
-          style={{ width: `${score}%` }}
+          style={{ width: `${Math.min(score, 100)}%` }}
         />
       </div>
-      <span className="text-xs text-dark-400">{score}</span>
+      <span className="text-xs text-dark-400 tabular-nums w-6 text-right">{score}</span>
+    </div>
+  );
+}
+
+function UsageBar({ used, limit }: { used: number; limit: number }) {
+  const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
+  const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-scl-500';
+  return (
+    <div className="w-12 h-1 bg-dark-700 rounded-full overflow-hidden" title={`${used}/${limit}`}>
+      <div className={clsx('h-full rounded-full', color)} style={{ width: `${pct}%` }} />
     </div>
   );
 }
@@ -317,20 +567,19 @@ function AssignModal({ numberId, onClose }: { numberId: string; onClose: () => v
   const users = usersData?.users || [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <ModalOverlay onClose={onClose}>
       <div className="card w-full max-w-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-dark-50">Assign Number</h3>
-          <button onClick={onClose} className="btn-ghost p-1">
-            <X className="w-5 h-5" />
-          </button>
+          <button onClick={onClose} className="btn-ghost p-1"><X className="w-5 h-5" /></button>
         </div>
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-64 overflow-y-auto">
           {users.map((user: any) => (
             <button
               key={user.id}
               onClick={() => assignMutation.mutate(user.id)}
-              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-dark-800 transition-colors text-left"
+              disabled={assignMutation.isPending}
+              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-dark-800 transition-colors text-left disabled:opacity-50"
             >
               <div className="w-8 h-8 rounded-full bg-scl-600/20 flex items-center justify-center text-scl-400 text-sm font-semibold">
                 {user.firstName?.[0]}
@@ -343,6 +592,212 @@ function AssignModal({ numberId, onClose }: { numberId: string; onClose: () => v
           ))}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
+  );
+}
+
+function AddNumberModal({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [tab, setTab] = useState<'single' | 'bulk'>('single');
+  const [phone, setPhone] = useState('+1');
+  const [friendlyName, setFriendlyName] = useState('');
+  const [dailyLimit, setDailyLimit] = useState(200);
+  const [isRamping, setIsRamping] = useState(true);
+  const [bulkText, setBulkText] = useState('');
+
+  const createMutation = useMutation({
+    mutationFn: (body: any) => api.post('/numbers', body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['numbers'] });
+      toast.success('Number added');
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to add number'),
+  });
+
+  const handleSingleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createMutation.mutate({ phoneNumber: phone.trim(), friendlyName: friendlyName.trim() || undefined, dailyLimit, isRamping });
+  };
+
+  const handleBulkSubmit = () => {
+    const lines = bulkText.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return;
+    let created = 0;
+    const total = lines.length;
+    const createNext = (idx: number) => {
+      if (idx >= total) {
+        toast.success(`Added ${created} of ${total} numbers`);
+        queryClient.invalidateQueries({ queryKey: ['numbers'] });
+        onClose();
+        return;
+      }
+      const num = lines[idx].startsWith('+') ? lines[idx] : `+1${lines[idx].replace(/\D/g, '')}`;
+      api.post('/numbers', { phoneNumber: num, dailyLimit, isRamping })
+        .then(() => { created++; })
+        .catch(() => {})
+        .finally(() => createNext(idx + 1));
+    };
+    createNext(0);
+  };
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div className="card w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-lg font-bold text-dark-50">Add Phone Number</h3>
+          <button onClick={onClose} className="btn-ghost p-1"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="flex gap-1 mb-5 p-0.5 bg-dark-800 rounded-lg">
+          <button onClick={() => setTab('single')} className={clsx('flex-1 py-1.5 text-xs rounded-md transition-colors', tab === 'single' ? 'bg-dark-700 text-dark-100' : 'text-dark-400 hover:text-dark-200')}>
+            Single
+          </button>
+          <button onClick={() => setTab('bulk')} className={clsx('flex-1 py-1.5 text-xs rounded-md transition-colors', tab === 'bulk' ? 'bg-dark-700 text-dark-100' : 'text-dark-400 hover:text-dark-200')}>
+            Bulk Import
+          </button>
+        </div>
+
+        {tab === 'single' ? (
+          <form onSubmit={handleSingleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs text-dark-400 mb-1">Phone Number</label>
+              <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+12125551234" className="input w-full font-mono" autoFocus required />
+            </div>
+            <div>
+              <label className="block text-xs text-dark-400 mb-1">Friendly Name (optional)</label>
+              <input type="text" value={friendlyName} onChange={(e) => setFriendlyName(e.target.value)} placeholder="NYC Office Line" className="input w-full" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-dark-400 mb-1">Daily Limit</label>
+                <input type="number" value={dailyLimit} onChange={(e) => setDailyLimit(Number(e.target.value))} min={1} max={10000} className="input w-full" />
+              </div>
+              <div className="flex items-end pb-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={isRamping} onChange={(e) => setIsRamping(e.target.checked)} className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-scl-500 focus:ring-scl-500" />
+                  <span className="text-sm text-dark-300">Enable ramping</span>
+                </label>
+              </div>
+            </div>
+            <button type="submit" disabled={createMutation.isPending} className="btn-primary w-full flex items-center justify-center gap-2">
+              {createMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Add Number
+            </button>
+          </form>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs text-dark-400 mb-1">Phone Numbers (one per line)</label>
+              <textarea value={bulkText} onChange={(e) => setBulkText(e.target.value)} rows={6} className="input w-full font-mono text-sm resize-none" placeholder={"+12125551234\n+12125551235\n+12125551236"} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-dark-400 mb-1">Daily Limit (all)</label>
+                <input type="number" value={dailyLimit} onChange={(e) => setDailyLimit(Number(e.target.value))} min={1} max={10000} className="input w-full" />
+              </div>
+              <div className="flex items-end pb-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={isRamping} onChange={(e) => setIsRamping(e.target.checked)} className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-scl-500 focus:ring-scl-500" />
+                  <span className="text-sm text-dark-300">Enable ramping</span>
+                </label>
+              </div>
+            </div>
+            <button onClick={handleBulkSubmit} disabled={!bulkText.trim()} className="btn-primary w-full flex items-center justify-center gap-2">
+              <Plus className="w-4 h-4" /> Import {bulkText.split('\n').filter(l => l.trim()).length} Numbers
+            </button>
+          </div>
+        )}
+      </div>
+    </ModalOverlay>
+  );
+}
+
+function EditNumberModal({ number, onClose }: { number: PhoneNumberItem; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [friendlyName, setFriendlyName] = useState(number.friendlyName || '');
+  const [status, setStatus] = useState(number.status);
+  const [dailyLimit, setDailyLimit] = useState(number.dailyLimit);
+  const [isRamping, setIsRamping] = useState(number.isRamping);
+
+  const updateMutation = useMutation({
+    mutationFn: (body: any) => api.put(`/numbers/${number.id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['numbers'] });
+      toast.success('Number updated');
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to update'),
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateMutation.mutate({ friendlyName: friendlyName.trim() || undefined, status, dailyLimit, isRamping });
+  };
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div className="card w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-lg font-bold text-dark-50">Edit Number</h3>
+          <button onClick={onClose} className="btn-ghost p-1"><X className="w-5 h-5" /></button>
+        </div>
+        <p className="text-sm text-dark-400 font-mono mb-4">{number.phoneNumber}</p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs text-dark-400 mb-1">Friendly Name</label>
+            <input type="text" value={friendlyName} onChange={(e) => setFriendlyName(e.target.value)} className="input w-full" />
+          </div>
+          <div>
+            <label className="block text-xs text-dark-400 mb-1">Status</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className="input w-full">
+              <option value="ACTIVE">Active</option>
+              <option value="WARMING">Warming</option>
+              <option value="COOLING">Cooling</option>
+              <option value="FLAGGED">Flagged</option>
+              <option value="DISABLED">Disabled</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-dark-400 mb-1">Daily Limit</label>
+              <input type="number" value={dailyLimit} onChange={(e) => setDailyLimit(Number(e.target.value))} min={1} max={10000} className="input w-full" />
+            </div>
+            <div className="flex items-end pb-1">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={isRamping} onChange={(e) => setIsRamping(e.target.checked)} className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-scl-500 focus:ring-scl-500" />
+                <span className="text-sm text-dark-300">Ramping</span>
+              </label>
+            </div>
+          </div>
+          <button type="submit" disabled={updateMutation.isPending} className="btn-primary w-full flex items-center justify-center gap-2">
+            {updateMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Edit3 className="w-4 h-4" />}
+            Save Changes
+          </button>
+        </form>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+function ConfirmDeleteModal({ number, onConfirm, onClose }: { number: PhoneNumberItem; onConfirm: () => void; onClose: () => void }) {
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div className="card w-full max-w-sm p-6 text-center">
+        <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+          <Trash2 className="w-6 h-6 text-red-400" />
+        </div>
+        <h3 className="text-lg font-bold text-dark-50 mb-2">Delete Number?</h3>
+        <p className="text-sm text-dark-400 mb-1">This will permanently remove</p>
+        <p className="text-base font-mono text-dark-200 mb-5">{number.phoneNumber}</p>
+        <p className="text-xs text-dark-500 mb-5">All assignments and pool memberships will also be removed.</p>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="btn-ghost flex-1">Cancel</button>
+          <button onClick={onConfirm} className="flex-1 py-2 px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium transition-colors">
+            Delete
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
   );
 }
