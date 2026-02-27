@@ -18,6 +18,7 @@ import {
   SortableContext,
   horizontalListSortingStrategy,
   verticalListSortingStrategy,
+  rectSortingStrategy,
   useSortable,
   arrayMove,
 } from '@dnd-kit/sortable';
@@ -41,10 +42,24 @@ import {
   ExternalLink,
   Copy,
   GripHorizontal,
+  LayoutGrid,
+  Columns,
+  LayoutList,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import { useNavigate } from 'react-router-dom';
+
+/* ─── View Mode ─── */
+type ViewMode = 'board' | 'grid-2' | 'grid-3' | 'grid-4';
+
+function getStoredViewMode(): ViewMode {
+  try {
+    const stored = localStorage.getItem('pipeline-view-mode');
+    if (stored && ['board', 'grid-2', 'grid-3', 'grid-4'].includes(stored)) return stored as ViewMode;
+  } catch {}
+  return 'board';
+}
 
 /* ─── Types ─── */
 interface PipelineStage {
@@ -97,10 +112,17 @@ export default function PipelinePage() {
   const [editingStage, setEditingStage] = useState<PipelineStage | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [overId, setOverId] = useState<UniqueIdentifier | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>(getStoredViewMode);
   const menuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  // Persist view mode
+  const handleViewModeChange = useCallback((mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem('pipeline-view-mode', mode);
+  }, []);
 
   // Close menus on outside click
   useEffect(() => {
@@ -301,6 +323,39 @@ export default function PipelinePage() {
             <span className="text-sm text-dark-500">
               {stages.reduce((sum, s) => sum + s.cards.length, 0)} leads total
             </span>
+            {/* View Mode Toggle */}
+            <div className="flex items-center bg-dark-800 rounded-lg p-0.5 border border-dark-700/50">
+              <button
+                onClick={() => handleViewModeChange('board')}
+                className={clsx(
+                  'p-1.5 rounded-md transition-all duration-150',
+                  viewMode === 'board' ? 'bg-scl-600 text-white shadow-sm' : 'text-dark-400 hover:text-dark-200'
+                )}
+                title="Board (horizontal)"
+              >
+                <Columns className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleViewModeChange('grid-2')}
+                className={clsx(
+                  'p-1.5 rounded-md transition-all duration-150',
+                  viewMode === 'grid-2' ? 'bg-scl-600 text-white shadow-sm' : 'text-dark-400 hover:text-dark-200'
+                )}
+                title="Grid 2 columns"
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleViewModeChange('grid-3')}
+                className={clsx(
+                  'p-1.5 rounded-md transition-all duration-150',
+                  viewMode === 'grid-3' ? 'bg-scl-600 text-white shadow-sm' : 'text-dark-400 hover:text-dark-200'
+                )}
+                title="Grid 3 columns"
+              >
+                <LayoutList className="w-4 h-4" />
+              </button>
+            </div>
             <button
               onClick={() => setShowAddStage(true)}
               className="btn-primary text-sm"
@@ -313,11 +368,21 @@ export default function PipelinePage() {
       </div>
 
       {/* Board */}
-      <div className="flex-1 overflow-x-auto p-6">
+      <div className={clsx(
+        'flex-1 p-6',
+        viewMode === 'board' ? 'overflow-x-auto' : 'overflow-y-auto'
+      )}>
         {isLoading ? (
-          <div className="flex gap-4 h-full">
+          <div className={clsx(
+            viewMode === 'board'
+              ? 'flex gap-4 h-full'
+              : `grid gap-4 ${viewMode === 'grid-2' ? 'grid-cols-2' : 'grid-cols-3'}`
+          )}>
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="w-[300px] shrink-0 bg-dark-800/50 rounded-xl animate-pulse h-[400px]" />
+              <div key={i} className={clsx(
+                'bg-dark-800/50 rounded-xl animate-pulse',
+                viewMode === 'board' ? 'w-[300px] shrink-0 h-[400px]' : 'h-[300px]'
+              )} />
             ))}
           </div>
         ) : (
@@ -330,8 +395,18 @@ export default function PipelinePage() {
             onDragCancel={handleDragCancel}
             measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
           >
-            <SortableContext items={stageIds} strategy={horizontalListSortingStrategy}>
-              <div className="flex gap-4 h-full min-h-[500px]">
+            <SortableContext
+              items={stageIds}
+              strategy={viewMode === 'board' ? horizontalListSortingStrategy : rectSortingStrategy}
+            >
+              <div className={clsx(
+                viewMode === 'board'
+                  ? 'flex gap-4 h-full min-h-[500px]'
+                  : `grid gap-4 auto-rows-min ${
+                      viewMode === 'grid-2' ? 'grid-cols-1 md:grid-cols-2' :
+                      'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
+                    }`
+              )}>
                 {stages.map((stage) => (
                   <SortableStageColumn
                     key={stage.id}
@@ -349,12 +424,16 @@ export default function PipelinePage() {
                     }}
                     onContextMenu={handleContextMenu}
                     isAnyDragging={!!activeId}
+                    viewMode={viewMode}
                   />
                 ))}
                 {/* Add stage inline card */}
                 <button
                   onClick={() => setShowAddStage(true)}
-                  className="w-[300px] shrink-0 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-dark-700 hover:border-scl-600/50 hover:bg-dark-800/20 transition-all duration-200 gap-2 text-dark-500 hover:text-scl-400 min-h-[200px]"
+                  className={clsx(
+                    'flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-dark-700 hover:border-scl-600/50 hover:bg-dark-800/20 transition-all duration-200 gap-2 text-dark-500 hover:text-scl-400',
+                    viewMode === 'board' ? 'w-[300px] shrink-0 min-h-[200px]' : 'min-h-[150px]'
+                  )}
                 >
                   <Plus className="w-6 h-6" />
                   <span className="text-sm font-medium">Add Stage</span>
@@ -479,6 +558,7 @@ function SortableStageColumn({
   onDelete,
   onContextMenu,
   isAnyDragging,
+  viewMode,
 }: {
   stage: PipelineStage;
   isMenuOpen: boolean;
@@ -488,6 +568,7 @@ function SortableStageColumn({
   onDelete: () => void;
   onContextMenu: (e: React.MouseEvent, type: 'card' | 'stage', item: any) => void;
   isAnyDragging: boolean;
+  viewMode: ViewMode;
 }) {
   const {
     attributes,
@@ -516,18 +597,30 @@ function SortableStageColumn({
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{
+        ...style,
+        backgroundColor: hexToRgba(stage.color, 0.04),
+        borderColor: hexToRgba(stage.color, 0.12),
+      }}
       className={clsx(
-        'w-[300px] shrink-0 flex flex-col rounded-xl transition-opacity duration-200',
+        'flex flex-col rounded-xl transition-opacity duration-200 border',
+        viewMode === 'board' ? 'w-[300px] shrink-0' : 'w-full',
+        viewMode !== 'board' && 'min-h-[250px] max-h-[600px]',
         isDragging && 'opacity-30 scale-[0.98]'
       )}
       onContextMenu={(e) => onContextMenu(e, 'stage', stage)}
     >
       {/* Stage Header */}
-      <div
-        className="flex items-center justify-between mb-3 px-2 py-1.5 rounded-lg group/header"
-        style={{ backgroundColor: hexToRgba(stage.color, 0.08) }}
-      >
+      <div className="relative">
+        {/* Color accent bar */}
+        <div
+          className="absolute top-0 left-0 right-0 h-1 rounded-t-xl"
+          style={{ backgroundColor: stage.color }}
+        />
+        <div
+          className="flex items-center justify-between px-3 py-2.5 rounded-t-xl group/header"
+          style={{ backgroundColor: hexToRgba(stage.color, 0.1) }}
+        >
         <div className="flex items-center gap-2">
           {/* Drag handle for stage */}
           <button
@@ -584,19 +677,20 @@ function SortableStageColumn({
           )}
         </div>
       </div>
+      </div>
 
       {/* Cards Container */}
       <div
         ref={setDroppableRef}
         className={clsx(
-          'flex-1 rounded-xl p-2 space-y-2 overflow-y-auto transition-all duration-200',
+          'flex-1 rounded-b-xl p-2 space-y-2 overflow-y-auto transition-all duration-200',
           isOver
             ? 'ring-2 ring-offset-2 ring-offset-dark-900'
-            : 'bg-dark-800/30',
-          isAnyDragging && !isOver && 'bg-dark-800/20'
+            : '',
+          isAnyDragging && !isOver && 'bg-dark-800/10'
         )}
         style={{
-          backgroundColor: isOver ? hexToRgba(stage.color, 0.1) : undefined,
+          backgroundColor: isOver ? hexToRgba(stage.color, 0.12) : hexToRgba(stage.color, 0.03),
           ...(isOver && {
             boxShadow: `0 0 0 2px ${hexToRgba(stage.color, 0.5)}, 0 0 20px ${hexToRgba(stage.color, 0.15)}`,
             borderColor: stage.color,
@@ -744,7 +838,10 @@ function CardOverlay({ card }: { card: PipelineCard }) {
 function StageOverlay({ stage }: { stage: PipelineStage }) {
   return (
     <div className="w-[300px] bg-dark-900/95 rounded-xl border-2 shadow-2xl p-3 rotate-[1deg]"
-      style={{ borderColor: stage.color }}>
+      style={{
+        borderColor: stage.color,
+        backgroundColor: hexToRgba(stage.color, 0.08),
+      }}>
       <div className="flex items-center gap-2 mb-2">
         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }} />
         <h3 className="text-sm font-semibold text-dark-200">{stage.name}</h3>

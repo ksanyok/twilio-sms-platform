@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './stores/authStore';
+import { useThemeStore } from './stores/themeStore';
 import ErrorBoundary from './components/ErrorBoundary';
 import AppLayout from './components/layout/AppLayout';
 import LoginPage from './pages/LoginPage';
@@ -37,10 +38,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (isLoading || !initialized) {
     return (
-      <div className="min-h-screen bg-dark-950 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--bg-primary)' }}>
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-scl-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-sm text-dark-400">Loading...</span>
+          <span className="text-sm" style={{ color: 'var(--text-muted)' }}>Loading...</span>
         </div>
       </div>
     );
@@ -54,6 +55,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const { resolved } = useThemeStore();
+  const isDark = resolved === 'dark';
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
@@ -87,11 +91,12 @@ export default function App() {
         toastOptions={{
           duration: 3000,
           style: {
-            background: '#1c1c27',
-            color: '#e2e2ea',
-            border: '1px solid rgba(56, 56, 76, 0.5)',
+            background: isDark ? '#1c1c27' : '#ffffff',
+            color: isDark ? '#e2e2ea' : '#1e293b',
+            border: isDark ? '1px solid rgba(56, 56, 76, 0.5)' : '1px solid rgba(226, 232, 240, 0.8)',
             borderRadius: '12px',
             fontSize: '14px',
+            boxShadow: isDark ? undefined : '0 4px 12px rgba(0, 0, 0, 0.08)',
           },
           success: {
             iconTheme: { primary: '#6366f1', secondary: '#fff' },

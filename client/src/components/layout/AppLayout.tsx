@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import { useThemeStore } from '../../stores/themeStore';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
 import {
@@ -18,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { clsx } from 'clsx';
+import ThemeToggle from '../ThemeToggle';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -56,23 +58,27 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-dark-950">
+    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
       {/* Sidebar */}
       <aside
         className={clsx(
-          'flex flex-col border-r border-dark-700/50 bg-dark-900/80 backdrop-blur-xl transition-all duration-300',
+          'flex flex-col border-r transition-all duration-300',
           collapsed ? 'w-[72px]' : 'w-[260px]'
         )}
+        style={{
+          backgroundColor: 'var(--bg-secondary)',
+          borderColor: 'var(--border-subtle)',
+        }}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 h-16 border-b border-dark-700/50">
+        <div className="flex items-center gap-3 px-4 h-16 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
           <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-scl-600 shrink-0">
             <Shield className="w-5 h-5 text-white" />
           </div>
           {!collapsed && (
             <div className="flex flex-col min-w-0">
-              <span className="text-sm font-bold text-dark-50 truncate">SecureCreditLines</span>
-              <span className="text-[10px] text-dark-500 uppercase tracking-wider">SMS Platform</span>
+              <span className="text-sm font-bold truncate" style={{ color: 'var(--text-primary)' }}>SecureCreditLines</span>
+              <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>SMS Platform</span>
             </div>
           )}
           <button
@@ -114,7 +120,12 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
         </nav>
 
         {/* User section */}
-        <div className="border-t border-dark-700/50 p-3">
+        <div className="border-t p-3 space-y-2" style={{ borderColor: 'var(--border-subtle)' }}>
+          {!collapsed && (
+            <div className="flex justify-center px-1 pb-1">
+              <ThemeToggle />
+            </div>
+          )}
           <div
             className={clsx(
               'flex items-center gap-3 px-3 py-2 rounded-lg',
@@ -126,15 +137,16 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
             </div>
             {!collapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-dark-200 truncate">
+                <p className="text-sm font-medium truncate" style={{ color: 'var(--text-secondary)' }}>
                   {user?.firstName} {user?.lastName}
                 </p>
-                <p className="text-xs text-dark-500 truncate">{user?.role}</p>
+                <p className="text-xs truncate" style={{ color: 'var(--text-faint)' }}>{user?.role}</p>
               </div>
             )}
             <button
               onClick={handleLogout}
-              className="p-1.5 text-dark-500 hover:text-red-400 transition-colors shrink-0"
+              className="p-1.5 hover:text-red-400 transition-colors shrink-0"
+              style={{ color: 'var(--text-faint)' }}
               title="Logout"
             >
               <LogOut className="w-4 h-4" />

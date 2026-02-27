@@ -75,6 +75,20 @@ interface BulkSendOptions {
 export class SendingEngine {
   
   /**
+   * Check if test mode is enabled via system settings
+   */
+  static async isTestMode(): Promise<boolean> {
+    try {
+      const setting = await prisma.systemSetting.findUnique({
+        where: { key: 'testMode' },
+      });
+      return setting?.value === true || setting?.value === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Queue a single message for sending
    */
   static async queueMessage(options: SendMessageOptions): Promise<string> {
@@ -315,7 +329,51 @@ export class SendingEngine {
         data: { status: 'SENDING' },
       });
 
-      // Send via Twilio
+      // ── TEST MODE: simulate delivery without calling Twilio ──
+      const testMode = await this.isTestMode();
+      if (testMode) {
+        const fakeSid = `TEST_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        
+        // Simulate a small delay 
+        await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+
+        await prisma.message.update({
+          where: { id: messageId },
+          data: {
+            twilioMessageSid: fakeSid,
+            status: 'SENT',
+            sentAt: new Date(),
+          },
+        });
+
+        await NumberService.recordSend(phoneNumberId, true);
+
+        // Update lead contact tracking same as real send
+        const msg = await prisma.message.findUnique({
+          where: { id: messageId },
+          include: { conversation: { include: { lead: true } } },
+        });
+
+        if (msg?.conversation?.leadId) {
+          const isFirstContact = msg.conversation.lead?.status === 'NEW';
+          await prisma.lead.update({
+            where: { id: msg.conversation.leadId },
+            data: {
+              lastContactedAt: new Date(),
+              contactCount: { increment: 1 },
+              ...(isFirstContact && { status: 'CONTACTED' }),
+            },
+          });
+        }
+
+        logger.info(`[TEST MODE] Message simulated: ${messageId} → ${toNumber}`, {
+          fakeSid,
+          fromNumber,
+        });
+        return;
+      }
+
+      // ── REAL MODE: Send via Twilio ──
       const client = getTwilioClient();
       if (!client) {
         throw new Error('Twilio client not configured');

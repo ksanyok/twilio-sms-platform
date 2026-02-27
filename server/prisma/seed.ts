@@ -104,43 +104,103 @@ async function seed() {
   }
   console.log(`  ✅ ${tags.length} tags created`);
 
-  // Create sample leads
+  // Create sample leads — spread across pipeline stages
   const sampleLeads = [
-    { firstName: 'Michael', lastName: 'Brown', phone: '+15551234001', email: 'michael@example.com', company: 'Brown LLC', state: 'NY', source: 'purchased' },
-    { firstName: 'Jessica', lastName: 'Davis', phone: '+15551234002', email: 'jessica@example.com', company: 'Davis Corp', state: 'CA', source: 'purchased' },
-    { firstName: 'Robert', lastName: 'Wilson', phone: '+15551234003', email: 'robert@example.com', company: 'Wilson & Co', state: 'TX', source: 'referral' },
-    { firstName: 'Emily', lastName: 'Taylor', phone: '+15551234004', email: 'emily@example.com', company: 'Taylor Industries', state: 'FL', source: 'purchased' },
-    { firstName: 'David', lastName: 'Anderson', phone: '+15551234005', email: 'david@example.com', company: 'Anderson Group', state: 'IL', source: 'previously_funded' },
-    { firstName: 'Jennifer', lastName: 'Martinez', phone: '+15551234006', email: 'jen@example.com', company: 'JM Services', state: 'NY', source: 'purchased' },
-    { firstName: 'James', lastName: 'Thomas', phone: '+15551234007', email: 'james@example.com', company: 'Thomas LLC', state: 'PA', source: 'purchased' },
-    { firstName: 'Amanda', lastName: 'Garcia', phone: '+15551234008', email: 'amanda@example.com', company: 'Garcia Inc', state: 'NJ', source: 'referral' },
+    // NEW stage
+    { firstName: 'Michael', lastName: 'Brown', phone: '+15551234001', email: 'michael@example.com', company: 'Brown LLC', state: 'NY', source: 'purchased', pipelineStage: 'new' },
+    { firstName: 'Jessica', lastName: 'Davis', phone: '+15551234002', email: 'jessica@example.com', company: 'Davis Corp', state: 'CA', source: 'purchased', pipelineStage: 'new' },
+    { firstName: 'Robert', lastName: 'Wilson', phone: '+15551234003', email: 'robert@example.com', company: 'Wilson & Co', state: 'TX', source: 'referral', pipelineStage: 'new' },
+    // CONTACTED stage
+    { firstName: 'Emily', lastName: 'Taylor', phone: '+15551234004', email: 'emily@example.com', company: 'Taylor Industries', state: 'FL', source: 'purchased', pipelineStage: 'contacted' },
+    { firstName: 'David', lastName: 'Anderson', phone: '+15551234005', email: 'david@example.com', company: 'Anderson Group', state: 'IL', source: 'previously_funded', pipelineStage: 'contacted' },
+    // REPLIED stage
+    { firstName: 'Jennifer', lastName: 'Martinez', phone: '+15551234006', email: 'jen@example.com', company: 'JM Services', state: 'NY', source: 'purchased', pipelineStage: 'replied' },
+    { firstName: 'James', lastName: 'Thomas', phone: '+15551234007', email: 'james@example.com', company: 'Thomas LLC', state: 'PA', source: 'purchased', pipelineStage: 'replied' },
+    // INTERESTED stage
+    { firstName: 'Amanda', lastName: 'Garcia', phone: '+15551234008', email: 'amanda@example.com', company: 'Garcia Inc', state: 'NJ', source: 'referral', pipelineStage: 'interested' },
+    { firstName: 'Daniel', lastName: 'Lee', phone: '+15551234009', email: 'daniel@example.com', company: 'Lee Capital Solutions', state: 'MA', source: 'purchased', pipelineStage: 'interested' },
+    { firstName: 'Rachel', lastName: 'Kim', phone: '+15551234010', email: 'rachel@example.com', company: 'Kimchi Kitchen', state: 'WA', source: 'referral', pipelineStage: 'interested' },
+    // DOCS REQUESTED stage
+    { firstName: 'Carlos', lastName: 'Ramirez', phone: '+15551234011', email: 'carlos@example.com', company: 'CR Transport LLC', state: 'AZ', source: 'purchased', pipelineStage: 'docs-requested' },
+    { firstName: 'Lisa', lastName: 'Nguyen', phone: '+15551234012', email: 'lisa@example.com', company: 'Fresh Nails Spa', state: 'CA', source: 'purchased', pipelineStage: 'docs-requested' },
+    // SUBMITTED stage
+    { firstName: 'Steven', lastName: 'Clark', phone: '+15551234013', email: 'steven@example.com', company: 'Clark Plumbing', state: 'OH', source: 'purchased', pipelineStage: 'submitted' },
+    { firstName: 'Michelle', lastName: 'Lewis', phone: '+15551234014', email: 'michelle@example.com', company: 'Lewis & Daughters', state: 'GA', source: 'previously_funded', pipelineStage: 'submitted' },
+    // FUNDED stage
+    { firstName: 'Anthony', lastName: 'Walker', phone: '+15551234015', email: 'anthony@example.com', company: 'Walker Construction', state: 'NC', source: 'previously_funded', pipelineStage: 'funded' },
+    { firstName: 'Nicole', lastName: 'Hall', phone: '+15551234016', email: 'nicole@example.com', company: 'Hall Design Studio', state: 'OR', source: 'referral', pipelineStage: 'funded' },
+    { firstName: 'Kevin', lastName: 'Allen', phone: '+15551234017', email: 'kevin@example.com', company: 'Allen Auto Repair', state: 'MI', source: 'purchased', pipelineStage: 'funded' },
+    // NOT INTERESTED stage
+    { firstName: 'Sandra', lastName: 'Young', phone: '+15551234018', email: 'sandra@example.com', company: 'Young Consulting', state: 'CO', source: 'purchased', pipelineStage: 'not-interested' },
+    { firstName: 'Brian', lastName: 'King', phone: '+15551234019', email: 'brian@example.com', company: 'King Roofing', state: 'TN', source: 'purchased', pipelineStage: 'not-interested' },
+    // More in NEW (pipeline looks realistic with most in early stages)
+    { firstName: 'Patricia', lastName: 'Wright', phone: '+15551234020', email: 'patricia@example.com', company: 'Wright Legal', state: 'VA', source: 'purchased', pipelineStage: 'new' },
+    { firstName: 'Jason', lastName: 'Lopez', phone: '+15551234021', email: 'jason@example.com', company: 'Lopez Landscaping', state: 'NV', source: 'purchased', pipelineStage: 'new' },
+    { firstName: 'Stephanie', lastName: 'Hill', phone: '+15551234022', email: 'steph@example.com', company: 'Hilltop Bakery', state: 'MN', source: 'referral', pipelineStage: 'new' },
+    { firstName: 'Gregory', lastName: 'Scott', phone: '+15551234023', email: 'greg@example.com', company: 'Scott IT Services', state: 'WI', source: 'purchased', pipelineStage: 'contacted' },
+    { firstName: 'Laura', lastName: 'Adams', phone: '+15551234024', email: 'laura@example.com', company: 'Adams Florist', state: 'CT', source: 'purchased', pipelineStage: 'contacted' },
+    { firstName: 'Mark', lastName: 'Baker', phone: '+15551234025', email: 'mark@example.com', company: 'Baker Supply Co', state: 'MD', source: 'previously_funded', pipelineStage: 'replied' },
   ];
+
+  const allTags = await prisma.tag.findMany();
+  const tagMap = new Map(allTags.map(t => [t.name, t.id]));
 
   const defaultStage = await prisma.pipelineStage.findFirst({ where: { isDefault: true } });
 
+  let leadIndex = 0;
   for (const leadData of sampleLeads) {
+    const { pipelineStage, ...leadFields } = leadData;
     const lead = await prisma.lead.upsert({
-      where: { phone: leadData.phone },
+      where: { phone: leadFields.phone },
       update: {},
       create: {
-        ...leadData,
-        assignedRepId: rep.id,
+        ...leadFields,
+        assignedRepId: leadIndex % 3 === 0 ? manager.id : rep.id,
       },
     });
 
-    // Create pipeline card
-    if (defaultStage) {
+    // Create pipeline card in designated stage
+    const stageId = pipelineStage || defaultStage?.id || 'new';
+    try {
       await prisma.pipelineCard.upsert({
         where: { leadId: lead.id },
-        update: {},
+        update: { stageId },
         create: {
           leadId: lead.id,
-          stageId: defaultStage.id,
+          stageId,
+          notes: leadIndex % 4 === 0 ? 'Warm lead — follow up soon' : leadIndex % 3 === 0 ? 'Called, left voicemail' : null,
         },
       });
+    } catch (e) {
+      // Stage ID may not exist yet — use default
+      if (defaultStage) {
+        await prisma.pipelineCard.upsert({
+          where: { leadId: lead.id },
+          update: {},
+          create: { leadId: lead.id, stageId: defaultStage.id },
+        });
+      }
     }
+
+    // Assign random tags to some leads
+    const tagAssignments: string[] = [];
+    if (leadIndex % 2 === 0 && tagMap.has('Hot Lead')) tagAssignments.push(tagMap.get('Hot Lead')!);
+    if (leadIndex % 5 === 0 && tagMap.has('VIP')) tagAssignments.push(tagMap.get('VIP')!);
+    if (leadData.source === 'previously_funded' && tagMap.has('Previously Funded')) tagAssignments.push(tagMap.get('Previously Funded')!);
+    if (leadData.source === 'purchased' && leadIndex % 3 === 0 && tagMap.has('Purchased Lead')) tagAssignments.push(tagMap.get('Purchased Lead')!);
+    if (pipelineStage === 'contacted' && tagMap.has('Follow-Up Needed')) tagAssignments.push(tagMap.get('Follow-Up Needed')!);
+
+    for (const tagId of tagAssignments) {
+      try {
+        await prisma.leadTag.create({ data: { leadId: lead.id, tagId } });
+      } catch {
+        // Unique constraint — already exists
+      }
+    }
+
+    leadIndex++;
   }
-  console.log(`  ✅ ${sampleLeads.length} sample leads created`);
+  console.log(`  ✅ ${sampleLeads.length} sample leads created across all pipeline stages`);
 
   // Create a sample automation rule (follow-up sequence)
   const followUpRule = await prisma.automationRule.upsert({
@@ -204,6 +264,14 @@ async function seed() {
     },
   });
   console.log('  ✅ Primary number pool created');
+
+  // Create test mode system setting (disabled by default)
+  await prisma.systemSetting.upsert({
+    where: { key: 'testMode' },
+    update: {},
+    create: { key: 'testMode', value: false },
+  });
+  console.log('  ✅ Test mode setting initialized (disabled)');
 
   console.log('\n✅ Seed completed successfully!');
   console.log('\n📋 Login credentials:');

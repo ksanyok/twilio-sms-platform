@@ -13,6 +13,7 @@ import {
   Upload,
   Download,
   Palette,
+  FlaskConical,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -418,9 +419,60 @@ function SystemTab() {
   const getValue = (key: string, defaultValue: string) =>
     localSettings[key] !== undefined ? localSettings[key] : (settings[key] || defaultValue);
 
+  const isTestMode = settings.testMode === true || settings.testMode === 'true';
+
+  const handleTestModeToggle = () => {
+    const newValue = !isTestMode;
+    saveMutation.mutate({ key: 'testMode', value: newValue as any });
+  };
+
   return (
-    <div className="card p-6 space-y-6">
-      <h3 className="text-base font-semibold text-dark-100">System Configuration</h3>
+    <div className="space-y-6">
+      {/* Test Mode Banner */}
+      <div className={clsx(
+        'card p-5 flex items-center justify-between border-2 transition-colors duration-200',
+        isTestMode
+          ? 'border-amber-500/50 bg-amber-500/5'
+          : 'border-dark-700/50'
+      )}>
+        <div className="flex items-center gap-3">
+          <div className={clsx(
+            'w-10 h-10 rounded-lg flex items-center justify-center',
+            isTestMode ? 'bg-amber-500/20 text-amber-400' : 'bg-dark-700 text-dark-400'
+          )}>
+            <FlaskConical className="w-5 h-5" />
+          </div>
+          <div>
+            <h4 className="text-sm font-semibold text-dark-100 flex items-center gap-2">
+              Test Mode
+              {isTestMode && (
+                <span className="badge bg-amber-500/20 text-amber-400 text-[10px] uppercase tracking-wider">Active</span>
+              )}
+            </h4>
+            <p className="text-xs text-dark-400 mt-0.5">
+              {isTestMode
+                ? 'SMS sending is simulated — no real messages are sent via Twilio'
+                : 'Enable to test automations and campaigns without actually sending SMS'}
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={handleTestModeToggle}
+          disabled={saveMutation.isPending}
+          className={clsx(
+            'relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 focus:outline-none',
+            isTestMode ? 'bg-amber-500' : 'bg-dark-600'
+          )}
+        >
+          <span className={clsx(
+            'inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200',
+            isTestMode ? 'translate-x-6' : 'translate-x-1'
+          )} />
+        </button>
+      </div>
+
+      <div className="card p-6 space-y-6">
+        <h3 className="text-base font-semibold text-dark-100">System Configuration</h3>
       <p className="text-sm text-dark-400">
         Edit settings below and click Save to apply changes in real-time.
       </p>
@@ -451,6 +503,7 @@ function SystemTab() {
           </div>
         ))}
       </div>
+    </div>
     </div>
   );
 }
