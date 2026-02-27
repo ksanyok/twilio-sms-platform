@@ -299,10 +299,26 @@ export default function PipelinePage() {
     const overIdStr = over.id as string;
 
     // Stage reorder
-    if (activeIdStr.startsWith('stage-') && overIdStr.startsWith('stage-')) {
+    if (activeIdStr.startsWith('stage-')) {
       const activeStageId = activeIdStr.replace('stage-', '');
-      const overStageId = overIdStr.replace('stage-', '');
-      if (activeStageId === overStageId) return;
+
+      // Resolve target stage: could be a stage-prefixed id, a raw stage id, or a card inside a stage
+      let overStageId: string | undefined;
+      if (overIdStr.startsWith('stage-')) {
+        overStageId = overIdStr.replace('stage-', '');
+      } else {
+        // Check if over a raw stage droppable zone
+        const directStage = stages.find(s => s.id === overIdStr);
+        if (directStage) {
+          overStageId = directStage.id;
+        } else {
+          // Over a card — find which stage it belongs to
+          const ownerStage = findStageByCardId(overIdStr);
+          overStageId = ownerStage?.id;
+        }
+      }
+
+      if (!overStageId || activeStageId === overStageId) return;
 
       const oldIndex = stages.findIndex((s) => s.id === activeStageId);
       const newIndex = stages.findIndex((s) => s.id === overStageId);
