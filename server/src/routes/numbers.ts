@@ -10,14 +10,14 @@ router.use(requireRole('ADMIN', 'MANAGER'));
 
 router.get('/', asyncHandler(NumberController.list));
 router.post('/', asyncHandler(NumberController.create));
-router.put('/:id', asyncHandler(NumberController.update));
-router.delete('/:id', asyncHandler(NumberController.remove));
 router.post('/sync-twilio', asyncHandler(NumberController.syncFromTwilio));
 router.post('/assign', asyncHandler(NumberController.assignToRep));
-router.post('/:id/cool', asyncHandler(NumberController.coolDown));
-router.post('/:id/activate', asyncHandler(NumberController.activate));
 router.get('/assignments', asyncHandler(NumberController.getAssignments));
 router.get('/pools', asyncHandler(NumberController.getPools));
 router.post('/pools', asyncHandler(NumberController.createPool));
+router.put('/:id', asyncHandler(NumberController.update));
+router.delete('/:id', asyncHandler(NumberController.remove));
+router.post('/:id/cool', asyncHandler(NumberController.coolDown));
+router.post('/:id/activate', asyncHandler(NumberController.activate));
 
 export default router;
