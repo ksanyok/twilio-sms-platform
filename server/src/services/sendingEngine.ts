@@ -76,13 +76,19 @@ export class SendingEngine {
   
   /**
    * Check if test mode is enabled via system settings
+   * Cached in Redis for 30s to avoid DB hits on every message send
    */
   static async isTestMode(): Promise<boolean> {
     try {
+      const cached = await redis.get('setting:testMode');
+      if (cached !== null) return cached === 'true';
+
       const setting = await prisma.systemSetting.findUnique({
         where: { key: 'testMode' },
       });
-      return setting?.value === true || setting?.value === 'true';
+      const value = setting?.value === true || setting?.value === 'true';
+      await redis.set('setting:testMode', String(value), 'EX', 30);
+      return value;
     } catch {
       return false;
     }
@@ -203,7 +209,6 @@ export class SendingEngine {
 
     // ── PROCESS LEADS ──
     const jobsToQueue: Array<{ name: string; data: any; opts: any }> = [];
-    const messagesToCreate: Array<any> = [];
     const missingConvoLeads: string[] = [];
 
     // Find leads that need new conversations
@@ -235,16 +240,25 @@ export class SendingEngine {
 
     // Prepare messages and jobs
     let jobIndex = 0;
+    const skippedLeadIds: string[] = [];
+    const messageDataToCreate: Array<{
+      conversationId: string;
+      direction: 'OUTBOUND';
+      status: 'QUEUED';
+      fromNumber: string;
+      toNumber: string;
+      body: string;
+      campaignId?: string;
+      sentByUserId?: string;
+      phoneNumberId: string;
+      leadId: string; // temp: used for job mapping, not stored
+    }> = [];
+
     for (const lead of options.leads) {
       // Check compliance from pre-fetched set
       if (blockedPhones.has(lead.phone)) {
         skipped++;
-        if (options.campaignId) {
-          await prisma.campaignLead.updateMany({
-            where: { campaignId: options.campaignId, leadId: lead.leadId },
-            data: { status: 'SKIPPED' },
-          });
-        }
+        skippedLeadIds.push(lead.leadId);
         continue;
       }
 
@@ -267,40 +281,61 @@ export class SendingEngine {
         continue;
       }
 
-      // Create message record
-      const message = await prisma.message.create({
-        data: {
-          conversationId,
-          direction: 'OUTBOUND',
-          status: 'QUEUED',
-          fromNumber: fromNumber.phoneNumber,
-          toNumber: lead.phone,
-          body,
-          campaignId: options.campaignId,
-          sentByUserId: options.sentByUserId,
-          phoneNumberId: fromNumber.id,
-        },
+      messageDataToCreate.push({
+        conversationId,
+        direction: 'OUTBOUND',
+        status: 'QUEUED',
+        fromNumber: fromNumber.phoneNumber,
+        toNumber: lead.phone,
+        body,
+        campaignId: options.campaignId,
+        sentByUserId: options.sentByUserId,
+        phoneNumberId: fromNumber.id,
+        leadId: lead.leadId,
       });
+    }
 
-      jobsToQueue.push({
-        name: 'send-sms',
-        data: {
-          messageId: message.id,
-          fromNumber: fromNumber.phoneNumber,
-          toNumber: lead.phone,
-          body,
-          phoneNumberId: fromNumber.id,
-          campaignId: options.campaignId,
-          leadId: lead.leadId,
-        },
-        opts: {
-          delay: jobIndex * delayBetweenMs,
-          priority: 5,
-        },
+    // ── BATCH: Update skipped campaign leads in one query ──
+    if (options.campaignId && skippedLeadIds.length > 0) {
+      await prisma.campaignLead.updateMany({
+        where: { campaignId: options.campaignId, leadId: { in: skippedLeadIds } },
+        data: { status: 'SKIPPED' },
       });
+    }
 
-      jobIndex++;
-      queued++;
+    // ── BATCH: Create all messages in a single transaction ──
+    if (messageDataToCreate.length > 0) {
+      const messages = await prisma.$transaction(
+        messageDataToCreate.map(({ leadId, ...data }) =>
+          prisma.message.create({ data })
+        )
+      );
+
+      // Build jobs from created messages
+      for (let i = 0; i < messages.length; i++) {
+        const message = messages[i];
+        const msgData = messageDataToCreate[i];
+
+        jobsToQueue.push({
+          name: 'send-sms',
+          data: {
+            messageId: message.id,
+            fromNumber: msgData.fromNumber,
+            toNumber: msgData.toNumber,
+            body: msgData.body,
+            phoneNumberId: msgData.phoneNumberId,
+            campaignId: options.campaignId,
+            leadId: msgData.leadId,
+          },
+          opts: {
+            delay: jobIndex * delayBetweenMs,
+            priority: 5,
+          },
+        });
+
+        jobIndex++;
+        queued++;
+      }
     }
 
     // ── BULK ADD to BullMQ (one Redis call instead of N) ──

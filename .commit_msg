@@ -1,0 +1,15 @@
+fix: CI build/test failures + performance and security improvements
+
+CI: fix Dockerfile prisma path, use db push instead of migrate deploy,
+add vitest --run flag, add JWT_REFRESH_SECRET to test env.
+
+Perf: batch N+1 in sendingEngine (skipped leads + message creation),
+batch N+1 in autoTagService.tagColdLeads, cache isTestMode in Redis.
+
+Security: settings key whitelist, input validation, rate limiting,
+replace any types with proper AuthRequest/Response.
+
+Stability: fix automationWorker process.exit(0) killing main server,
+Redis exponential backoff reconnection, proper logger usage.
+
+Other: pipeline pagination, tag cascade delete, pagination bounds.

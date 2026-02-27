@@ -37,7 +37,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: scl
-          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD || 'scl_secret_2024' }}
+          POSTGRES_PASSWORD: scl_secret_2024
           POSTGRES_DB: scl_sms_test
         ports:
           - 5432:5432
@@ -66,17 +66,18 @@ jobs:
         run: cd server && npm ci
       - name: Generate Prisma client
         run: cd server && npx prisma generate
-      - name: Run migrations
+      - name: Push database schema
         env:
           DATABASE_URL: postgresql://scl:scl_secret_2024@localhost:5432/scl_sms_test
-        run: cd server && npx prisma migrate deploy
+        run: cd server && npx prisma db push --skip-generate
       - name: Run tests
         env:
           DATABASE_URL: postgresql://scl:scl_secret_2024@localhost:5432/scl_sms_test
           REDIS_URL: redis://localhost:6379
-          JWT_SECRET: test-secret
+          JWT_SECRET: test-secret-ci-only
+          JWT_REFRESH_SECRET: test-refresh-secret-ci-only
           NODE_ENV: test
-        run: cd server && npm test
+        run: cd server && npx vitest --run
 
   build:
     runs-on: ubuntu-latest

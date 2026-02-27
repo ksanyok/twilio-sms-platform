@@ -1,5 +1,3 @@
-import { Worker, Job } from 'bullmq';
-import redis from '../config/redis';
 import { AutomationService } from '../services/automationService';
 import { NumberService } from '../services/numberService';
 import logger from '../config/logger';
@@ -57,10 +55,18 @@ logger.info('🤖 Automation Worker started');
 logger.info(`  Checking automations every ${AUTOMATION_CHECK_INTERVAL / 1000}s`);
 logger.info(`  Checking daily reset every ${DAILY_RESET_CHECK_INTERVAL / 1000}s`);
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('Shutting down automation worker...');
+// Export cleanup function so main process can stop intervals on shutdown
+export function stopAutomationWorker(): void {
   clearInterval(automationInterval);
   clearInterval(resetInterval);
-  process.exit(0);
-});
+  logger.info('Automation Worker stopped');
+}
+
+// Only handle SIGTERM if running standalone (not imported by index.ts)
+if (require.main === module) {
+  process.on('SIGTERM', () => {
+    logger.info('Shutting down automation worker...');
+    stopAutomationWorker();
+    process.exit(0);
+  });
+}

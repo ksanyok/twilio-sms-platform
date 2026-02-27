@@ -11,13 +11,12 @@ RUN cd server && npm ci
 COPY client/package*.json ./client/
 RUN cd client && npm ci
 
-# Copy source
+# Copy source (server/prisma/ is included in server/)
 COPY server/ ./server/
 COPY client/ ./client/
-COPY prisma/ ./prisma/
 
 # Generate Prisma client
-RUN cd server && npx prisma generate --schema=../prisma/schema.prisma
+RUN cd server && npx prisma generate
 
 # Build server
 RUN cd server && npm run build
@@ -34,13 +33,16 @@ WORKDIR /app
 COPY server/package*.json ./server/
 RUN cd server && npm ci --production
 
-# Copy Prisma schema and generate client
-COPY prisma/ ./prisma/
-RUN cd server && npx prisma generate --schema=../prisma/schema.prisma
+# Copy Prisma schema and generate client (schema lives inside server/)
+COPY server/prisma/ ./server/prisma/
+RUN cd server && npx prisma generate
 
 # Copy built artifacts
 COPY --from=builder /app/server/dist ./server/dist
 COPY --from=builder /app/client/dist ./client/dist
+
+# Copy nginx config for potential use
+COPY nginx.conf ./nginx.conf
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

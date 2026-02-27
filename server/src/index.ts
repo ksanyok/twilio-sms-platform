@@ -9,7 +9,7 @@ import jwt from 'jsonwebtoken';
 
 // Import workers so they start with the server
 import './jobs/worker';
-import './jobs/automationWorker';
+import { stopAutomationWorker } from './jobs/automationWorker';
 
 const httpServer = createServer(app);
 
@@ -139,6 +139,9 @@ import redis from './config/redis';
 async function gracefulShutdown(signal: string) {
   logger.info(`${signal} received, shutting down gracefully...`);
   
+  // Stop automation intervals
+  stopAutomationWorker();
+
   // Stop accepting new connections
   httpServer.close(() => {
     logger.info('HTTP server closed');

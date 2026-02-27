@@ -107,6 +107,7 @@ export class AutoTagService {
 
   /**
    * Batch job: tag leads as 'cold' who haven't replied in 7+ days after being contacted
+   * OPTIMIZED: Uses batch queries instead of N+1 per lead
    */
   static async tagColdLeads(): Promise<number> {
     try {
@@ -124,21 +125,29 @@ export class AutoTagService {
         take: 500,
       });
 
-      let tagged = 0;
-      for (const lead of coldLeads) {
-        const existing = await prisma.leadTag.findFirst({
-          where: { leadId: lead.id, tagId: coldTagId },
+      if (coldLeads.length === 0) return 0;
+
+      const leadIds = coldLeads.map(l => l.id);
+
+      // Batch: find which leads already have the cold tag
+      const existingTags = await prisma.leadTag.findMany({
+        where: { tagId: coldTagId, leadId: { in: leadIds } },
+        select: { leadId: true },
+      });
+      const alreadyTagged = new Set(existingTags.map(t => t.leadId));
+      const toTag = leadIds.filter(id => !alreadyTagged.has(id));
+
+      if (toTag.length > 0) {
+        await prisma.leadTag.createMany({
+          data: toTag.map(leadId => ({ leadId, tagId: coldTagId })),
+          skipDuplicates: true,
         });
-        if (!existing) {
-          await prisma.leadTag.create({ data: { leadId: lead.id, tagId: coldTagId } });
-          tagged++;
-        }
       }
 
-      if (tagged > 0) {
-        logger.info(`Auto-tagged ${tagged} cold leads`);
+      if (toTag.length > 0) {
+        logger.info(`Auto-tagged ${toTag.length} cold leads`);
       }
-      return tagged;
+      return toTag.length;
     } catch (err) {
       logger.error('AutoTag tagColdLeads error', { error: (err as Error).message });
       return 0;

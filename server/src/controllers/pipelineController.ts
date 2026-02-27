@@ -7,6 +7,9 @@ import { WebhookService } from '../services/webhookService';
 export class PipelineController {
 
   static async getStages(req: AuthRequest, res: Response): Promise<void> {
+    const cardsPerStage = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+    const cardPage = Math.max(0, parseInt(req.query.offset as string) || 0);
+
     const stages = await prisma.pipelineStage.findMany({
       orderBy: { order: 'asc' },
       include: {
@@ -32,6 +35,8 @@ export class PipelineController {
             },
           },
           orderBy: { position: 'asc' },
+          take: cardsPerStage,
+          skip: cardPage,
         },
         _count: { select: { cards: true } },
       },
@@ -130,8 +135,8 @@ export class PipelineController {
       }).catch(() => {}); // fire and forget
     }
 
-    // Update lead status based on pipeline stage
-    const stageStatusMap: Record<string, string> = {
+    // Update lead status based on pipeline stage (configurable mapping)
+    const STAGE_STATUS_MAP: Record<string, string> = {
       'New': 'NEW',
       'Contacted': 'CONTACTED',
       'Replied': 'REPLIED',
@@ -141,7 +146,7 @@ export class PipelineController {
       'Funded': 'FUNDED',
     };
 
-    const newStatus = stageStatusMap[card.stage.name];
+    const newStatus = STAGE_STATUS_MAP[card.stage.name];
     if (newStatus && card.lead) {
       await prisma.lead.update({
         where: { id: card.leadId },
