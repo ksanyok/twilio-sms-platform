@@ -23,7 +23,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-dark-950 flex items-center justify-center px-4">
+        <div className="min-h-screen bg-dark-950 flex items-center justify-center px-4" style={{ backgroundColor: 'var(--bg-primary)' }}>
           <div className="card p-8 max-w-md w-full text-center">
             <AlertTriangle className="w-12 h-12 mx-auto text-red-400 mb-4" />
             <h2 className="text-lg font-bold text-dark-100 mb-2">Something went wrong</h2>

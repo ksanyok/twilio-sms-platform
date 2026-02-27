@@ -11,7 +11,12 @@ import {
   ArrowDownRight,
   Activity,
   AlertTriangle,
+  Plus,
+  Upload,
+  CheckCircle2,
+  TrendingUp,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   AreaChart,
   Area,
@@ -24,8 +29,10 @@ import {
   Bar,
 } from 'recharts';
 import { format } from 'date-fns';
+import { useThemeStore } from '../stores/themeStore';
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const { data, isLoading, isError } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
@@ -64,10 +71,11 @@ export default function DashboardPage() {
   }
 
   const stats = data;
+  const isDark = useThemeStore(s => s.resolved) === 'dark';
 
   return (
     <div className="p-8 space-y-8 max-w-[1600px]">
-      {/* Header */}
+      {/* Header + Quick Actions */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-dark-50">Dashboard</h1>
@@ -75,19 +83,41 @@ export default function DashboardPage() {
             Overview of your SMS operations
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-dark-500">
-          <Activity className="w-3.5 h-3.5 text-green-400" />
-          <span>Live • Updated every 30s</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/campaigns', { state: { openCreate: true } })}
+            className="btn-primary text-sm"
+          >
+            <Plus className="w-4 h-4 mr-1.5" />
+            Create Campaign
+          </button>
+          <button
+            onClick={() => navigate('/leads', { state: { openImport: true } })}
+            className="btn-ghost text-sm border border-dark-600"
+          >
+            <Upload className="w-4 h-4 mr-1.5" />
+            Import Leads
+          </button>
+          <div className="flex items-center gap-2 text-xs text-dark-500 ml-2">
+            <Activity className="w-3.5 h-3.5 text-green-400" />
+            <span>Live</span>
+          </div>
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
         <StatCard
           label="Sent (24h)"
           value={stats?.overview.sentLast24h || 0}
           icon={Send}
           color="indigo"
+        />
+        <StatCard
+          label="Delivered (24h)"
+          value={stats?.overview.deliveredLast24h || 0}
+          icon={CheckCircle2}
+          color="green"
         />
         <StatCard
           label="Total Leads"
@@ -98,8 +128,8 @@ export default function DashboardPage() {
         <StatCard
           label="Reply Rate (7d)"
           value={`${stats?.overview.replyRate || 0}%`}
-          icon={MessageSquare}
-          color="green"
+          icon={TrendingUp}
+          color="yellow"
         />
         <StatCard
           label="Active Automations"
@@ -139,20 +169,21 @@ export default function DashboardPage() {
                     <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#1e293b' : '#e2e8f0'} />
                 <XAxis
                   dataKey="date"
-                  stroke="#475569"
+                  stroke={isDark ? '#475569' : '#94a3b8'}
                   fontSize={12}
                   tickFormatter={(val) => format(new Date(val), 'MMM d')}
                 />
-                <YAxis stroke="#475569" fontSize={12} />
+                <YAxis stroke={isDark ? '#475569' : '#94a3b8'} fontSize={12} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #334155',
+                    backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                    border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
                     borderRadius: '8px',
-                    color: '#e2e8f0',
+                    color: isDark ? '#e2e8f0' : '#1e293b',
+                    boxShadow: isDark ? undefined : '0 4px 12px rgba(0,0,0,0.08)',
                   }}
                 />
                 <Area
@@ -296,6 +327,7 @@ function StatCard({
     blue: 'bg-blue-600/20 text-blue-400',
     green: 'bg-green-600/20 text-green-400',
     purple: 'bg-purple-600/20 text-purple-400',
+    yellow: 'bg-yellow-600/20 text-yellow-400',
   };
 
   return (

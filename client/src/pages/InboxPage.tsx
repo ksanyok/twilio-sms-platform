@@ -19,6 +19,11 @@ import {
   Bell,
   BellOff,
   X,
+  Copy,
+  ExternalLink,
+  Ban,
+  UserPlus,
+  Sparkles,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -29,7 +34,20 @@ export default function InboxPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; conv: Conversation } | null>(null);
+  const ctxMenuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+
+  // Close inbox context menu on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target as Node)) {
+        setCtxMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   // WebSocket for real-time message updates
   useEffect(() => {
@@ -70,7 +88,7 @@ export default function InboxPage() {
   return (
     <div className="flex h-full min-h-0">
       {/* Conversation List */}
-      <div className="w-[380px] flex flex-col border-r border-dark-700/50 bg-dark-900/50">
+      <div className="w-[380px] flex flex-col border-r border-dark-700/50" style={{ backgroundColor: 'var(--bg-secondary)' }}>
         {/* Search Header */}
         <div className="p-4 border-b border-dark-700/50 space-y-3">
           <div className="flex items-center justify-between">
@@ -126,13 +144,36 @@ export default function InboxPage() {
               conversation={conv}
               isSelected={selectedId === conv.id}
               onClick={() => setSelectedId(conv.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setCtxMenu({ x: e.clientX, y: e.clientY, conv });
+              }}
             />
           ))}
         </div>
       </div>
 
+      {/* Inbox Context Menu */}
+      {ctxMenu && (
+        <div
+          ref={ctxMenuRef}
+          className="fixed z-[100] w-52 bg-dark-800 border border-dark-600 rounded-lg shadow-2xl py-1 animate-in fade-in zoom-in-95 duration-100"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+        >
+          <button onClick={() => { setSelectedId(ctxMenu.conv.id); setCtxMenu(null); }} className="ctx-menu-item">
+            <MessageSquare className="w-3.5 h-3.5" /> Open Thread
+          </button>
+          <button onClick={() => { navigator.clipboard.writeText(ctxMenu.conv.lead?.phone || ''); toast.success('Phone copied'); setCtxMenu(null); }} className="ctx-menu-item">
+            <Copy className="w-3.5 h-3.5" /> Copy Phone
+          </button>
+          <button onClick={() => { window.open(`/leads?id=${ctxMenu.conv.leadId}`, '_self'); setCtxMenu(null); }} className="ctx-menu-item">
+            <ExternalLink className="w-3.5 h-3.5" /> View Lead
+          </button>
+        </div>
+      )}
+
       {/* Message Thread */}
-      <div className="flex-1 flex flex-col bg-dark-950">
+      <div className="flex-1 flex flex-col bg-dark-950" style={{ backgroundColor: 'var(--bg-primary)' }}>
         {selectedId ? (
           <MessageThread conversationId={selectedId} />
         ) : (
@@ -153,10 +194,12 @@ function ConversationItem({
   conversation,
   isSelected,
   onClick,
+  onContextMenu,
 }: {
   conversation: Conversation;
   isSelected: boolean;
   onClick: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }) {
   const lead = conversation.lead;
   const lastMessage = conversation.messages?.[0];
@@ -164,6 +207,7 @@ function ConversationItem({
   return (
     <button
       onClick={onClick}
+      onContextMenu={onContextMenu}
       className={clsx(
         'w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-dark-800/50 transition-colors border-b border-dark-800/30',
         isSelected && 'bg-dark-800/70 border-l-2 border-l-scl-500'
@@ -223,6 +267,7 @@ function ConversationItem({
 function MessageThread({ conversationId }: { conversationId: string }) {
   const [replyText, setReplyText] = useState('');
   const [showThreadMenu, setShowThreadMenu] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const threadMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -290,13 +335,26 @@ function MessageThread({ conversationId }: { conversationId: string }) {
     sendMutation.mutate(replyText.trim());
   };
 
+  const handleAiDraft = async () => {
+    setAiLoading(true);
+    try {
+      const { data } = await api.post('/ai/draft-reply', { conversationId });
+      setReplyText(data.draft);
+      toast.success('AI draft generated');
+    } catch {
+      toast.error('AI not available — check OpenAI settings');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const conversation = data?.conversation;
   const messages: Message[] = data?.messages || [];
 
   return (
     <>
       {/* Thread Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-dark-700/50 bg-dark-900/50">
+      <div className="flex items-center justify-between px-6 py-3 border-b border-dark-700/50" style={{ backgroundColor: 'var(--bg-secondary)' }}>
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-scl-600/20 flex items-center justify-center text-scl-400 text-sm font-semibold">
             {conversation?.lead?.firstName?.[0]}{conversation?.lead?.lastName?.[0] || ''}
@@ -389,14 +447,23 @@ function MessageThread({ conversationId }: { conversationId: string }) {
       </div>
 
       {/* Reply Input */}
-      <div className="border-t border-dark-700/50 bg-dark-900/30 p-4">
+      <div className="border-t border-dark-700/50 p-4" style={{ backgroundColor: 'var(--bg-secondary)' }}>
         {conversation?.lead?.optedOut ? (
           <div className="flex items-center justify-center gap-2 text-sm text-red-400 py-2">
             <AlertTriangle className="w-4 h-4" />
             This lead has opted out. Cannot send messages.
           </div>
         ) : (
-          <form onSubmit={handleSend} className="flex items-end gap-3">
+          <form onSubmit={handleSend} className="flex items-end gap-2">
+            <button
+              type="button"
+              onClick={handleAiDraft}
+              disabled={aiLoading}
+              className="btn-ghost px-3 py-2.5 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10"
+              title="AI Draft Reply"
+            >
+              <Sparkles className={clsx('w-4 h-4', aiLoading && 'animate-pulse')} />
+            </button>
             <textarea
               className="input flex-1 min-h-[44px] max-h-[120px] resize-none py-2.5"
               placeholder="Type your message..."
@@ -434,7 +501,7 @@ function MessageBubble({ message }: { message: Message }) {
           'max-w-[70%] rounded-2xl px-4 py-2.5',
           isOutbound
             ? 'bg-scl-600 text-white rounded-br-md'
-            : 'bg-dark-800 text-dark-200 rounded-bl-md'
+            : 'bg-dark-800 text-dark-200 rounded-bl-md border border-dark-700/50'
         )}
       >
         <p className="text-sm whitespace-pre-wrap">{message.body}</p>

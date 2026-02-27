@@ -14,11 +14,18 @@ import {
   Download,
   Palette,
   FlaskConical,
+  Edit3,
+  Key,
+  Phone,
+  Brain,
+  Webhook,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 
-type Tab = 'tags' | 'users' | 'suppression' | 'system';
+type Tab = 'tags' | 'users' | 'suppression' | 'system' | 'integrations';
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>('tags');
@@ -27,6 +34,7 @@ export default function SettingsPage() {
     { key: 'tags', label: 'Tags', icon: <Tag className="w-4 h-4" /> },
     { key: 'users', label: 'Users', icon: <Users className="w-4 h-4" /> },
     { key: 'suppression', label: 'Suppression', icon: <ShieldX className="w-4 h-4" /> },
+    { key: 'integrations', label: 'Integrations', icon: <Key className="w-4 h-4" /> },
     { key: 'system', label: 'System', icon: <Settings className="w-4 h-4" /> },
   ];
 
@@ -60,6 +68,7 @@ export default function SettingsPage() {
       {tab === 'tags' && <TagsTab />}
       {tab === 'users' && <UsersTab />}
       {tab === 'suppression' && <SuppressionTab />}
+      {tab === 'integrations' && <IntegrationsTab />}
       {tab === 'system' && <SystemTab />}
     </div>
   );
@@ -173,6 +182,7 @@ function TagsTab() {
 /* ─── Users ─── */
 function UsersTab() {
   const [showCreate, setShowCreate] = useState(false);
+  const [editingUser, setEditingUser] = useState<any>(null);
   const queryClient = useQueryClient();
 
   const { data } = useQuery({
@@ -183,7 +193,22 @@ function UsersTab() {
     },
   });
 
+  const toggleActiveMutation = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      api.put(`/auth/users/${id}`, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('User updated');
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed'),
+  });
+
   const users = data?.users || [];
+
+  const handleContextMenu = (e: React.MouseEvent, user: any) => {
+    e.preventDefault();
+    setEditingUser(user);
+  };
 
   return (
     <div className="card p-6 space-y-6">
@@ -199,7 +224,8 @@ function UsersTab() {
         {users.map((user: any) => (
           <div
             key={user.id}
-            className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg"
+            onContextMenu={(e) => handleContextMenu(e, user)}
+            className="flex items-center justify-between p-3 bg-dark-800/50 rounded-lg group cursor-pointer hover:bg-dark-700/50 transition-colors"
           >
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-scl-600/20 flex items-center justify-center text-scl-400 text-sm font-semibold">
@@ -210,32 +236,60 @@ function UsersTab() {
                 <p className="text-xs text-dark-500">{user.email}</p>
               </div>
             </div>
-            <span className={clsx(
-              'badge text-[10px]',
-              user.role === 'ADMIN' ? 'bg-red-500/20 text-red-300' :
-              user.role === 'MANAGER' ? 'bg-yellow-500/20 text-yellow-300' :
-              'bg-blue-500/20 text-blue-300'
-            )}>
-              {user.role}
-            </span>
+            <div className="flex items-center gap-2">
+              {!user.isActive && (
+                <span className="badge bg-red-500/20 text-red-300 text-[10px]">Disabled</span>
+              )}
+              <span className={clsx(
+                'badge text-[10px]',
+                user.role === 'ADMIN' ? 'bg-red-500/20 text-red-300' :
+                user.role === 'MANAGER' ? 'bg-yellow-500/20 text-yellow-300' :
+                'bg-blue-500/20 text-blue-300'
+              )}>
+                {user.role}
+              </span>
+              <button
+                onClick={() => setEditingUser(user)}
+                className="btn-ghost p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-dark-400" />
+              </button>
+            </div>
           </div>
         ))}
       </div>
 
-      {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} />}
+      {showCreate && <UserFormModal onClose={() => setShowCreate(false)} />}
+      {editingUser && <UserFormModal user={editingUser} onClose={() => setEditingUser(null)} />}
     </div>
   );
 }
 
-function CreateUserModal({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', role: 'REP' });
+function UserFormModal({ user, onClose }: { user?: any; onClose: () => void }) {
+  const isEdit = !!user;
+  const [form, setForm] = useState({
+    firstName: user?.firstName || '',
+    lastName: user?.lastName || '',
+    email: user?.email || '',
+    password: '',
+    role: user?.role || 'REP',
+    isActive: user?.isActive ?? true,
+  });
   const queryClient = useQueryClient();
 
-  const createMutation = useMutation({
-    mutationFn: () => api.post('/auth/register', form),
+  const mutation = useMutation({
+    mutationFn: () => {
+      if (isEdit) {
+        const payload: any = { firstName: form.firstName, lastName: form.lastName, role: form.role, isActive: form.isActive };
+        if (form.password) payload.password = form.password;
+        return api.put(`/auth/users/${user.id}`, payload);
+      } else {
+        return api.post('/auth/register', form);
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success('User created');
+      toast.success(isEdit ? 'User updated' : 'User created');
       onClose();
     },
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed'),
@@ -245,11 +299,11 @@ function CreateUserModal({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="card w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-dark-50">Add User</h3>
+          <h3 className="text-lg font-bold text-dark-50">{isEdit ? 'Edit User' : 'Add User'}</h3>
           <button onClick={onClose} className="btn-ghost p-1"><X className="w-5 h-5" /></button>
         </div>
         <form
-          onSubmit={(e) => { e.preventDefault(); createMutation.mutate(); }}
+          onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }}
           className="space-y-4"
         >
           <div className="grid grid-cols-2 gap-3">
@@ -264,24 +318,35 @@ function CreateUserModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="label">Email</label>
-            <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+            <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required disabled={isEdit} />
           </div>
           <div>
-            <label className="label">Password</label>
-            <input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={6} />
+            <label className="label">{isEdit ? 'New Password (leave blank to keep)' : 'Password'}</label>
+            <input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} {...(!isEdit && { required: true, minLength: 6 })} />
           </div>
-          <div>
-            <label className="label">Role</label>
-            <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              <option value="REP">Representative</option>
-              <option value="MANAGER">Manager</option>
-              <option value="ADMIN">Admin</option>
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Role</label>
+              <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+                <option value="REP">Representative</option>
+                <option value="MANAGER">Manager</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+            </div>
+            {isEdit && (
+              <div>
+                <label className="label">Status</label>
+                <select className="input" value={form.isActive ? 'active' : 'disabled'} onChange={(e) => setForm({ ...form, isActive: e.target.value === 'active' })}>
+                  <option value="active">Active</option>
+                  <option value="disabled">Disabled</option>
+                </select>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
-            <button type="submit" disabled={createMutation.isPending} className="btn-primary">
-              {createMutation.isPending ? 'Creating...' : 'Create User'}
+            <button type="submit" disabled={mutation.isPending} className="btn-primary">
+              {mutation.isPending ? 'Saving...' : isEdit ? 'Update User' : 'Create User'}
             </button>
           </div>
         </form>
@@ -379,6 +444,155 @@ function SuppressionTab() {
   );
 }
 
+/* ─── Integrations (Twilio + OpenAI) ─── */
+function IntegrationsTab() {
+  const queryClient = useQueryClient();
+  const [showTwilioToken, setShowTwilioToken] = useState(false);
+  const [showOpenAIKey, setShowOpenAIKey] = useState(false);
+
+  const { data } = useQuery({
+    queryKey: ['systemSettings'],
+    queryFn: async () => {
+      const { data } = await api.get('/settings/settings');
+      return data;
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      await api.put(`/settings/settings/${key}`, { value });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['systemSettings'] });
+      toast.success('Setting saved');
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to save'),
+  });
+
+  const settings = data?.settings || {};
+  const [local, setLocal] = useState<Record<string, string>>({});
+  const [dirty, setDirty] = useState<Set<string>>(new Set());
+
+  const getVal = (key: string, def: string = '') =>
+    local[key] !== undefined ? local[key] : (settings[key] || def);
+
+  const handleChange = (key: string, value: string) => {
+    setLocal(prev => ({ ...prev, [key]: value }));
+    setDirty(prev => new Set(prev).add(key));
+  };
+
+  const handleSave = (key: string) => {
+    saveMutation.mutate({ key, value: getVal(key) });
+    setDirty(prev => { const next = new Set(prev); next.delete(key); return next; });
+  };
+
+  const IntegrationField = ({ label, settingKey, defaultValue = '', isSecret = false, showSecret = false, onToggle }: {
+    label: string; settingKey: string; defaultValue?: string; isSecret?: boolean; showSecret?: boolean; onToggle?: () => void;
+  }) => (
+    <div>
+      <label className="label">{label}</label>
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <input
+            className="input pr-10 font-mono text-sm"
+            type={isSecret && !showSecret ? 'password' : 'text'}
+            value={getVal(settingKey, defaultValue)}
+            onChange={(e) => handleChange(settingKey, e.target.value)}
+            placeholder={`Enter ${label}...`}
+          />
+          {isSecret && onToggle && (
+            <button type="button" onClick={onToggle} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-dark-400 hover:text-dark-200">
+              {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
+        {dirty.has(settingKey) && (
+          <button onClick={() => handleSave(settingKey)} disabled={saveMutation.isPending} className="btn-primary py-2 px-3 text-xs">
+            <Save className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Twilio */}
+      <div className="card p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+            <Phone className="w-5 h-5 text-red-400" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-dark-100">Twilio</h3>
+            <p className="text-xs text-dark-400">SMS sending, number management, webhooks</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4">
+          <IntegrationField label="Account SID" settingKey="twilioAccountSid" />
+          <IntegrationField label="Auth Token" settingKey="twilioAuthToken" isSecret showSecret={showTwilioToken} onToggle={() => setShowTwilioToken(!showTwilioToken)} />
+          <IntegrationField label="Messaging Service SID" settingKey="twilioMessagingServiceSid" />
+          <IntegrationField label="Webhook Base URL" settingKey="webhookBaseUrl" defaultValue="https://yourdomain.com" />
+        </div>
+      </div>
+
+      {/* OpenAI */}
+      <div className="card p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+            <Brain className="w-5 h-5 text-green-400" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-dark-100">OpenAI</h3>
+            <p className="text-xs text-dark-400">AI-powered replies, lead classification, scoring</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4">
+          <IntegrationField label="API Key" settingKey="openaiApiKey" isSecret showSecret={showOpenAIKey} onToggle={() => setShowOpenAIKey(!showOpenAIKey)} />
+          <div>
+            <label className="label">Model</label>
+            <div className="flex items-center gap-2">
+              <select
+                className="input flex-1"
+                value={getVal('openaiModel', 'gpt-4o-mini')}
+                onChange={(e) => handleChange('openaiModel', e.target.value)}
+              >
+                <option value="gpt-4o-mini">GPT-4o Mini (fast, cheap)</option>
+                <option value="gpt-4o">GPT-4o (best quality)</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                <option value="gpt-3.5-turbo">GPT-3.5 Turbo (legacy)</option>
+              </select>
+              {dirty.has('openaiModel') && (
+                <button onClick={() => handleSave('openaiModel')} disabled={saveMutation.isPending} className="btn-primary py-2 px-3 text-xs">
+                  <Save className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Webhooks Outbound */}
+      <div className="card p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+            <Webhook className="w-5 h-5 text-purple-400" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-dark-100">Outbound Webhooks</h3>
+            <p className="text-xs text-dark-400">Send events to external services (CRM, Zapier, Make)</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-4">
+          <IntegrationField label="New Reply Webhook URL" settingKey="webhookOnReply" />
+          <IntegrationField label="Opt-Out Webhook URL" settingKey="webhookOnOptOut" />
+          <IntegrationField label="Stage Change Webhook URL" settingKey="webhookOnStageChange" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── System ─── */
 function SystemTab() {
   const queryClient = useQueryClient();
@@ -410,10 +624,12 @@ function SystemTab() {
   const fields = [
     { label: 'Max Messages / Number / Day', key: 'maxPerNumberPerDay', defaultValue: '300' },
     { label: 'Global Daily Limit', key: 'globalDailyLimit', defaultValue: '20000' },
-    { label: 'Quiet Hours Start', key: 'quietHoursStart', defaultValue: '21:00' },
-    { label: 'Quiet Hours End', key: 'quietHoursEnd', defaultValue: '09:00' },
+    { label: 'Quiet Hours Start (24h)', key: 'quietHoursStart', defaultValue: '21' },
+    { label: 'Quiet Hours End (24h)', key: 'quietHoursEnd', defaultValue: '9' },
+    { label: 'Quiet Hours Timezone', key: 'quietHoursTimezone', defaultValue: 'America/New_York' },
     { label: 'Default Send Speed (msg/min)', key: 'defaultSpeed', defaultValue: '4' },
     { label: 'Opt-Out Reply', key: 'optOutReply', defaultValue: 'You have been unsubscribed.' },
+    { label: 'Help Reply', key: 'helpReply', defaultValue: 'Reply STOP to opt-out.' },
   ];
 
   const getValue = (key: string, defaultValue: string) =>

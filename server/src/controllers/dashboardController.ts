@@ -13,6 +13,7 @@ export class DashboardController {
     // Parallel queries for performance
     const [
       sentLast24h,
+      deliveredLast24h,
       totalLeads,
       repliesLast7d,
       sentLast7d,
@@ -27,6 +28,15 @@ export class DashboardController {
           direction: 'OUTBOUND',
           createdAt: { gte: last24h },
           status: { in: ['SENT', 'DELIVERED'] },
+        },
+      }),
+
+      // Messages delivered in last 24h
+      prisma.message.count({
+        where: {
+          direction: 'OUTBOUND',
+          createdAt: { gte: last24h },
+          status: 'DELIVERED',
         },
       }),
 
@@ -107,6 +117,7 @@ export class DashboardController {
     res.json({
       overview: {
         sentLast24h,
+        deliveredLast24h,
         totalLeads,
         replyRate: parseFloat(replyRate),
         activeAutomations,

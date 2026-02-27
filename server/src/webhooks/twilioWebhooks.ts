@@ -3,6 +3,8 @@ import prisma from '../config/database';
 import logger from '../config/logger';
 import { ComplianceService } from '../services/complianceService';
 import { AutomationService } from '../services/automationService';
+import { AutoTagService } from '../services/autoTagService';
+import { WebhookService } from '../services/webhookService';
 import getTwilioClient from '../config/twilio';
 import { config } from '../config';
 import { validateRequest } from 'twilio';
@@ -124,6 +126,13 @@ router.post('/inbound', async (req: Request, res: Response) => {
 
       // Handle reply - pause automations, update lead status
       await AutomationService.onLeadReply(lead.id);
+      await AutoTagService.onReply(lead.id);
+      await WebhookService.onReply({
+        leadId: lead.id,
+        phone: From,
+        body: Body,
+        conversationId: conversation.id,
+      });
 
       // Update campaign lead status if applicable
       await prisma.campaignLead.updateMany({

@@ -27,6 +27,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const { data } = await api.post('/auth/login', { email, password });
       localStorage.setItem('scl_token', data.token);
+      localStorage.setItem('scl_refresh_token', data.refreshToken);
       localStorage.setItem('scl_user', JSON.stringify(data.user));
       set({
         user: data.user,
@@ -44,6 +45,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     localStorage.removeItem('scl_token');
+    localStorage.removeItem('scl_refresh_token');
     localStorage.removeItem('scl_user');
     set({
       user: null,
@@ -93,8 +95,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         } else {
           // 401/403 = token invalid, clear and redirect to login
           localStorage.removeItem('scl_token');
+          localStorage.removeItem('scl_refresh_token');
           localStorage.removeItem('scl_user');
-          set({ user: null, token: null, isAuthenticated: false, isLoading: false, initialized: true });
         }
       }
     } else {

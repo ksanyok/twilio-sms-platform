@@ -189,7 +189,7 @@ export class SendingEngine {
     ]);
 
     // Check quiet hours once
-    if (ComplianceService.isQuietHours()) {
+    if (await ComplianceService.isQuietHours()) {
       return { queued: 0, skipped: options.leads.length, errors: ['Quiet hours — all skipped'] };
     }
 

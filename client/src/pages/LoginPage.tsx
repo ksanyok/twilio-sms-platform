@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { Shield, LogIn, Eye, EyeOff } from 'lucide-react';
+import { useThemeStore } from '../stores/themeStore';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -31,7 +32,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-dark-950 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-dark-950 flex items-center justify-center px-4" style={{ backgroundColor: 'var(--bg-primary)' }}>
       {/* Background accent */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-scl-600/10 rounded-full blur-[120px]" />

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { Campaign, CampaignStatus } from '../types';
 import {
@@ -17,6 +18,8 @@ import {
   Filter,
   Trash2,
   Users,
+  Copy,
+  Eye,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -25,7 +28,21 @@ export default function CampaignsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [search, setSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; campaign: Campaign } | null>(null);
+  const ctxMenuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  // Close context menu on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target as Node)) {
+        setCtxMenu(null);
+      }
+    };
+    if (ctxMenu) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [ctxMenu]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['campaigns', statusFilter, search],
@@ -164,7 +181,14 @@ export default function CampaignsPage() {
                 : null;
               
               return (
-                <tr key={campaign.id} className="table-row">
+                <tr
+                  key={campaign.id}
+                  className="table-row cursor-context-menu"
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setCtxMenu({ x: e.clientX, y: e.clientY, campaign });
+                  }}
+                >
                   <td className="table-cell">
                     <div>
                       <p className="font-medium text-dark-200">{campaign.name}</p>
@@ -244,6 +268,70 @@ export default function CampaignsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Right-Click Context Menu */}
+      {ctxMenu && (
+        <div
+          ref={ctxMenuRef}
+          className="fixed z-[100] w-52 bg-dark-800 border border-dark-700 rounded-lg shadow-2xl py-1 animate-in fade-in"
+          style={{ left: ctxMenu.x, top: ctxMenu.y }}
+        >
+          <button
+            onClick={() => { navigate(`/campaigns/${ctxMenu.campaign.id}`); setCtxMenu(null); }}
+            className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+          >
+            <Eye className="w-3.5 h-3.5" /> View Campaign
+          </button>
+          <button
+            onClick={() => { navigator.clipboard.writeText(ctxMenu.campaign.name); toast.success('Name copied'); setCtxMenu(null); }}
+            className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+          >
+            <Copy className="w-3.5 h-3.5" /> Copy Name
+          </button>
+          <div className="border-t border-dark-700 my-1" />
+          {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(ctxMenu.campaign.status) && (
+            <button
+              onClick={() => { startMutation.mutate(ctxMenu.campaign.id); setCtxMenu(null); }}
+              className="w-full text-left px-3 py-2 text-sm text-green-400 hover:bg-dark-700/50 flex items-center gap-2"
+            >
+              <Play className="w-3.5 h-3.5" /> Start Campaign
+            </button>
+          )}
+          {ctxMenu.campaign.status === 'SENDING' && (
+            <button
+              onClick={() => { pauseMutation.mutate(ctxMenu.campaign.id); setCtxMenu(null); }}
+              className="w-full text-left px-3 py-2 text-sm text-yellow-400 hover:bg-dark-700/50 flex items-center gap-2"
+            >
+              <Pause className="w-3.5 h-3.5" /> Pause Campaign
+            </button>
+          )}
+          {['SENDING', 'PAUSED', 'SCHEDULED'].includes(ctxMenu.campaign.status) && (
+            <button
+              onClick={() => {
+                setCtxMenu(null);
+                if (window.confirm('Cancel this campaign?')) cancelMutation.mutate(ctxMenu.campaign.id);
+              }}
+              className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
+            >
+              <XCircle className="w-3.5 h-3.5" /> Cancel Campaign
+            </button>
+          )}
+          {['DRAFT', 'COMPLETED', 'CANCELLED'].includes(ctxMenu.campaign.status) && (
+            <>
+              <div className="border-t border-dark-700 my-1" />
+              <button
+                onClick={() => {
+                  setCtxMenu(null);
+                  if (window.confirm('Delete this campaign?')) deleteMutation.mutate(ctxMenu.campaign.id);
+                }}
+                className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete Campaign
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Create Campaign Modal */}
       {showCreateModal && (

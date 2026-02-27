@@ -48,6 +48,12 @@ export class AuthController {
       { expiresIn: config.jwt.expiresIn } as jwt.SignOptions
     );
 
+    const refreshToken = jwt.sign(
+      { userId: user.id, type: 'refresh' },
+      config.jwt.refreshSecret,
+      { expiresIn: config.jwt.refreshExpiresIn } as jwt.SignOptions
+    );
+
     // Update last login
     await prisma.user.update({
       where: { id: user.id },
@@ -64,6 +70,7 @@ export class AuthController {
 
     res.json({
       token,
+      refreshToken,
       user: {
         id: user.id,
         email: user.email,
@@ -146,6 +153,65 @@ export class AuthController {
       email: req.user?.email,
     });
     res.json({ user: req.user });
+  }
+
+  static async refresh(req: AuthRequest, res: Response): Promise<void> {
+    const { refreshToken } = req.body;
+    const requestId = (req as any).requestId || '-';
+
+    if (!refreshToken) {
+      throw new AppError('Refresh token required', 400);
+    }
+
+    try {
+      const decoded = jwt.verify(refreshToken, config.jwt.refreshSecret) as {
+        userId: string;
+        type: string;
+      };
+
+      if (decoded.type !== 'refresh') {
+        throw new AppError('Invalid token type', 401);
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.userId },
+        select: { id: true, email: true, role: true, isActive: true, firstName: true, lastName: true },
+      });
+
+      if (!user || !user.isActive) {
+        throw new AppError('User not found or inactive', 401);
+      }
+
+      const newToken = jwt.sign(
+        { userId: user.id, email: user.email, role: user.role },
+        config.jwt.secret,
+        { expiresIn: config.jwt.expiresIn } as jwt.SignOptions
+      );
+
+      const newRefreshToken = jwt.sign(
+        { userId: user.id, type: 'refresh' },
+        config.jwt.refreshSecret,
+        { expiresIn: config.jwt.refreshExpiresIn } as jwt.SignOptions
+      );
+
+      authLogger.info('Token refreshed', { requestId, userId: user.id });
+
+      res.json({
+        token: newToken,
+        refreshToken: newRefreshToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+        },
+      });
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      authLogger.warn('Token refresh failed', { requestId, error: (error as Error).message });
+      throw new AppError('Invalid refresh token', 401);
+    }
   }
 
   static async getUsers(req: AuthRequest, res: Response): Promise<void> {

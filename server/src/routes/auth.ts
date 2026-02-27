@@ -20,6 +20,7 @@ const loginLimiter = rateLimit({
 
 // Public
 router.post('/login', loginLimiter, asyncHandler(AuthController.login));
+router.post('/refresh', asyncHandler(AuthController.refresh));
 
 // Protected
 router.get('/me', authenticate, asyncHandler(AuthController.getMe));

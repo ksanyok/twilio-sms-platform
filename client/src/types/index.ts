@@ -183,6 +183,7 @@ export interface NumberPool {
 export interface DashboardStats {
   overview: {
     sentLast24h: number;
+    deliveredLast24h: number;
     totalLeads: number;
     replyRate: number;
     activeAutomations: number;

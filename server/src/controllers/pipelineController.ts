@@ -2,6 +2,7 @@ import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
+import { WebhookService } from '../services/webhookService';
 
 export class PipelineController {
 
@@ -101,6 +102,13 @@ export class PipelineController {
     const { cardId } = req.params;
     const { stageId, position } = req.body;
 
+    // Get previous stage before moving
+    const prevCard = await prisma.pipelineCard.findUnique({
+      where: { id: cardId },
+      include: { stage: true },
+    });
+    const fromStageName = prevCard?.stage?.name || 'Unknown';
+
     const card = await prisma.pipelineCard.update({
       where: { id: cardId },
       data: {
@@ -112,6 +120,15 @@ export class PipelineController {
         lead: true,
       },
     });
+
+    // Fire webhook on stage change
+    if (fromStageName !== card.stage.name) {
+      WebhookService.onStageChange({
+        leadId: card.leadId,
+        fromStage: fromStageName,
+        toStage: card.stage.name,
+      }).catch(() => {}); // fire and forget
+    }
 
     // Update lead status based on pipeline stage
     const stageStatusMap: Record<string, string> = {

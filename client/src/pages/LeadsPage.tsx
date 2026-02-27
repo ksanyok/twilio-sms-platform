@@ -17,6 +17,11 @@ import {
   ChevronLeft,
   ChevronRight,
   FileSpreadsheet,
+  Copy,
+  ExternalLink,
+  Ban,
+  MessageSquare,
+  ArrowRightLeft,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -33,6 +38,8 @@ export default function LeadsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; lead: any } | null>(null);
+  const ctxMenuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -42,10 +49,13 @@ export default function LeadsPage() {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setOpenMenuId(null);
       }
+      if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target as Node)) {
+        setCtxMenu(null);
+      }
     };
-    if (openMenuId) document.addEventListener('mousedown', handleClick);
+    if (openMenuId || ctxMenu) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [openMenuId]);
+  }, [openMenuId, ctxMenu]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['leads', search, statusFilter, page],
@@ -238,7 +248,12 @@ export default function LeadsPage() {
               {leads.map((lead: any) => (
                 <tr
                   key={lead.id}
-                  className="border-b border-dark-800/50 hover:bg-dark-800/30 transition-colors"
+                  className="border-b border-dark-800/50 hover:bg-dark-800/30 transition-colors cursor-context-menu"
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setCtxMenu({ x: e.clientX, y: e.clientY, lead });
+                    setOpenMenuId(null);
+                  }}
                 >
                   <td className="table-td">
                     <input
@@ -357,6 +372,57 @@ export default function LeadsPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Right-Click Context Menu */}
+        {ctxMenu && (
+          <div
+            ref={ctxMenuRef}
+            className="fixed z-[100] w-52 bg-dark-800 border border-dark-700 rounded-lg shadow-2xl py-1 animate-in fade-in"
+            style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          >
+            <button
+              onClick={() => { navigate(`/inbox?lead=${ctxMenu.lead.id}`); setCtxMenu(null); }}
+              className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+            >
+              <MessageSquare className="w-3.5 h-3.5" /> Open Conversation
+            </button>
+            <button
+              onClick={() => { navigate(`/pipeline?lead=${ctxMenu.lead.id}`); setCtxMenu(null); }}
+              className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+            >
+              <ArrowRightLeft className="w-3.5 h-3.5" /> View in Pipeline
+            </button>
+            <button
+              onClick={() => { navigator.clipboard.writeText(ctxMenu.lead.phone); toast.success('Phone copied'); setCtxMenu(null); }}
+              className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+            >
+              <Copy className="w-3.5 h-3.5" /> Copy Phone
+            </button>
+            <div className="border-t border-dark-700 my-1" />
+            <button
+              onClick={() => { statusMutation.mutate({ id: ctxMenu.lead.id, status: 'CONTACTED' }); setCtxMenu(null); }}
+              className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+            >
+              <Phone className="w-3.5 h-3.5" /> Mark Contacted
+            </button>
+            <button
+              onClick={() => { statusMutation.mutate({ id: ctxMenu.lead.id, status: 'DNC' }); setCtxMenu(null); }}
+              className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
+            >
+              <Ban className="w-3.5 h-3.5" /> Mark DNC
+            </button>
+            <div className="border-t border-dark-700 my-1" />
+            <button
+              onClick={() => {
+                setCtxMenu(null);
+                if (window.confirm('Delete this lead?')) deleteMutation.mutate(ctxMenu.lead.id);
+              }}
+              className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete Lead
+            </button>
+          </div>
+        )}
 
         {/* Pagination */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-dark-700/50">

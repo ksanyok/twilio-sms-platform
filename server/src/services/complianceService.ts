@@ -2,6 +2,8 @@ import prisma from '../config/database';
 import redis from '../config/redis';
 import logger from '../config/logger';
 import { config } from '../config';
+import { AutoTagService } from './autoTagService';
+import { WebhookService } from './webhookService';
 
 /**
  * ComplianceService - STOP/HELP handling, suppression, quiet hours
@@ -63,7 +65,7 @@ export class ComplianceService {
     }
 
     // Check quiet hours (not cached — time-dependent)
-    if (this.isQuietHours()) {
+    if (await this.isQuietHours()) {
       return { allowed: false, reason: 'Quiet hours' };
     }
 
@@ -163,7 +165,12 @@ export class ComplianceService {
           pauseReason: 'opted_out',
         },
       });
+      // Auto-tag opted-out leads
+      await AutoTagService.onOptOut(lead.id);
     }
+
+    // Fire opt-out webhook
+    await WebhookService.onOptOut({ phone, leadId: leads[0]?.id });
 
     logger.info(`Opt-out processed: ${phone}`);
     await this.invalidateCache(phone);
@@ -190,19 +197,65 @@ export class ComplianceService {
   }
 
   /**
-   * Check if current time is within quiet hours
+   * Check if current time is within quiet hours.
+   * Reads from DB SystemSetting first, falling back to env config.
    */
-  static isQuietHours(): boolean {
+  static async isQuietHours(): Promise<boolean> {
+    let quietHoursStart = config.compliance.quietHoursStart;
+    let quietHoursEnd = config.compliance.quietHoursEnd;
+    let timezone = config.compliance.timezone;
+
+    try {
+      // Try to read settings from DB (cached in Redis for 60s)
+      const cacheKey = 'compliance:quiet_hours_config';
+      const cached = await redis.get(cacheKey);
+
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        quietHoursStart = parsed.start;
+        quietHoursEnd = parsed.end;
+        timezone = parsed.timezone;
+      } else {
+        const settings = await prisma.systemSetting.findMany({
+          where: {
+            key: { in: ['quietHoursStart', 'quietHoursEnd', 'quietHoursTimezone'] },
+          },
+        });
+
+        const settingsMap = Object.fromEntries(settings.map((s) => [s.key, String(s.value)]));
+
+        if (settingsMap.quietHoursStart) {
+          // Support "HH:MM" format from frontend
+          const startStr = settingsMap.quietHoursStart;
+          quietHoursStart = parseInt(startStr.includes(':') ? startStr.split(':')[0] : startStr, 10);
+        }
+        if (settingsMap.quietHoursEnd) {
+          const endStr = settingsMap.quietHoursEnd;
+          quietHoursEnd = parseInt(endStr.includes(':') ? endStr.split(':')[0] : endStr, 10);
+        }
+        if (settingsMap.quietHoursTimezone) {
+          timezone = settingsMap.quietHoursTimezone;
+        }
+
+        // Cache for 60s
+        await redis.set(
+          cacheKey,
+          JSON.stringify({ start: quietHoursStart, end: quietHoursEnd, timezone }),
+          'EX',
+          60
+        );
+      }
+    } catch (err) {
+      logger.warn('Failed to read quiet hours from DB, using env config', { error: (err as Error).message });
+    }
+
     const now = new Date();
-    // Convert to target timezone
     const timeStr = now.toLocaleTimeString('en-US', {
-      timeZone: config.compliance.timezone,
+      timeZone: timezone,
       hour12: false,
       hour: '2-digit',
     });
     const currentHour = parseInt(timeStr, 10);
-
-    const { quietHoursStart, quietHoursEnd } = config.compliance;
 
     // Handle overnight quiet hours (e.g., 20:00 - 09:00)
     if (quietHoursStart > quietHoursEnd) {

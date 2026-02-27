@@ -45,6 +45,10 @@ import {
   LayoutGrid,
   Columns,
   LayoutList,
+  Filter,
+  UserPlus,
+  StickyNote,
+  Send,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -82,6 +86,7 @@ interface PipelineCard {
     phone: string;
     status: string;
     company?: string | null;
+    assignedRepId?: string | null;
     tags: { tag: { id: string; name: string; color: string } }[];
   };
   notes: string | null;
@@ -113,6 +118,11 @@ export default function PipelinePage() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [overId, setOverId] = useState<UniqueIdentifier | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(getStoredViewMode);
+  const [filterTag, setFilterTag] = useState<string>('');
+  const [filterRep, setFilterRep] = useState<string>('');
+  const [filterSearch, setFilterSearch] = useState<string>('');
+  const [showNoteModal, setShowNoteModal] = useState<PipelineCard | null>(null);
+  const [showAssignModal, setShowAssignModal] = useState<PipelineCard | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -161,7 +171,38 @@ export default function PipelinePage() {
     },
   });
 
-  const stages: PipelineStage[] = data?.stages || [];
+  // Tags + Users for filters
+  const { data: tagsData } = useQuery({
+    queryKey: ['tags'],
+    queryFn: async () => { const { data } = await api.get('/settings/tags'); return data; },
+  });
+  const { data: usersData } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => { const { data } = await api.get('/auth/users'); return data; },
+  });
+  const allTags: { id: string; name: string; color: string }[] = tagsData?.tags || [];
+  const allUsers: { id: string; firstName: string; lastName: string }[] = usersData?.users || [];
+
+  const rawStages: PipelineStage[] = data?.stages || [];
+
+  // Apply filters
+  const stages = useMemo(() => {
+    if (!filterTag && !filterRep && !filterSearch) return rawStages;
+    return rawStages.map(stage => ({
+      ...stage,
+      cards: stage.cards.filter(card => {
+        if (filterTag && !card.lead.tags?.some(t => t.tag.id === filterTag)) return false;
+        if (filterRep && card.lead.assignedRepId !== filterRep) return false;
+        if (filterSearch) {
+          const q = filterSearch.toLowerCase();
+          const name = `${card.lead.firstName} ${card.lead.lastName || ''}`.toLowerCase();
+          if (!name.includes(q) && !card.lead.phone.includes(q) && !(card.lead.company || '').toLowerCase().includes(q)) return false;
+        }
+        return true;
+      }),
+    }));
+  }, [rawStages, filterTag, filterRep, filterSearch]);
+
   const stageIds = useMemo(() => stages.map((s) => `stage-${s.id}`), [stages]);
 
   const moveCardMutation = useMutation({
@@ -195,9 +236,29 @@ export default function PipelinePage() {
     },
   });
 
+  const assignRepMutation = useMutation({
+    mutationFn: ({ leadId, repId }: { leadId: string; repId: string | null }) =>
+      api.put(`/leads/${leadId}`, { assignedRepId: repId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+      toast.success('Rep assigned');
+      setShowAssignModal(null);
+    },
+  });
+
+  const saveNoteMutation = useMutation({
+    mutationFn: ({ leadId, notes }: { leadId: string; notes: string }) =>
+      api.put(`/leads/${leadId}`, { notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+      toast.success('Note saved');
+      setShowNoteModal(null);
+    },
+  });
+
   /* ─── Find helpers ─── */
   function findCard(cardId: string): PipelineCard | undefined {
-    for (const stage of stages) {
+    for (const stage of rawStages) {
       const card = stage.cards.find((c) => c.id === cardId);
       if (card) return card;
     }
@@ -205,7 +266,7 @@ export default function PipelinePage() {
   }
 
   function findStageByCardId(cardId: string): PipelineStage | undefined {
-    return stages.find((s) => s.cards.some((c) => c.id === cardId));
+    return rawStages.find((s) => s.cards.some((c) => c.id === cardId));
   }
 
   /* ─── Drag handlers ─── */
@@ -321,7 +382,7 @@ export default function PipelinePage() {
           </div>
           <div className="flex items-center gap-3">
             <span className="text-sm text-dark-500">
-              {stages.reduce((sum, s) => sum + s.cards.length, 0)} leads total
+              {stages.reduce((sum, s) => sum + s.cards.length, 0)} leads
             </span>
             {/* View Mode Toggle */}
             <div className="flex items-center bg-dark-800 rounded-lg p-0.5 border border-dark-700/50">
@@ -364,6 +425,45 @@ export default function PipelinePage() {
               Add Stage
             </button>
           </div>
+        </div>
+        {/* Filter Bar */}
+        <div className="flex items-center gap-3 mt-3">
+          <Filter className="w-4 h-4 text-dark-500" />
+          <input
+            type="text"
+            placeholder="Search leads..."
+            value={filterSearch}
+            onChange={(e) => setFilterSearch(e.target.value)}
+            className="input py-1.5 px-3 text-sm w-48"
+          />
+          <select
+            value={filterTag}
+            onChange={(e) => setFilterTag(e.target.value)}
+            className="input py-1.5 px-3 text-sm w-40"
+          >
+            <option value="">All Tags</option>
+            {allTags.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <select
+            value={filterRep}
+            onChange={(e) => setFilterRep(e.target.value)}
+            className="input py-1.5 px-3 text-sm w-40"
+          >
+            <option value="">All Reps</option>
+            {allUsers.map(u => (
+              <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+            ))}
+          </select>
+          {(filterTag || filterRep || filterSearch) && (
+            <button
+              onClick={() => { setFilterTag(''); setFilterRep(''); setFilterSearch(''); }}
+              className="btn-ghost text-xs text-dark-400 hover:text-dark-200"
+            >
+              <X className="w-3.5 h-3.5 mr-1" /> Clear
+            </button>
+          )}
         </div>
       </div>
 
@@ -472,6 +572,15 @@ export default function PipelinePage() {
               </button>
               <button
                 onClick={() => {
+                  navigate(`/inbox?lead=${contextMenu.card!.leadId}&reply=true`);
+                  setContextMenu(null);
+                }}
+                className="ctx-menu-item"
+              >
+                <Send className="w-3.5 h-3.5" /> Send SMS
+              </button>
+              <button
+                onClick={() => {
                   navigator.clipboard.writeText(contextMenu.card!.lead.phone);
                   toast.success('Phone copied');
                   setContextMenu(null);
@@ -479,6 +588,25 @@ export default function PipelinePage() {
                 className="ctx-menu-item"
               >
                 <Copy className="w-3.5 h-3.5" /> Copy Phone
+              </button>
+              <div className="border-t border-dark-700 my-1" />
+              <button
+                onClick={() => {
+                  setShowAssignModal(contextMenu.card!);
+                  setContextMenu(null);
+                }}
+                className="ctx-menu-item"
+              >
+                <UserPlus className="w-3.5 h-3.5" /> Assign Rep
+              </button>
+              <button
+                onClick={() => {
+                  setShowNoteModal(contextMenu.card!);
+                  setContextMenu(null);
+                }}
+                className="ctx-menu-item"
+              >
+                <StickyNote className="w-3.5 h-3.5" /> Add Note
               </button>
               <button
                 onClick={() => {
@@ -544,6 +672,21 @@ export default function PipelinePage() {
       {/* Modals */}
       {showAddStage && <StageModal onClose={() => setShowAddStage(false)} />}
       {editingStage && <StageModal stage={editingStage} onClose={() => setEditingStage(null)} />}
+      {showAssignModal && (
+        <AssignRepModal
+          card={showAssignModal}
+          users={allUsers}
+          onAssign={(repId) => assignRepMutation.mutate({ leadId: showAssignModal.leadId, repId })}
+          onClose={() => setShowAssignModal(null)}
+        />
+      )}
+      {showNoteModal && (
+        <NoteModal
+          card={showNoteModal}
+          onSave={(notes) => saveNoteMutation.mutate({ leadId: showNoteModal.leadId, notes })}
+          onClose={() => setShowNoteModal(null)}
+        />
+      )}
     </div>
   );
 }
@@ -946,6 +1089,91 @@ function StageModal({ stage, onClose }: { stage?: PipelineStage; onClose: () => 
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Assign Rep Modal ─── */
+function AssignRepModal({
+  card,
+  users,
+  onAssign,
+  onClose,
+}: {
+  card: PipelineCard;
+  users: { id: string; firstName: string; lastName: string }[];
+  onAssign: (repId: string | null) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="card w-full max-w-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-dark-50">Assign Rep</h3>
+          <button onClick={onClose} className="btn-ghost p-1"><X className="w-5 h-5" /></button>
+        </div>
+        <p className="text-sm text-dark-400 mb-3">
+          {card.lead.firstName} {card.lead.lastName || ''} · {card.lead.phone}
+        </p>
+        <div className="space-y-1.5 max-h-60 overflow-y-auto">
+          <button
+            onClick={() => onAssign(null as any)}
+            className="w-full text-left p-2.5 rounded-lg text-sm hover:bg-dark-700/50 text-dark-400 transition-colors"
+          >
+            Unassign
+          </button>
+          {users.map((u) => (
+            <button
+              key={u.id}
+              onClick={() => onAssign(u.id)}
+              className="w-full flex items-center gap-3 p-2.5 rounded-lg text-sm hover:bg-dark-700/50 transition-colors"
+            >
+              <div className="w-7 h-7 rounded-full bg-scl-600/20 flex items-center justify-center text-xs font-semibold text-scl-400">
+                {u.firstName[0]}
+              </div>
+              <span className="text-dark-200">{u.firstName} {u.lastName}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Note Modal ─── */
+function NoteModal({
+  card,
+  onSave,
+  onClose,
+}: {
+  card: PipelineCard;
+  onSave: (notes: string) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState(card.notes || '');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="card w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-dark-50">Note</h3>
+          <button onClick={onClose} className="btn-ghost p-1"><X className="w-5 h-5" /></button>
+        </div>
+        <p className="text-sm text-dark-400 mb-3">
+          {card.lead.firstName} {card.lead.lastName || ''} · {card.lead.phone}
+        </p>
+        <textarea
+          className="input min-h-[120px] text-sm"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Add a note about this lead..."
+          autoFocus
+        />
+        <div className="flex justify-end gap-3 pt-3">
+          <button onClick={onClose} className="btn-ghost">Cancel</button>
+          <button onClick={() => onSave(text)} className="btn-primary">Save Note</button>
+        </div>
       </div>
     </div>
   );
