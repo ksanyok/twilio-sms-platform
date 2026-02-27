@@ -33,6 +33,7 @@ import { useThemeStore } from '../stores/themeStore';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const isDark = useThemeStore(s => s.resolved) === 'dark';
   const { data, isLoading, isError } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
@@ -71,7 +72,6 @@ export default function DashboardPage() {
   }
 
   const stats = data;
-  const isDark = useThemeStore(s => s.resolved) === 'dark';
 
   return (
     <div className="p-8 space-y-8 max-w-[1600px]">
