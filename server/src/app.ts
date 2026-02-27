@@ -23,6 +23,10 @@ import aiRoutes from './routes/ai';
 // Webhooks
 import twilioWebhooks from './webhooks/twilioWebhooks';
 
+// Health check dependencies
+import prisma from './config/database';
+import redis from './config/redis';
+
 const app = express();
 
 // Security
@@ -45,9 +49,29 @@ app.use(compression());
 // Logging
 app.use(requestLogger);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', env: config.env, timestamp: new Date().toISOString() });
+// Health check (verifies DB + Redis connectivity)
+app.get('/api/health', async (req, res) => {
+  try {
+    const [dbOk, redisOk] = await Promise.allSettled([
+      prisma.$queryRaw`SELECT 1`,
+      redis.ping(),
+    ]);
+
+    const status = dbOk.status === 'fulfilled' && redisOk.status === 'fulfilled' ? 'ok' : 'degraded';
+    const statusCode = status === 'ok' ? 200 : 503;
+
+    res.status(statusCode).json({
+      status,
+      env: config.env,
+      timestamp: new Date().toISOString(),
+      services: {
+        database: dbOk.status === 'fulfilled' ? 'ok' : 'error',
+        redis: redisOk.status === 'fulfilled' ? 'ok' : 'error',
+      },
+    });
+  } catch (error) {
+    res.status(503).json({ status: 'error', timestamp: new Date().toISOString() });
+  }
 });
 
 // API Routes

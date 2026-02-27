@@ -385,4 +385,24 @@ export class LeadController {
 
     res.json({ message: 'Bulk action completed', affected: leadIds.length });
   }
+
+  static async delete(req: AuthRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    const lead = await prisma.lead.findUnique({ where: { id } });
+    if (!lead) throw new AppError('Lead not found', 404);
+
+    // Delete related data in correct order (FK constraints)
+    await prisma.$transaction([
+      prisma.leadTag.deleteMany({ where: { leadId: id } }),
+      prisma.automationRun.deleteMany({ where: { leadId: id } }),
+      prisma.pipelineCard.deleteMany({ where: { leadId: id } }),
+      prisma.campaignLead.deleteMany({ where: { leadId: id } }),
+      prisma.message.deleteMany({ where: { conversation: { leadId: id } } }),
+      prisma.conversation.deleteMany({ where: { leadId: id } }),
+      prisma.lead.delete({ where: { id } }),
+    ]);
+
+    res.json({ message: 'Lead deleted successfully' });
+  }
 }

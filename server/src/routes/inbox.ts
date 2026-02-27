@@ -1,11 +1,9 @@
 import { Router } from 'express';
 import { InboxController } from '../controllers/inboxController';
 import { authenticate } from '../middleware/auth';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
-
-const asyncHandler = (fn: Function) => (req: any, res: any, next: any) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
 
 router.use(authenticate);
 

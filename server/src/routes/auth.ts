@@ -2,11 +2,9 @@ import { Router } from 'express';
 import { AuthController } from '../controllers/authController';
 import { authenticate, requireRole } from '../middleware/auth';
 import rateLimit from 'express-rate-limit';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
-
-const asyncHandler = (fn: Function) => (req: any, res: any, next: any) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
 
 // Rate limit login attempts: 10 per 15 minutes per IP
 const loginLimiter = rateLimit({

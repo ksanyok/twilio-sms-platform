@@ -1,11 +1,9 @@
 import { Router } from 'express';
 import { PipelineController } from '../controllers/pipelineController';
 import { authenticate, requireRole } from '../middleware/auth';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
-
-const asyncHandler = (fn: Function) => (req: any, res: any, next: any) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
 
 router.use(authenticate);
 

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
@@ -7,15 +7,17 @@ import { useThemeStore } from './stores/themeStore';
 import ErrorBoundary from './components/ErrorBoundary';
 import AppLayout from './components/layout/AppLayout';
 import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import CampaignsPage from './pages/CampaignsPage';
-import InboxPage from './pages/InboxPage';
-import PipelinePage from './pages/PipelinePage';
-import LeadsPage from './pages/LeadsPage';
-import NumbersPage from './pages/NumbersPage';
-import AutomationPage from './pages/AutomationPage';
-import SettingsPage from './pages/SettingsPage';
-import NotFoundPage from './pages/NotFoundPage';
+
+// Lazy-loaded pages for better initial bundle size
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const CampaignsPage = lazy(() => import('./pages/CampaignsPage'));
+const InboxPage = lazy(() => import('./pages/InboxPage'));
+const PipelinePage = lazy(() => import('./pages/PipelinePage'));
+const LeadsPage = lazy(() => import('./pages/LeadsPage'));
+const NumbersPage = lazy(() => import('./pages/NumbersPage'));
+const AutomationPage = lazy(() => import('./pages/AutomationPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,6 +56,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function PageLoader() {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-scl-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
 export default function App() {
   const { resolved } = useThemeStore();
   const isDark = resolved === 'dark';
@@ -69,17 +79,19 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <AppLayout>
-                    <Routes>
-                      <Route path="/" element={<DashboardPage />} />
-                      <Route path="campaigns" element={<CampaignsPage />} />
-                      <Route path="inbox" element={<InboxPage />} />
-                      <Route path="pipeline" element={<PipelinePage />} />
-                      <Route path="leads" element={<LeadsPage />} />
-                      <Route path="numbers" element={<NumbersPage />} />
-                      <Route path="automation" element={<AutomationPage />} />
-                      <Route path="settings" element={<SettingsPage />} />
-                      <Route path="*" element={<NotFoundPage />} />
-                    </Routes>
+                    <Suspense fallback={<PageLoader />}>
+                      <Routes>
+                        <Route path="/" element={<DashboardPage />} />
+                        <Route path="campaigns" element={<CampaignsPage />} />
+                        <Route path="inbox" element={<InboxPage />} />
+                        <Route path="pipeline" element={<PipelinePage />} />
+                        <Route path="leads" element={<LeadsPage />} />
+                        <Route path="numbers" element={<NumbersPage />} />
+                        <Route path="automation" element={<AutomationPage />} />
+                        <Route path="settings" element={<SettingsPage />} />
+                        <Route path="*" element={<NotFoundPage />} />
+                      </Routes>
+                    </Suspense>
                   </AppLayout>
                 </ProtectedRoute>
               }

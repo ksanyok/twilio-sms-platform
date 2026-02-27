@@ -1,11 +1,9 @@
 import { Router } from 'express';
 import { NumberController } from '../controllers/numberController';
 import { authenticate, requireRole } from '../middleware/auth';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
-
-const asyncHandler = (fn: Function) => (req: any, res: any, next: any) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
 
 router.use(authenticate);
 router.use(requireRole('ADMIN', 'MANAGER'));

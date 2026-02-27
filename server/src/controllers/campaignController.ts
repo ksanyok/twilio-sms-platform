@@ -7,11 +7,14 @@ import { SendingEngine, campaignQueue } from '../services/sendingEngine';
 export class CampaignController {
 
   static async list(req: AuthRequest, res: Response): Promise<void> {
-    const { status, page = '1', limit = '20' } = req.query;
+    const { status, search, page = '1', limit = '20' } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
     const where: any = {};
     if (status) where.status = status;
+    if (search) {
+      where.name = { contains: search as string, mode: 'insensitive' };
+    }
 
     const [campaigns, total] = await Promise.all([
       prisma.campaign.findMany({
@@ -263,5 +266,24 @@ export class CampaignController {
         ? ((campaign.totalReplied / campaign.totalDelivered) * 100).toFixed(1)
         : '0',
     });
+  }
+
+  static async delete(req: AuthRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    const campaign = await prisma.campaign.findUnique({ where: { id } });
+    if (!campaign) throw new AppError('Campaign not found', 404);
+
+    // Cannot delete active campaigns
+    if (campaign.status === 'SENDING') {
+      throw new AppError('Cannot delete an active campaign. Pause or cancel it first.', 400);
+    }
+
+    await prisma.$transaction([
+      prisma.campaignLead.deleteMany({ where: { campaignId: id } }),
+      prisma.campaign.delete({ where: { id } }),
+    ]);
+
+    res.json({ message: 'Campaign deleted successfully' });
   }
 }

@@ -114,6 +114,14 @@ export class AuthController {
       throw new AppError('Email already exists', 409);
     }
 
+    // Password complexity validation
+    if (!password || password.length < 8) {
+      throw new AppError('Password must be at least 8 characters long', 400);
+    }
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+      throw new AppError('Password must contain uppercase, lowercase, and a number', 400);
+    }
+
     const passwordHash = await bcrypt.hash(password, 12);
 
     const user = await prisma.user.create({

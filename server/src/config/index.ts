@@ -21,7 +21,10 @@ export const config = {
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
   },
 
-  jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
+  // Alias for backward compatibility
+  get jwtSecret() {
+    return this.jwt.secret;
+  },
 
   twilio: {
     accountSid: process.env.TWILIO_ACCOUNT_SID || '',

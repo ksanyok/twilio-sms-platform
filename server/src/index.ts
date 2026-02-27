@@ -22,12 +22,31 @@ const io = new SocketIOServer(httpServer, {
   },
 });
 
-io.on('connection', (socket) => {
-  logger.debug(`Socket connected: ${socket.id}`);
+// Socket.IO auth middleware (MUST be before connection handler)
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
+  if (!token) {
+    return next(new Error('Authentication required'));
+  }
+  try {
+    const decoded = jwt.verify(token, config.jwt.secret) as { userId: string; email: string; role: string };
+    (socket as any).userId = decoded.userId;
+    next();
+  } catch {
+    next(new Error('Invalid token'));
+  }
+});
 
-  socket.on('join:inbox', (userId: string) => {
-    socket.join(`inbox:${userId}`);
-    logger.debug(`User ${userId} joined inbox channel`);
+io.on('connection', (socket) => {
+  const authenticatedUserId = (socket as any).userId;
+  logger.debug(`Socket connected: ${socket.id} (user: ${authenticatedUserId})`);
+
+  // Only allow joining own inbox channel
+  socket.on('join:inbox', () => {
+    if (authenticatedUserId) {
+      socket.join(`inbox:${authenticatedUserId}`);
+      logger.debug(`User ${authenticatedUserId} joined inbox channel`);
+    }
   });
 
   socket.on('join:conversation', (conversationId: string) => {
@@ -39,27 +58,34 @@ io.on('connection', (socket) => {
   });
 });
 
-// Socket.IO auth middleware
-io.use((socket, next) => {
-  const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.replace('Bearer ', '');
-  if (!token) {
-    return next(new Error('Authentication required'));
-  }
-  try {
-    const decoded = jwt.verify(token, config.jwtSecret) as any;
-    (socket as any).userId = decoded.id;
-    next();
-  } catch {
-    next(new Error('Invalid token'));
-  }
-});
-
 // Make io accessible to routes
 app.set('io', io);
+
+// Production safety checks
+function validateProductionConfig() {
+  if (config.env === 'production') {
+    const weakSecrets = ['dev-secret-change-me', 'dev-refresh-secret-change-me', 'test-secret'];
+    if (weakSecrets.includes(config.jwt.secret)) {
+      logger.error('❌ FATAL: JWT_SECRET is using a default/weak value in production!');
+      process.exit(1);
+    }
+    if (weakSecrets.includes(config.jwt.refreshSecret)) {
+      logger.error('❌ FATAL: JWT_REFRESH_SECRET is using a default/weak value in production!');
+      process.exit(1);
+    }
+    if (config.admin.password === 'admin123') {
+      logger.error('❌ FATAL: ADMIN_PASSWORD is "admin123" in production!');
+      process.exit(1);
+    }
+  }
+}
 
 // Start server
 async function start() {
   try {
+    // Validate configuration
+    validateProductionConfig();
+
     // Test database connection
     await prisma.$connect();
     logger.info('✅ Database connected');
@@ -97,22 +123,57 @@ async function ensureAdminUser() {
   }
 }
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down...');
-  await prisma.$disconnect();
-  httpServer.close(() => {
-    process.exit(0);
-  });
+// Unhandled rejection handler
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Promise Rejection:', { reason });
 });
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, shutting down...');
-  await prisma.$disconnect();
-  httpServer.close(() => {
-    process.exit(0);
-  });
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', { error: error.message, stack: error.stack });
+  process.exit(1);
 });
+
+// Graceful shutdown
+import redis from './config/redis';
+
+async function gracefulShutdown(signal: string) {
+  logger.info(`${signal} received, shutting down gracefully...`);
+  
+  // Stop accepting new connections
+  httpServer.close(() => {
+    logger.info('HTTP server closed');
+  });
+
+  // Close Socket.IO
+  io.close();
+  logger.info('Socket.IO closed');
+
+  // Disconnect databases
+  try {
+    await redis.quit();
+    logger.info('Redis disconnected');
+  } catch (err) {
+    logger.error('Error disconnecting Redis:', err);
+  }
+
+  try {
+    await prisma.$disconnect();
+    logger.info('Database disconnected');
+  } catch (err) {
+    logger.error('Error disconnecting database:', err);
+  }
+
+  // Force exit after 10s timeout
+  setTimeout(() => {
+    logger.warn('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000).unref();
+
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 start();
 

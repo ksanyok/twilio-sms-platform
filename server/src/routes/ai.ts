@@ -3,11 +3,9 @@ import { AIService } from '../services/aiService';
 import { authenticate } from '../middleware/auth';
 import { AuthRequest } from '../middleware/auth';
 import prisma from '../config/database';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
-
-const asyncHandler = (fn: Function) => (req: any, res: any, next: any) =>
-  Promise.resolve(fn(req, res, next)).catch(next);
 
 /**
  * POST /api/ai/draft-reply
