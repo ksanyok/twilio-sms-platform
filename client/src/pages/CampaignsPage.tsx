@@ -15,6 +15,8 @@ import {
   AlertTriangle,
   ChevronRight,
   Filter,
+  Trash2,
+  Users,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -26,10 +28,11 @@ export default function CampaignsPage() {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campaigns', statusFilter],
+    queryKey: ['campaigns', statusFilter, search],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter) params.set('status', statusFilter);
+      if (search) params.set('search', search);
       const { data } = await api.get(`/campaigns?${params}`);
       return data;
     },
@@ -50,6 +53,25 @@ export default function CampaignsPage() {
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
       toast.success('Campaign paused');
     },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to pause'),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/campaigns/${id}/cancel`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      toast.success('Campaign cancelled');
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to cancel'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/campaigns/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      toast.success('Campaign deleted');
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to delete'),
   });
 
   const statuses: CampaignStatus[] = ['DRAFT', 'SCHEDULED', 'SENDING', 'PAUSED', 'COMPLETED', 'CANCELLED'];
@@ -139,7 +161,7 @@ export default function CampaignsPage() {
             {data?.campaigns?.map((campaign: Campaign) => {
               const deliveryRate = campaign.totalSent > 0
                 ? ((campaign.totalDelivered / campaign.totalSent) * 100).toFixed(1)
-                : '-';
+                : null;
               
               return (
                 <tr key={campaign.id} className="table-row">
@@ -158,12 +180,16 @@ export default function CampaignsPage() {
                   <td className="table-cell text-center font-mono text-yellow-400">{campaign.totalBlocked.toLocaleString()}</td>
                   <td className="table-cell text-center font-mono text-purple-400">{campaign.totalReplied.toLocaleString()}</td>
                   <td className="table-cell text-center">
-                    <span className={`text-xs font-medium ${
-                      parseFloat(deliveryRate) >= 80 ? 'text-green-400' :
-                      parseFloat(deliveryRate) >= 50 ? 'text-yellow-400' : 'text-red-400'
-                    }`}>
-                      {deliveryRate}%
-                    </span>
+                    {deliveryRate !== null ? (
+                      <span className={`text-xs font-medium ${
+                        parseFloat(deliveryRate) >= 80 ? 'text-green-400' :
+                        parseFloat(deliveryRate) >= 50 ? 'text-yellow-400' : 'text-red-400'
+                      }`}>
+                        {deliveryRate}%
+                      </span>
+                    ) : (
+                      <span className="text-xs text-dark-500">—</span>
+                    )}
                   </td>
                   <td className="table-cell text-dark-500 text-xs">
                     {format(new Date(campaign.createdAt), 'MMM d, yyyy')}
@@ -188,9 +214,28 @@ export default function CampaignsPage() {
                           <Pause className="w-4 h-4" />
                         </button>
                       )}
-                      <button className="p-1.5 hover:bg-dark-700 rounded text-dark-400 hover:text-dark-200 transition-colors" title="Analytics">
-                        <BarChart3 className="w-4 h-4" />
-                      </button>
+                      {['SENDING', 'PAUSED', 'SCHEDULED'].includes(campaign.status) && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Cancel this campaign?')) cancelMutation.mutate(campaign.id);
+                          }}
+                          className="p-1.5 hover:bg-red-600/20 rounded text-dark-400 hover:text-red-400 transition-colors"
+                          title="Cancel"
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </button>
+                      )}
+                      {['DRAFT', 'COMPLETED', 'CANCELLED'].includes(campaign.status) && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Delete this campaign?')) deleteMutation.mutate(campaign.id);
+                          }}
+                          className="p-1.5 hover:bg-red-600/20 rounded text-dark-400 hover:text-red-400 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -216,6 +261,25 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
     sendingSpeed: 60,
     scheduledAt: '',
   });
+  const [leadFilter, setLeadFilter] = useState({ status: '', search: '' });
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+
+  // Load available leads for selection
+  const { data: leadsData } = useQuery({
+    queryKey: ['campaign-leads', leadFilter.status, leadFilter.search],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set('limit', '200');
+      if (leadFilter.status) params.set('status', leadFilter.status);
+      if (leadFilter.search) params.set('search', leadFilter.search);
+      const { data } = await api.get(`/leads?${params}`);
+      return data;
+    },
+  });
+
+  const availableLeads = leadsData?.leads || [];
+  const totalAvailable = leadsData?.pagination?.total || 0;
 
   const createMutation = useMutation({
     mutationFn: (data: any) => api.post('/campaigns', data),
@@ -229,12 +293,36 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    createMutation.mutate(formData);
+    const leadIds = selectAll ? undefined : Array.from(selectedLeadIds);
+    createMutation.mutate({
+      ...formData,
+      leadIds,
+      selectAllWithFilter: selectAll ? { status: leadFilter.status, search: leadFilter.search } : undefined,
+    });
   };
 
+  const toggleLead = (id: string) => {
+    setSelectedLeadIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+    setSelectAll(false);
+  };
+
+  const toggleAllVisible = () => {
+    if (selectedLeadIds.size === availableLeads.length) {
+      setSelectedLeadIds(new Set());
+    } else {
+      setSelectedLeadIds(new Set(availableLeads.map((l: any) => l.id)));
+    }
+  };
+
+  const leadCount = selectAll ? totalAvailable : selectedLeadIds.size;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="card w-full max-w-lg mx-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm overflow-y-auto py-8">
+      <div className="card w-full max-w-2xl mx-4 animate-fade-in">
         <div className="card-header flex items-center justify-between">
           <h3 className="text-lg font-semibold text-dark-100">New Campaign</h3>
           <button onClick={onClose} className="text-dark-500 hover:text-dark-300">
@@ -256,7 +344,7 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
           <div>
             <label className="label">Message Template</label>
             <textarea
-              className="input min-h-[120px] resize-y"
+              className="input min-h-[100px] resize-y"
               value={formData.messageTemplate}
               onChange={(e) => setFormData({ ...formData, messageTemplate: e.target.value })}
               placeholder="Hi {{firstName}}, this is SCL..."
@@ -266,6 +354,84 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
               Available variables: {'{{firstName}}'}, {'{{lastName}}'}, {'{{company}}'}
             </p>
           </div>
+
+          {/* Lead Selection */}
+          <div>
+            <label className="label flex items-center gap-2">
+              <Users className="w-4 h-4" />
+              Select Leads ({leadCount} selected)
+            </label>
+            <div className="bg-dark-800/50 rounded-lg border border-dark-700/50 p-3 space-y-3">
+              {/* Lead filters */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  className="input py-1.5 text-sm flex-1"
+                  placeholder="Search leads..."
+                  value={leadFilter.search}
+                  onChange={(e) => setLeadFilter(f => ({ ...f, search: e.target.value }))}
+                />
+                <select
+                  className="input py-1.5 text-sm w-auto"
+                  value={leadFilter.status}
+                  onChange={(e) => setLeadFilter(f => ({ ...f, status: e.target.value }))}
+                >
+                  <option value="">All Statuses</option>
+                  <option value="NEW">NEW</option>
+                  <option value="CONTACTED">CONTACTED</option>
+                  <option value="REPLIED">REPLIED</option>
+                  <option value="INTERESTED">INTERESTED</option>
+                </select>
+              </div>
+              {/* Select all toggle */}
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-sm text-dark-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectAll}
+                    onChange={(e) => {
+                      setSelectAll(e.target.checked);
+                      if (e.target.checked) setSelectedLeadIds(new Set());
+                    }}
+                    className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-scl-500 focus:ring-scl-500"
+                  />
+                  Select all {totalAvailable} matching leads
+                </label>
+                {!selectAll && (
+                  <button type="button" onClick={toggleAllVisible} className="text-xs text-scl-400 hover:text-scl-300">
+                    {selectedLeadIds.size === availableLeads.length ? 'Deselect all' : 'Select visible'}
+                  </button>
+                )}
+              </div>
+              {/* Lead list */}
+              {!selectAll && (
+                <div className="max-h-[200px] overflow-y-auto space-y-1">
+                  {availableLeads.map((lead: any) => (
+                    <label
+                      key={lead.id}
+                      className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-dark-700/50 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedLeadIds.has(lead.id)}
+                        onChange={() => toggleLead(lead.id)}
+                        className="w-3.5 h-3.5 rounded border-dark-600 bg-dark-800 text-scl-500 focus:ring-scl-500"
+                      />
+                      <span className="text-sm text-dark-200 flex-1">
+                        {lead.firstName} {lead.lastName || ''}
+                      </span>
+                      <span className="text-xs text-dark-500 font-mono">{lead.phone}</span>
+                      <span className="text-[10px] badge bg-dark-700 text-dark-400">{lead.status}</span>
+                    </label>
+                  ))}
+                  {availableLeads.length === 0 && (
+                    <p className="text-sm text-dark-500 text-center py-4">No leads found</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Sending Speed</label>
@@ -277,6 +443,7 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
                 <option value="30">30 / min (Slow)</option>
                 <option value="60">60 / min (Normal)</option>
                 <option value="120">120 / min (Fast)</option>
+                <option value="300">300 / min (Max)</option>
               </select>
             </div>
             <div>
@@ -296,7 +463,7 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
             <button
               type="submit"
               className="btn-primary"
-              disabled={createMutation.isPending}
+              disabled={createMutation.isPending || (leadCount === 0)}
             >
               {createMutation.isPending ? 'Creating...' : 'Create Campaign'}
             </button>

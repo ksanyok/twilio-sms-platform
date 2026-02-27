@@ -11,7 +11,10 @@ router.use(authenticate);
 
 // Tags
 router.get('/tags', asyncHandler(async (req: any, res: any) => {
-  const tags = await prisma.tag.findMany({ orderBy: { name: 'asc' } });
+  const tags = await prisma.tag.findMany({
+    orderBy: { name: 'asc' },
+    include: { _count: { select: { leads: true } } },
+  });
   res.json({ tags });
 }));
 

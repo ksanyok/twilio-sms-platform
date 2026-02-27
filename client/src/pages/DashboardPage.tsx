@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { DashboardStats } from '../types';
 import {
@@ -6,11 +7,10 @@ import {
   Users,
   MessageSquare,
   Bot,
-  TrendingUp,
   ArrowUpRight,
   ArrowDownRight,
   Activity,
-  Zap,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -26,7 +26,7 @@ import {
 import { format } from 'date-fns';
 
 export default function DashboardPage() {
-  const { data, isLoading } = useQuery<DashboardStats>({
+  const { data, isLoading, isError } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
       const { data } = await api.get('/dashboard/stats');
@@ -46,6 +46,18 @@ export default function DashboardPage() {
             ))}
           </div>
           <div className="h-80 bg-dark-800 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="p-8">
+        <div className="card p-12 text-center">
+          <AlertTriangle className="w-12 h-12 mx-auto text-red-400 mb-4" />
+          <p className="text-dark-300 font-medium">Failed to load dashboard</p>
+          <p className="text-sm text-dark-500 mt-1">Check your connection and try refreshing</p>
         </div>
       </div>
     );
@@ -199,9 +211,9 @@ export default function DashboardPage() {
         <div className="card">
           <div className="card-header flex items-center justify-between">
             <h3 className="text-sm font-semibold text-dark-200">Recent Campaigns</h3>
-            <a href="/campaigns" className="text-xs text-scl-400 hover:text-scl-300">
+            <Link to="/campaigns" className="text-xs text-scl-400 hover:text-scl-300">
               View All →
-            </a>
+            </Link>
           </div>
           <div className="divide-y divide-dark-700/30">
             {stats?.recentCampaigns?.length === 0 && (
@@ -227,9 +239,9 @@ export default function DashboardPage() {
         <div className="card">
           <div className="card-header flex items-center justify-between">
             <h3 className="text-sm font-semibold text-dark-200">Number Health</h3>
-            <a href="/numbers" className="text-xs text-scl-400 hover:text-scl-300">
+            <Link to="/numbers" className="text-xs text-scl-400 hover:text-scl-300">
               Manage →
-            </a>
+            </Link>
           </div>
           <div className="p-6">
             <div className="space-y-4">

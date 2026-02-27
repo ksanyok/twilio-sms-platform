@@ -380,6 +380,10 @@ function SuppressionTab() {
 
 /* ─── System ─── */
 function SystemTab() {
+  const queryClient = useQueryClient();
+  const [localSettings, setLocalSettings] = useState<Record<string, string>>({});
+  const [dirty, setDirty] = useState<Set<string>>(new Set());
+
   const { data } = useQuery({
     queryKey: ['systemSettings'],
     queryFn: async () => {
@@ -389,40 +393,63 @@ function SystemTab() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: (settings: any) => api.put('/settings', settings),
-    onSuccess: () => toast.success('Settings saved'),
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      await api.put(`/settings/settings/${key}`, { value });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['systemSettings'] });
+      setDirty(prev => { const next = new Set(prev); next.delete(variables.key); return next; });
+      toast.success('Setting saved');
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to save'),
   });
 
   const settings = data?.settings || {};
+
+  const fields = [
+    { label: 'Max Messages / Number / Day', key: 'maxPerNumberPerDay', defaultValue: '300' },
+    { label: 'Global Daily Limit', key: 'globalDailyLimit', defaultValue: '20000' },
+    { label: 'Quiet Hours Start', key: 'quietHoursStart', defaultValue: '21:00' },
+    { label: 'Quiet Hours End', key: 'quietHoursEnd', defaultValue: '09:00' },
+    { label: 'Default Send Speed (msg/min)', key: 'defaultSpeed', defaultValue: '4' },
+    { label: 'Opt-Out Reply', key: 'optOutReply', defaultValue: 'You have been unsubscribed.' },
+  ];
+
+  const getValue = (key: string, defaultValue: string) =>
+    localSettings[key] !== undefined ? localSettings[key] : (settings[key] || defaultValue);
 
   return (
     <div className="card p-6 space-y-6">
       <h3 className="text-base font-semibold text-dark-100">System Configuration</h3>
       <p className="text-sm text-dark-400">
-        Core settings are managed via environment variables. This section shows current runtime values.
+        Edit settings below and click Save to apply changes in real-time.
       </p>
 
       <div className="grid grid-cols-2 gap-4">
-        {[
-          { label: 'Max Messages / Number / Day', key: 'maxPerNumberPerDay', value: '300' },
-          { label: 'Global Daily Limit', key: 'globalDailyLimit', value: '20000' },
-          { label: 'Quiet Hours Start', key: 'quietHoursStart', value: '21:00' },
-          { label: 'Quiet Hours End', key: 'quietHoursEnd', value: '09:00' },
-          { label: 'Default Send Speed (msg/min)', key: 'defaultSpeed', value: '4' },
-          { label: 'Opt-Out Reply', key: 'optOutReply', value: 'You have been unsubscribed.' },
-        ].map((item) => (
+        {fields.map((item) => (
           <div key={item.key}>
             <label className="label">{item.label}</label>
-            <input className="input" defaultValue={settings[item.key] || item.value} readOnly />
+            <div className="flex items-center gap-2">
+              <input
+                className="input flex-1"
+                value={getValue(item.key, item.defaultValue)}
+                onChange={(e) => {
+                  setLocalSettings(prev => ({ ...prev, [item.key]: e.target.value }));
+                  setDirty(prev => new Set(prev).add(item.key));
+                }}
+              />
+              {dirty.has(item.key) && (
+                <button
+                  onClick={() => saveMutation.mutate({ key: item.key, value: getValue(item.key, item.defaultValue) })}
+                  disabled={saveMutation.isPending}
+                  className="btn-primary py-2 px-3 text-xs"
+                >
+                  <Save className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
         ))}
-      </div>
-
-      <div className="bg-dark-800/50 rounded-lg p-4 border border-dark-700/50">
-        <p className="text-xs text-dark-500">
-          To change these values, update the .env file and restart the server. 
-          Future versions will support live configuration updates.
-        </p>
       </div>
     </div>
   );

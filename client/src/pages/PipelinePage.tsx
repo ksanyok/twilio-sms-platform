@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext,
@@ -21,6 +21,10 @@ import {
   Tag,
   MoreVertical,
   ChevronRight,
+  Edit3,
+  Trash2,
+  X,
+  Palette,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -51,7 +55,22 @@ interface PipelineCard {
 
 export default function PipelinePage() {
   const [activeCard, setActiveCard] = useState<PipelineCard | null>(null);
+  const [openMenuStageId, setOpenMenuStageId] = useState<string | null>(null);
+  const [showAddStage, setShowAddStage] = useState(false);
+  const [editingStage, setEditingStage] = useState<PipelineStage | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+
+  // Close stage menu on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuStageId(null);
+      }
+    };
+    if (openMenuStageId) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [openMenuStageId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -72,6 +91,15 @@ export default function PipelinePage() {
       queryClient.invalidateQueries({ queryKey: ['pipeline'] });
     },
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to move card'),
+  });
+
+  const deleteStMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/pipeline/stages/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+      toast.success('Stage deleted');
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to delete stage'),
   });
 
   const stages: PipelineStage[] = data?.stages || [];
@@ -109,7 +137,7 @@ export default function PipelinePage() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 0px)' }}>
       {/* Header */}
       <div className="shrink-0 px-6 py-4 border-b border-dark-700/50">
         <div className="flex items-center justify-between">
@@ -121,6 +149,13 @@ export default function PipelinePage() {
             <span className="text-sm text-dark-500">
               {stages.reduce((sum, s) => sum + s.cards.length, 0)} leads total
             </span>
+            <button
+              onClick={() => setShowAddStage(true)}
+              className="btn-primary text-sm"
+            >
+              <Plus className="w-4 h-4" />
+              Add Stage
+            </button>
           </div>
         </div>
       </div>
@@ -142,8 +177,30 @@ export default function PipelinePage() {
           >
             <div className="flex gap-4 h-full min-h-[500px]">
               {stages.map((stage) => (
-                <StageColumn key={stage.id} stage={stage} />
+                <StageColumn
+                  key={stage.id}
+                  stage={stage}
+                  isMenuOpen={openMenuStageId === stage.id}
+                  onToggleMenu={() => setOpenMenuStageId(openMenuStageId === stage.id ? null : stage.id)}
+                  menuRef={openMenuStageId === stage.id ? menuRef : undefined}
+                  onEdit={() => { setOpenMenuStageId(null); setEditingStage(stage); }}
+                  onDelete={() => {
+                    setOpenMenuStageId(null);
+                    if (stage.cards.length > 0) {
+                      if (!window.confirm(`Delete "${stage.name}"? ${stage.cards.length} cards will be moved to the first stage.`)) return;
+                    }
+                    deleteStMutation.mutate(stage.id);
+                  }}
+                />
               ))}
+              {/* Add stage inline card */}
+              <button
+                onClick={() => setShowAddStage(true)}
+                className="w-[300px] shrink-0 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-dark-700 hover:border-scl-600/50 hover:bg-dark-800/20 transition-colors gap-2 text-dark-500 hover:text-scl-400 min-h-[200px]"
+              >
+                <Plus className="w-6 h-6" />
+                <span className="text-sm font-medium">Add Stage</span>
+              </button>
             </div>
 
             <DragOverlay>
@@ -152,11 +209,35 @@ export default function PipelinePage() {
           </DndContext>
         )}
       </div>
+
+      {/* Add Stage Modal */}
+      {showAddStage && (
+        <StageModal onClose={() => setShowAddStage(false)} />
+      )}
+
+      {/* Edit Stage Modal */}
+      {editingStage && (
+        <StageModal stage={editingStage} onClose={() => setEditingStage(null)} />
+      )}
     </div>
   );
 }
 
-function StageColumn({ stage }: { stage: PipelineStage }) {
+function StageColumn({
+  stage,
+  isMenuOpen,
+  onToggleMenu,
+  menuRef,
+  onEdit,
+  onDelete,
+}: {
+  stage: PipelineStage;
+  isMenuOpen: boolean;
+  onToggleMenu: () => void;
+  menuRef?: React.RefObject<HTMLDivElement | null>;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const { setNodeRef, isOver } = useDroppable({
     id: stage.id,
     data: { stageId: stage.id },
@@ -176,9 +257,37 @@ function StageColumn({ stage }: { stage: PipelineStage }) {
             {stage.cards.length}
           </span>
         </div>
-        <button className="btn-ghost p-1">
-          <MoreVertical className="w-4 h-4" />
-        </button>
+        <div className="relative">
+          <button onClick={onToggleMenu} className="btn-ghost p-1">
+            <MoreVertical className="w-4 h-4" />
+          </button>
+          {isMenuOpen && (
+            <div
+              ref={menuRef as React.RefObject<HTMLDivElement>}
+              className="absolute right-0 top-full mt-1 w-44 bg-dark-800 border border-dark-700 rounded-lg shadow-xl z-50 py-1"
+            >
+              <button
+                onClick={onEdit}
+                className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+              >
+                <Edit3 className="w-3.5 h-3.5" /> Rename Stage
+              </button>
+              <button
+                onClick={onEdit}
+                className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+              >
+                <Palette className="w-3.5 h-3.5" /> Change Color
+              </button>
+              <div className="border-t border-dark-700 my-1" />
+              <button
+                onClick={onDelete}
+                className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete Stage
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Cards Container */}
@@ -276,6 +385,87 @@ function CardOverlay({ card }: { card: PipelineCard }) {
           <p className="text-sm font-medium text-dark-200">{card.lead.firstName} {card.lead.lastName || ''}</p>
           <p className="text-[11px] text-dark-500">{card.lead.phone}</p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Stage Create/Edit Modal ─── */
+function StageModal({ stage, onClose }: { stage?: PipelineStage; onClose: () => void }) {
+  const isEdit = !!stage;
+  const queryClient = useQueryClient();
+  const [name, setName] = useState(stage?.name || '');
+  const [color, setColor] = useState(stage?.color || '#6366f1');
+
+  const presetColors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#6366f1', '#8b5cf6', '#ec4899', '#06b6d4', '#14b8a6', '#f97316'];
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      isEdit
+        ? api.put(`/pipeline/stages/${stage!.id}`, { name, color })
+        : api.post('/pipeline/stages', { name, color }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+      toast.success(isEdit ? 'Stage updated' : 'Stage created');
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed'),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="card w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-dark-50">
+            {isEdit ? 'Edit Stage' : 'Add Pipeline Stage'}
+          </h3>
+          <button onClick={onClose} className="btn-ghost p-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form
+          onSubmit={(e) => { e.preventDefault(); if (name.trim()) saveMutation.mutate(); }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="label">Stage Name</label>
+            <input
+              className="input"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g., Qualified"
+              required
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="label">Color</label>
+            <div className="flex items-center gap-2 flex-wrap">
+              {presetColors.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={clsx(
+                    'w-8 h-8 rounded-full transition-transform',
+                    color === c && 'ring-2 ring-offset-2 ring-offset-dark-900 ring-white scale-110'
+                  )}
+                  style={{ backgroundColor: c }}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: color }} />
+            <span className="text-sm text-dark-300">{name || 'Preview'}</span>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
+            <button type="submit" disabled={saveMutation.isPending || !name.trim()} className="btn-primary">
+              {saveMutation.isPending ? 'Saving...' : isEdit ? 'Update Stage' : 'Create Stage'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

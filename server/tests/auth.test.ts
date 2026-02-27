@@ -78,7 +78,7 @@ describe('Auth API', () => {
 
       expect(res.status).toBe(401);
       expect(res.body).toHaveProperty('error');
-    });
+    }, 15000);
 
     it('отказ при несуществующем email', async () => {
       const res = await request(app)

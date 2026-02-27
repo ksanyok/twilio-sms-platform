@@ -14,16 +14,44 @@ import {
   Phone,
   Tag,
   MoreVertical,
+  UserX,
+  Archive,
+  Bell,
+  BellOff,
+  X,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
+import { io, Socket } from 'socket.io-client';
 
 export default function InboxPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const queryClient = useQueryClient();
+
+  // WebSocket for real-time message updates
+  useEffect(() => {
+    let socket: Socket | null = null;
+    try {
+      const token = localStorage.getItem('scl_token');
+      socket = io(window.location.origin, {
+        auth: { token },
+        transports: ['websocket', 'polling'],
+      });
+      socket.on('new-message', () => {
+        queryClient.invalidateQueries({ queryKey: ['conversations'] });
+        queryClient.invalidateQueries({ queryKey: ['conversation'] });
+      });
+      socket.on('message-status', () => {
+        queryClient.invalidateQueries({ queryKey: ['conversation'] });
+      });
+    } catch {
+      // Fallback to polling if WebSocket fails
+    }
+    return () => { socket?.disconnect(); };
+  }, [queryClient]);
 
   const { data: conversationsData, isLoading } = useQuery({
     queryKey: ['conversations', search, showUnreadOnly],
@@ -34,7 +62,7 @@ export default function InboxPage() {
       const { data } = await api.get(`/inbox?${params}`);
       return data;
     },
-    refetchInterval: 10000, // Poll every 10s
+    refetchInterval: 15000, // Fallback polling every 15s
   });
 
   const conversations: Conversation[] = conversationsData?.conversations || [];
@@ -194,8 +222,21 @@ function ConversationItem({
 
 function MessageThread({ conversationId }: { conversationId: string }) {
   const [replyText, setReplyText] = useState('');
+  const [showThreadMenu, setShowThreadMenu] = useState(false);
+  const threadMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+
+  // Close thread menu on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (threadMenuRef.current && !threadMenuRef.current.contains(e.target as Node)) {
+        setShowThreadMenu(false);
+      }
+    };
+    if (showThreadMenu) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showThreadMenu]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['conversation', conversationId],
@@ -203,7 +244,7 @@ function MessageThread({ conversationId }: { conversationId: string }) {
       const { data } = await api.get(`/inbox/${conversationId}`);
       return data;
     },
-    refetchInterval: 5000,
+    refetchInterval: 8000,
   });
 
   const sendMutation = useMutation({
@@ -216,9 +257,32 @@ function MessageThread({ conversationId }: { conversationId: string }) {
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to send'),
   });
 
+  const markReadMutation = useMutation({
+    mutationFn: () => api.post(`/inbox/${conversationId}/read`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) => api.put(`/leads/${id}`, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      toast.success('Lead status updated');
+    },
+    onError: () => toast.error('Failed to update status'),
+  });
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [data?.messages]);
+
+  // Auto mark as read when opened
+  useEffect(() => {
+    if (data?.conversation?.unreadCount > 0) {
+      markReadMutation.mutate();
+    }
+  }, [conversationId, data?.conversation?.unreadCount]);
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
@@ -251,9 +315,63 @@ function MessageThread({ conversationId }: { conversationId: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-ghost p-2">
-            <MoreVertical className="w-4 h-4" />
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowThreadMenu(!showThreadMenu)}
+              className="btn-ghost p-2"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+            {showThreadMenu && (
+              <div
+                ref={threadMenuRef}
+                className="absolute right-0 top-full mt-1 w-52 bg-dark-800 border border-dark-700 rounded-lg shadow-xl z-50 py-1"
+              >
+                <button
+                  onClick={() => {
+                    setShowThreadMenu(false);
+                    markReadMutation.mutate();
+                    toast.success('Marked as read');
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+                >
+                  <Bell className="w-3.5 h-3.5" /> Mark as Read
+                </button>
+                {conversation?.lead && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setShowThreadMenu(false);
+                        statusMutation.mutate({ id: conversation.lead.id, status: 'INTERESTED' });
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+                    >
+                      <User className="w-3.5 h-3.5" /> Mark Interested
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowThreadMenu(false);
+                        statusMutation.mutate({ id: conversation.lead.id, status: 'NOT_INTERESTED' });
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+                    >
+                      <UserX className="w-3.5 h-3.5" /> Mark Not Interested
+                    </button>
+                    <div className="border-t border-dark-700 my-1" />
+                    <button
+                      onClick={() => {
+                        setShowThreadMenu(false);
+                        statusMutation.mutate({ id: conversation.lead.id, status: 'DNC' });
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
+                    >
+                      <X className="w-3.5 h-3.5" /> Mark DNC
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

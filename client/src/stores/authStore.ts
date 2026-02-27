@@ -25,9 +25,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (email: string, password: string) => {
     set({ isLoginLoading: true });
     try {
-      console.log('[AUTH] Attempting login for:', email);
       const { data } = await api.post('/auth/login', { email, password });
-      console.log('[AUTH] Login successful, user:', data.user?.email);
       localStorage.setItem('scl_token', data.token);
       localStorage.setItem('scl_user', JSON.stringify(data.user));
       set({
@@ -39,14 +37,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         initialized: true,
       });
     } catch (err) {
-      console.error('[AUTH] Login failed:', err);
       set({ isLoginLoading: false });
       throw err;
     }
   },
 
   logout: () => {
-    console.log('[AUTH] Logging out');
     localStorage.removeItem('scl_token');
     localStorage.removeItem('scl_user');
     set({
@@ -65,16 +61,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const token = localStorage.getItem('scl_token');
     const userStr = localStorage.getItem('scl_user');
     
-    console.log('[AUTH] checkAuth — token exists:', !!token, ', user exists:', !!userStr);
-    
     if (token && userStr) {
       try {
-        const user = JSON.parse(userStr);
         // Verify token is still valid with the server
         const { data } = await api.get('/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        console.log('[AUTH] Token verified, user:', data.user?.email);
         set({ 
           user: data.user, 
           token, 
@@ -82,14 +74,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isLoading: false,
           initialized: true,
         });
-      } catch (err) {
-        console.warn('[AUTH] Token invalid, clearing session');
+      } catch {
         localStorage.removeItem('scl_token');
         localStorage.removeItem('scl_user');
         set({ user: null, token: null, isAuthenticated: false, isLoading: false, initialized: true });
       }
     } else {
-      console.log('[AUTH] No stored session');
       set({ isLoading: false, initialized: true });
     }
   },

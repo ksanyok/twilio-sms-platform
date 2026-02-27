@@ -1,5 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import { useQuery } from '@tanstack/react-query';
+import api from '../../services/api';
 import {
   LayoutDashboard,
   Send,
@@ -32,6 +34,17 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
+
+  // Unread inbox count for badge
+  const { data: inboxData } = useQuery({
+    queryKey: ['inbox-unread-count'],
+    queryFn: async () => {
+      const { data } = await api.get('/inbox?unreadOnly=true&limit=1');
+      return data;
+    },
+    refetchInterval: 30000,
+  });
+  const unreadCount = inboxData?.conversations?.length || 0;
 
   const handleLogout = () => {
     logout();
@@ -79,7 +92,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
               end={item.href === '/'}
               className={({ isActive }) =>
                 clsx(
-                  'sidebar-link',
+                  'sidebar-link relative',
                   isActive && 'active',
                   collapsed && 'justify-center px-2'
                 )
@@ -88,6 +101,14 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
             >
               <item.icon className="w-5 h-5 shrink-0" />
               {!collapsed && <span className="text-sm font-medium">{item.name}</span>}
+              {item.name === 'Inbox' && unreadCount > 0 && (
+                <span className={clsx(
+                  'absolute bg-scl-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center',
+                  collapsed ? 'top-0 right-0 w-4 h-4' : 'right-2 top-1/2 -translate-y-1/2 w-5 h-5'
+                )}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -111,15 +132,13 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
                 <p className="text-xs text-dark-500 truncate">{user?.role}</p>
               </div>
             )}
-            {!collapsed && (
-              <button
-                onClick={handleLogout}
-                className="p-1.5 text-dark-500 hover:text-red-400 transition-colors"
-                title="Logout"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              onClick={handleLogout}
+              className="p-1.5 text-dark-500 hover:text-red-400 transition-colors shrink-0"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </aside>

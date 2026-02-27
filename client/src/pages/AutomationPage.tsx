@@ -177,7 +177,7 @@ export default function AutomationPage() {
                 </button>
                 <button
                   onClick={() => {
-                    if (confirm('Delete this automation rule?')) {
+                    if (window.confirm('Delete this automation rule?')) {
                       deleteMutation.mutate(rule.id);
                     }
                   }}
@@ -227,6 +227,9 @@ function AutomationModal({ rule, onClose }: { rule?: any; onClose: () => void })
     triggerConfig: rule?.triggerConfig || {},
     actionConfig: rule?.actionConfig || {},
     isActive: rule?.isActive ?? true,
+    sendAfterHour: rule?.sendAfterHour ?? 9,
+    sendBeforeHour: rule?.sendBeforeHour ?? 21,
+    sendOnWeekends: rule?.sendOnWeekends ?? false,
   });
 
   const [templates, setTemplates] = useState<any[]>(
@@ -301,7 +304,7 @@ function AutomationModal({ rule, onClose }: { rule?: any; onClose: () => void })
             <select
               className="input"
               value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              onChange={(e) => setForm({ ...form, type: e.target.value, triggerConfig: {} })}
             >
               <option value="LEAD_CREATED">Lead Created</option>
               <option value="STATUS_CHANGED">Status Changed</option>
@@ -309,6 +312,119 @@ function AutomationModal({ rule, onClose }: { rule?: any; onClose: () => void })
               <option value="NO_REPLY">No Reply (timeout)</option>
               <option value="MANUAL">Manual Start</option>
             </select>
+          </div>
+
+          {/* Trigger Config — conditional per type */}
+          {form.type === 'STATUS_CHANGED' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label">From Status</label>
+                <select
+                  className="input"
+                  value={(form.triggerConfig as any)?.fromStatus || ''}
+                  onChange={(e) => setForm({ ...form, triggerConfig: { ...form.triggerConfig, fromStatus: e.target.value } })}
+                >
+                  <option value="">Any</option>
+                  <option value="NEW">NEW</option>
+                  <option value="CONTACTED">CONTACTED</option>
+                  <option value="REPLIED">REPLIED</option>
+                  <option value="INTERESTED">INTERESTED</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">To Status</label>
+                <select
+                  className="input"
+                  value={(form.triggerConfig as any)?.toStatus || ''}
+                  onChange={(e) => setForm({ ...form, triggerConfig: { ...form.triggerConfig, toStatus: e.target.value } })}
+                >
+                  <option value="">Any</option>
+                  <option value="CONTACTED">CONTACTED</option>
+                  <option value="REPLIED">REPLIED</option>
+                  <option value="INTERESTED">INTERESTED</option>
+                  <option value="NOT_INTERESTED">NOT_INTERESTED</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {form.type === 'KEYWORD_RECEIVED' && (
+            <div>
+              <label className="label">Keywords (comma separated)</label>
+              <input
+                className="input"
+                placeholder="e.g., interested, more info, pricing"
+                value={(form.triggerConfig as any)?.keywords || ''}
+                onChange={(e) => setForm({ ...form, triggerConfig: { ...form.triggerConfig, keywords: e.target.value } })}
+              />
+              <p className="text-xs text-dark-500 mt-1">Case-insensitive matching against incoming messages</p>
+            </div>
+          )}
+
+          {form.type === 'NO_REPLY' && (
+            <div>
+              <label className="label">Days without reply</label>
+              <input
+                type="number"
+                className="input w-32"
+                min={1}
+                value={(form.triggerConfig as any)?.daysNoReply || 3}
+                onChange={(e) => setForm({ ...form, triggerConfig: { ...form.triggerConfig, daysNoReply: parseInt(e.target.value) || 3 } })}
+              />
+            </div>
+          )}
+
+          {form.type === 'LEAD_CREATED' && (
+            <div>
+              <label className="label">Source filter (optional)</label>
+              <input
+                className="input"
+                placeholder="e.g., Website, CSV import"
+                value={(form.triggerConfig as any)?.source || ''}
+                onChange={(e) => setForm({ ...form, triggerConfig: { ...form.triggerConfig, source: e.target.value } })}
+              />
+              <p className="text-xs text-dark-500 mt-1">Leave empty to trigger for all sources</p>
+            </div>
+          )}
+
+          {/* Send Window */}
+          <div className="bg-dark-800/50 rounded-lg p-4 border border-dark-700/50">
+            <label className="label mb-3">Send Window</label>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-dark-400">After</label>
+                <input
+                  type="number"
+                  className="input w-20 py-1 text-sm"
+                  min={0}
+                  max={23}
+                  value={form.sendAfterHour}
+                  onChange={(e) => setForm({ ...form, sendAfterHour: parseInt(e.target.value) || 0 })}
+                />
+                <span className="text-xs text-dark-500">:00</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-dark-400">Before</label>
+                <input
+                  type="number"
+                  className="input w-20 py-1 text-sm"
+                  min={0}
+                  max={23}
+                  value={form.sendBeforeHour}
+                  onChange={(e) => setForm({ ...form, sendBeforeHour: parseInt(e.target.value) || 23 })}
+                />
+                <span className="text-xs text-dark-500">:00</span>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-dark-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.sendOnWeekends}
+                  onChange={(e) => setForm({ ...form, sendOnWeekends: e.target.checked })}
+                  className="w-3.5 h-3.5 rounded border-dark-600 bg-dark-800 text-scl-500"
+                />
+                Weekends
+              </label>
+            </div>
           </div>
 
           <div>

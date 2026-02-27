@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './stores/authStore';
+import ErrorBoundary from './components/ErrorBoundary';
 import AppLayout from './components/layout/AppLayout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -13,6 +14,7 @@ import LeadsPage from './pages/LeadsPage';
 import NumbersPage from './pages/NumbersPage';
 import AutomationPage from './pages/AutomationPage';
 import SettingsPage from './pages/SettingsPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -53,31 +55,32 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/*"
-            element={
-              <ProtectedRoute>
-                <AppLayout>
-                  <Routes>
-                    <Route path="/" element={<DashboardPage />} />
-                    <Route path="/campaigns" element={<CampaignsPage />} />
-                    <Route path="/inbox" element={<InboxPage />} />
-                    <Route path="/pipeline" element={<PipelinePage />} />
-                    <Route path="/leads" element={<LeadsPage />} />
-                    <Route path="/numbers" element={<NumbersPage />} />
-                    <Route path="/automation" element={<AutomationPage />} />
-                    <Route path="/settings" element={<SettingsPage />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
-                </AppLayout>
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <AppLayout>
+                    <Routes>
+                      <Route path="/" element={<DashboardPage />} />
+                      <Route path="campaigns" element={<CampaignsPage />} />
+                      <Route path="inbox" element={<InboxPage />} />
+                      <Route path="pipeline" element={<PipelinePage />} />
+                      <Route path="leads" element={<LeadsPage />} />
+                      <Route path="numbers" element={<NumbersPage />} />
+                      <Route path="automation" element={<AutomationPage />} />
+                      <Route path="settings" element={<SettingsPage />} />
+                      <Route path="*" element={<NotFoundPage />} />
+                    </Routes>
+                  </AppLayout>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
       </BrowserRouter>
       <Toaster
         position="top-right"
@@ -99,5 +102,6 @@ export default function App() {
         }}
       />
     </QueryClientProvider>
+  </ErrorBoundary>
   );
 }

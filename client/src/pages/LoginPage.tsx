@@ -14,7 +14,6 @@ export default function LoginPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      console.log('[LOGIN] Already authenticated, redirecting to /');
       navigate('/', { replace: true });
     }
   }, [isAuthenticated, navigate]);
@@ -22,13 +21,10 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    console.log('[LOGIN] Submitting login form for:', email);
     try {
       await login(email, password);
-      console.log('[LOGIN] Login succeeded, navigating to /');
       navigate('/', { replace: true });
     } catch (err: any) {
-      console.error('[LOGIN] Login error:', err);
       const msg = err.response?.data?.error || err.message || 'Invalid credentials';
       setError(msg);
     }

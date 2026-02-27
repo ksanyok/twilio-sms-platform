@@ -18,14 +18,9 @@ api.interceptors.request.use((config) => {
 
 // Response interceptor - handle auth errors
 api.interceptors.response.use(
-  (response) => {
-    console.log(`[API] ${response.config.method?.toUpperCase()} ${response.config.url} → ${response.status}`);
-    return response;
-  },
+  (response) => response,
   (error) => {
     const url = error.config?.url || 'unknown';
-    const status = error.response?.status || 'network';
-    console.error(`[API] ${error.config?.method?.toUpperCase()} ${url} → ${status}`, error.response?.data);
     
     // Only redirect on 401 for non-login endpoints
     if (error.response?.status === 401 && !url.includes('/auth/login')) {

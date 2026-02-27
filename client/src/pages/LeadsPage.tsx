@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
   Search,
@@ -12,14 +13,10 @@ import {
   ChevronDown,
   Phone,
   Mail,
-  MapPin,
-  FileSpreadsheet,
-  CheckSquare,
   X,
   ChevronLeft,
   ChevronRight,
-  Filter,
-  Download,
+  FileSpreadsheet,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -37,6 +34,7 @@ export default function LeadsPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // Close menu on outside click
   useEffect(() => {
@@ -332,7 +330,7 @@ export default function LeadsPage() {
                           <button
                             onClick={() => {
                               setOpenMenuId(null);
-                              window.location.href = `/inbox?lead=${lead.id}`;
+                              navigate(`/inbox?lead=${lead.id}`);
                             }}
                             className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
                           >
@@ -342,7 +340,7 @@ export default function LeadsPage() {
                           <button
                             onClick={() => {
                               setOpenMenuId(null);
-                              if (confirm('Delete this lead?')) {
+                              if (window.confirm('Delete this lead? This action cannot be undone.')) {
                                 deleteMutation.mutate(lead.id);
                               }
                             }}

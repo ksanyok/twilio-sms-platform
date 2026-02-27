@@ -44,11 +44,12 @@ export default function NumbersPage() {
   });
 
   const coolMutation = useMutation({
-    mutationFn: (id: string) => api.post(`/numbers/${id}/cool`),
+    mutationFn: (id: string) => api.post(`/numbers/${id}/cool`, { reason: 'manual', hours: 24 }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['numbers'] });
-      toast.success('Number cooled');
+      toast.success('Number cooling for 24 hours');
     },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to cool number'),
   });
 
   const activateMutation = useMutation({
@@ -57,6 +58,7 @@ export default function NumbersPage() {
       queryClient.invalidateQueries({ queryKey: ['numbers'] });
       toast.success('Number activated');
     },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to activate'),
   });
 
   const numbers = data?.numbers || [];
@@ -77,13 +79,22 @@ export default function NumbersPage() {
           <h1 className="text-2xl font-bold text-dark-50">Phone Numbers</h1>
           <p className="text-sm text-dark-400 mt-1">{numbers.length} numbers in pool</p>
         </div>
-        <button
-          onClick={() => queryClient.invalidateQueries({ queryKey: ['numbers'] })}
-          className="btn-ghost flex items-center gap-2"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['numbers'] })}
+            className="btn-ghost flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+          <button
+            onClick={() => toast('Number import coming soon. Add numbers via Twilio Console and they\'ll appear here.', { icon: 'ℹ️' })}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            Add Number
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
