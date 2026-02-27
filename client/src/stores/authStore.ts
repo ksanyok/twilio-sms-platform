@@ -74,13 +74,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isLoading: false,
           initialized: true,
         });
-      } catch {
-        localStorage.removeItem('scl_token');
-        localStorage.removeItem('scl_user');
-        set({ user: null, token: null, isAuthenticated: false, isLoading: false, initialized: true });
+      } catch (err: any) {
+        const status = err?.response?.status;
+        // 5xx = server issue, keep token and use cached user
+        if (!status || status >= 500) {
+          try {
+            const cachedUser = JSON.parse(userStr);
+            set({
+              user: cachedUser,
+              token,
+              isAuthenticated: true,
+              isLoading: false,
+              initialized: true,
+            });
+          } catch {
+            set({ user: null, token: null, isAuthenticated: false, isLoading: false, initialized: true });
+          }
+        } else {
+          // 401/403 = token invalid, clear and redirect to login
+          localStorage.removeItem('scl_token');
+          localStorage.removeItem('scl_user');
+          set({ user: null, token: null, isAuthenticated: false, isLoading: false, initialized: true });
+        }
       }
     } else {
       set({ isLoading: false, initialized: true });
     }
   },
 }));
+
+// Reset initialized on HMR so checkAuth re-fires
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    useAuthStore.setState({ initialized: false });
+  });
+}

@@ -1,6 +1,6 @@
 /**
  * API Routes Integration Tests
- * Тестирует основные CRUD endpoints: leads, campaigns, pipeline, inbox.
+ * Tests main CRUD endpoints: leads, campaigns, pipeline, inbox.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
@@ -15,7 +15,7 @@ let testStageId: string;
 
 describe('API Routes', () => {
   beforeAll(async () => {
-    // Создаём тестового юзера и логинимся
+    // Create test user and log in
     const hash = await bcrypt.hash('TestPass!1', 12);
     await prisma.user.upsert({
       where: { email: 'test-api@test.com' },
@@ -36,7 +36,7 @@ describe('API Routes', () => {
   });
 
   afterAll(async () => {
-    // Очистка тестовых данных в правильном порядке
+    // Clean up test data in correct order
     if (testLeadId) {
       await prisma.leadTag.deleteMany({ where: { leadId: testLeadId } });
       await prisma.campaignLead.deleteMany({ where: { leadId: testLeadId } });
@@ -57,7 +57,7 @@ describe('API Routes', () => {
 
   // ─── LEADS ────────────────────
   describe('Leads API', () => {
-    it('POST /api/leads — создание лида', async () => {
+    it('POST /api/leads — creates a lead', async () => {
       const res = await request(app)
         .post('/api/leads')
         .set('Authorization', `Bearer ${token}`)
@@ -75,7 +75,7 @@ describe('API Routes', () => {
       testLeadId = res.body.lead.id;
     });
 
-    it('GET /api/leads — список лидов', async () => {
+    it('GET /api/leads — lists leads', async () => {
       const res = await request(app)
         .get('/api/leads')
         .set('Authorization', `Bearer ${token}`);
@@ -86,7 +86,7 @@ describe('API Routes', () => {
       expect(res.body.pagination).toHaveProperty('total');
     });
 
-    it('GET /api/leads/:id — детали лида', async () => {
+    it('GET /api/leads/:id — returns lead details', async () => {
       const res = await request(app)
         .get(`/api/leads/${testLeadId}`)
         .set('Authorization', `Bearer ${token}`);
@@ -95,7 +95,7 @@ describe('API Routes', () => {
       expect(res.body.lead.id).toBe(testLeadId);
     });
 
-    it('PUT /api/leads/:id — обновление лида', async () => {
+    it('PUT /api/leads/:id — updates a lead', async () => {
       const res = await request(app)
         .put(`/api/leads/${testLeadId}`)
         .set('Authorization', `Bearer ${token}`)
@@ -108,7 +108,7 @@ describe('API Routes', () => {
 
   // ─── CAMPAIGNS ────────────────
   describe('Campaigns API', () => {
-    it('POST /api/campaigns — создание кампании', async () => {
+    it('POST /api/campaigns — creates a campaign', async () => {
       const res = await request(app)
         .post('/api/campaigns')
         .set('Authorization', `Bearer ${token}`)
@@ -123,7 +123,7 @@ describe('API Routes', () => {
       testCampaignId = res.body.campaign.id;
     });
 
-    it('GET /api/campaigns — список кампаний', async () => {
+    it('GET /api/campaigns — lists campaigns', async () => {
       const res = await request(app)
         .get('/api/campaigns')
         .set('Authorization', `Bearer ${token}`);
@@ -132,7 +132,7 @@ describe('API Routes', () => {
       expect(res.body.campaigns).toBeInstanceOf(Array);
     });
 
-    it('GET /api/campaigns/:id — детали кампании', async () => {
+    it('GET /api/campaigns/:id — returns campaign details', async () => {
       const res = await request(app)
         .get(`/api/campaigns/${testCampaignId}`)
         .set('Authorization', `Bearer ${token}`);
@@ -144,7 +144,7 @@ describe('API Routes', () => {
 
   // ─── PIPELINE ─────────────────
   describe('Pipeline API', () => {
-    it('POST /api/pipeline/stages — создание стадии', async () => {
+    it('POST /api/pipeline/stages — creates a stage', async () => {
       const res = await request(app)
         .post('/api/pipeline/stages')
         .set('Authorization', `Bearer ${token}`)
@@ -155,7 +155,7 @@ describe('API Routes', () => {
       testStageId = res.body.stage.id;
     });
 
-    it('GET /api/pipeline/stages — список стадий', async () => {
+    it('GET /api/pipeline/stages — lists stages', async () => {
       const res = await request(app)
         .get('/api/pipeline/stages')
         .set('Authorization', `Bearer ${token}`);
@@ -167,7 +167,7 @@ describe('API Routes', () => {
 
   // ─── DASHBOARD ────────────────
   describe('Dashboard API', () => {
-    it('GET /api/dashboard/stats — статистика', async () => {
+    it('GET /api/dashboard/stats — returns statistics', async () => {
       const res = await request(app)
         .get('/api/dashboard/stats')
         .set('Authorization', `Bearer ${token}`);
@@ -182,7 +182,7 @@ describe('API Routes', () => {
 
   // ─── SETTINGS ─────────────────
   describe('Settings API', () => {
-    it('GET /api/settings/tags — список тегов', async () => {
+    it('GET /api/settings/tags — lists tags', async () => {
       const res = await request(app)
         .get('/api/settings/tags')
         .set('Authorization', `Bearer ${token}`);
@@ -203,7 +203,7 @@ describe('API Routes', () => {
 
   // ─── AUTOMATION ────────────────
   describe('Automation API', () => {
-    it('GET /api/automation/rules — список правил', async () => {
+    it('GET /api/automation/rules — lists rules', async () => {
       const res = await request(app)
         .get('/api/automation/rules')
         .set('Authorization', `Bearer ${token}`);
@@ -215,7 +215,7 @@ describe('API Routes', () => {
 
   // ─── NUMBERS ──────────────────
   describe('Numbers API', () => {
-    it('GET /api/numbers — список номеров', async () => {
+    it('GET /api/numbers — lists numbers', async () => {
       const res = await request(app)
         .get('/api/numbers')
         .set('Authorization', `Bearer ${token}`);
@@ -253,7 +253,7 @@ describe('API Routes', () => {
       await prisma.user.deleteMany({ where: { email: 'test-rep-access@test.com' } });
     });
 
-    it('REP не может создать пользователя', async () => {
+    it('REP cannot create a user', async () => {
       const res = await request(app)
         .post('/api/auth/register')
         .set('Authorization', `Bearer ${repToken}`)
@@ -267,7 +267,7 @@ describe('API Routes', () => {
       expect(res.status).toBe(403);
     });
 
-    it('REP не может видеть номера', async () => {
+    it('REP cannot view numbers', async () => {
       const res = await request(app)
         .get('/api/numbers')
         .set('Authorization', `Bearer ${repToken}`);

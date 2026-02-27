@@ -1,6 +1,6 @@
 /**
  * Number Service Tests
- * Тестирует ротацию номеров, ramp-up, cooling, daily reset.
+ * Tests number rotation, ramp-up, cooling, daily reset.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import prisma from '../src/config/database';
@@ -13,7 +13,7 @@ const TEST_PHONE_2 = '+10009990002';
 
 describe('NumberService', () => {
   beforeAll(async () => {
-    // Очищаем тестовые данные
+    // Clean up test data
     await prisma.numberAssignment.deleteMany({
       where: { phoneNumber: { twilioSid: { startsWith: 'PN_TEST_' } } },
     });
@@ -21,7 +21,7 @@ describe('NumberService', () => {
       where: { twilioSid: { startsWith: 'PN_TEST_' } },
     });
 
-    // Создаём тестовые номера
+    // Create test numbers
     await prisma.phoneNumber.create({
       data: {
         twilioSid: TEST_NUMBER_SID,
@@ -57,17 +57,17 @@ describe('NumberService', () => {
   });
 
   describe('getBestAvailableNumber', () => {
-    it('возвращает подходящий номер для отправки', async () => {
+    it('returns the best available number for sending', async () => {
       const number = await NumberService.getBestAvailableNumber();
 
-      // Должен вернуть один из наших ACTIVE номеров с оставшимся лимитом
+      // Should return one of our ACTIVE numbers with remaining limit
       expect(number).toBeTruthy();
       expect(number?.status).toBe('ACTIVE');
     });
   });
 
   describe('recordSend', () => {
-    it('увеличивает dailySentCount и totalSent', async () => {
+    it('increments dailySentCount and totalSent', async () => {
       const numberBefore = await prisma.phoneNumber.findUnique({
         where: { twilioSid: TEST_NUMBER_SID },
       });
@@ -84,7 +84,7 @@ describe('NumberService', () => {
       expect(numberAfter!.errorStreak).toBe(0);
     });
 
-    it('увеличивает totalFailed при ошибке', async () => {
+    it('increments totalFailed on error', async () => {
       const number = await prisma.phoneNumber.findUnique({
         where: { twilioSid: TEST_NUMBER_SID },
       });
@@ -99,7 +99,7 @@ describe('NumberService', () => {
   });
 
   describe('coolNumber', () => {
-    it('переводит номер в статус COOLING', async () => {
+    it('sets number status to COOLING', async () => {
       const number = await prisma.phoneNumber.findUnique({
         where: { twilioSid: TEST_NUMBER_SID_2 },
       });
@@ -116,7 +116,7 @@ describe('NumberService', () => {
   });
 
   describe('resetDailyCounters', () => {
-    it('сбрасывает dailySentCount для всех номеров', async () => {
+    it('resets dailySentCount for all numbers', async () => {
       await NumberService.resetDailyCounters();
 
       const numbers = await prisma.phoneNumber.findMany({

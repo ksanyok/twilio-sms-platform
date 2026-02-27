@@ -1,6 +1,6 @@
 import prisma from '../src/config/database';
 
-// Отключаем Prisma после ВСЕХ тестов
+// Disconnect Prisma after ALL tests
 export async function teardown() {
   await prisma.$disconnect();
 }

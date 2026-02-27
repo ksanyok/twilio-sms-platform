@@ -1,6 +1,6 @@
 /**
  * Compliance Service Tests
- * Тестирует STOP/HELP обработку, suppression list, quiet hours.
+ * Tests STOP/HELP keyword handling, suppression list, quiet hours.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import prisma from '../src/config/database';
@@ -11,7 +11,7 @@ const TEST_PHONE_2 = '+10005550002';
 
 describe('ComplianceService', () => {
   beforeAll(async () => {
-    // Очищаем тестовые данные
+    // Clean up test data
     await prisma.suppressionEntry.deleteMany({
       where: { phone: { startsWith: '+1000555' } },
     });
@@ -30,8 +30,8 @@ describe('ComplianceService', () => {
   });
 
   describe('processInboundKeywords', () => {
-    it('STOP — помечает как opt-out и возвращает ответ', async () => {
-      // Создадим лида чтобы opt-out работал
+    it('STOP — marks as opt-out and returns response', async () => {
+      // Create a lead so opt-out works
       await prisma.lead.create({
         data: { firstName: 'Test', phone: TEST_PHONE, source: 'test' },
       });
@@ -41,7 +41,7 @@ describe('ComplianceService', () => {
       expect(result.isKeyword).toBe(true);
       expect(result.response).toBeTruthy();
 
-      // Проверяем suppression list
+      // Verify suppression list
       const entry = await prisma.suppressionEntry.findUnique({
         where: { phone: TEST_PHONE },
       });
@@ -49,7 +49,7 @@ describe('ComplianceService', () => {
       expect(entry?.reason).toBe('STOP');
     });
 
-    it('stop (строчные) — тоже работает', async () => {
+    it('stop (lowercase) — also works', async () => {
       await prisma.lead.create({
         data: { firstName: 'Test2', phone: TEST_PHONE_2, source: 'test' },
       });
@@ -59,14 +59,14 @@ describe('ComplianceService', () => {
       expect(result.isKeyword).toBe(true);
     });
 
-    it('HELP — возвращает справочный ответ', async () => {
+    it('HELP — returns help response', async () => {
       const result = await ComplianceService.processInboundKeywords('+10005550099', 'HELP');
 
       expect(result.isKeyword).toBe(true);
       expect(result.response).toContain('Secure Credit Lines');
     });
 
-    it('обычное сообщение — не keyword', async () => {
+    it('regular message — not a keyword', async () => {
       const result = await ComplianceService.processInboundKeywords('+10005550099', 'Hello, I am interested');
 
       expect(result.isKeyword).toBe(false);
@@ -74,15 +74,15 @@ describe('ComplianceService', () => {
   });
 
   describe('canSendTo', () => {
-    it('блокирует отправку на номер из suppression list', async () => {
-      // TEST_PHONE уже в suppression list после теста STOP
+    it('blocks sending to a number in the suppression list', async () => {
+      // TEST_PHONE is already in suppression list after the STOP test
       const result = await ComplianceService.canSendTo(TEST_PHONE);
 
       expect(result.allowed).toBe(false);
       expect(result.reason).toBeTruthy();
     });
 
-    it('разрешает отправку на чистый номер', async () => {
+    it('allows sending to a clean number', async () => {
       const result = await ComplianceService.canSendTo('+10005550077');
 
       expect(result.allowed).toBe(true);
@@ -90,17 +90,17 @@ describe('ComplianceService', () => {
   });
 
   describe('handleOptOut / handleOptIn', () => {
-    it('opt-in после opt-out — снимает suppression', async () => {
-      // Сначала opt-in
+    it('opt-in after opt-out — removes suppression', async () => {
+      // First, opt-in
       await ComplianceService.handleOptIn(TEST_PHONE);
 
       const entry = await prisma.suppressionEntry.findUnique({
         where: { phone: TEST_PHONE },
       });
-      // Запись должна быть удалена
+      // Entry should be deleted
       expect(entry).toBeNull();
 
-      // Теперь canSendTo должен разрешить
+      // Now canSendTo should allow it
       const result = await ComplianceService.canSendTo(TEST_PHONE);
       expect(result.allowed).toBe(true);
     });

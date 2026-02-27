@@ -1,7 +1,7 @@
 /**
  * Auth API Integration Tests
- * Тестирует аутентификацию, авторизацию и управление пользователями.
- * Работает с реальной БД (локальный PostgreSQL).
+ * Tests authentication, authorization, and user management.
+ * Runs against a real DB (local PostgreSQL).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
@@ -21,7 +21,7 @@ let adminUserId: string;
 
 describe('Auth API', () => {
   beforeAll(async () => {
-    // Создаём тестового админа
+    // Create test admin
     const hash = await bcrypt.hash(TEST_ADMIN.password, 12);
     const user = await prisma.user.upsert({
       where: { email: TEST_ADMIN.email },
@@ -38,7 +38,7 @@ describe('Auth API', () => {
   });
 
   afterAll(async () => {
-    // Удаляем только пользователей, созданных ЭТИМ тестовым файлом
+    // Delete only users created by THIS test file
     const ownEmails = ['test-admin@test.com', 'test-rep@test.com', 'test-manager@test.com', 'test-new@test.com'];
     const testUsers = await prisma.user.findMany({
       where: { email: { in: ownEmails } },
@@ -54,7 +54,7 @@ describe('Auth API', () => {
   });
 
   describe('POST /api/auth/login', () => {
-    it('успешный логин с верными данными', async () => {
+    it('should login successfully with valid credentials', async () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({ email: TEST_ADMIN.email, password: TEST_ADMIN.password });
@@ -71,7 +71,7 @@ describe('Auth API', () => {
       adminToken = res.body.token;
     });
 
-    it('отказ при неверном пароле', async () => {
+    it('should reject wrong password', async () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({ email: TEST_ADMIN.email, password: 'WrongPassword' });
@@ -80,7 +80,7 @@ describe('Auth API', () => {
       expect(res.body).toHaveProperty('error');
     }, 15000);
 
-    it('отказ при несуществующем email', async () => {
+    it('should reject non-existent email', async () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({ email: 'nonexistent@test.com', password: 'any' });
@@ -88,7 +88,7 @@ describe('Auth API', () => {
       expect(res.status).toBe(401);
     });
 
-    it('отказ без email или password', async () => {
+    it('should reject missing email or password', async () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({ email: TEST_ADMIN.email });
@@ -98,7 +98,7 @@ describe('Auth API', () => {
   });
 
   describe('GET /api/auth/me', () => {
-    it('возвращает текущего пользователя по токену', async () => {
+    it('should return current user by token', async () => {
       const res = await request(app)
         .get('/api/auth/me')
         .set('Authorization', `Bearer ${adminToken}`);
@@ -110,13 +110,13 @@ describe('Auth API', () => {
       });
     });
 
-    it('отказ без токена', async () => {
+    it('should reject request without token', async () => {
       const res = await request(app).get('/api/auth/me');
 
       expect(res.status).toBe(401);
     });
 
-    it('отказ с невалидным токеном', async () => {
+    it('should reject invalid token', async () => {
       const res = await request(app)
         .get('/api/auth/me')
         .set('Authorization', 'Bearer invalid-token-here');
@@ -126,7 +126,7 @@ describe('Auth API', () => {
   });
 
   describe('POST /api/auth/register', () => {
-    it('админ может создать нового пользователя', async () => {
+    it('should allow admin to create a new user', async () => {
       const res = await request(app)
         .post('/api/auth/register')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -145,7 +145,7 @@ describe('Auth API', () => {
       });
     });
 
-    it('отказ при дублировании email', async () => {
+    it('should reject duplicate email', async () => {
       const res = await request(app)
         .post('/api/auth/register')
         .set('Authorization', `Bearer ${adminToken}`)
@@ -159,7 +159,7 @@ describe('Auth API', () => {
       expect(res.status).toBe(409);
     });
 
-    it('отказ без авторизации', async () => {
+    it('should reject without authorization', async () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send({
@@ -174,7 +174,7 @@ describe('Auth API', () => {
   });
 
   describe('GET /api/auth/users', () => {
-    it('админ получает список пользователей', async () => {
+    it('should allow admin to list users', async () => {
       const res = await request(app)
         .get('/api/auth/users')
         .set('Authorization', `Bearer ${adminToken}`);
@@ -182,7 +182,7 @@ describe('Auth API', () => {
       expect(res.status).toBe(200);
       expect(res.body.users).toBeInstanceOf(Array);
       expect(res.body.users.length).toBeGreaterThanOrEqual(1);
-      // Проверяем что пароли не утекают
+      // Verify passwords are not leaked
       res.body.users.forEach((u: any) => {
         expect(u).not.toHaveProperty('passwordHash');
       });
@@ -190,7 +190,7 @@ describe('Auth API', () => {
   });
 
   describe('PUT /api/auth/users/:id', () => {
-    it('админ может обновить пользователя', async () => {
+    it('should allow admin to update a user', async () => {
       const res = await request(app)
         .put(`/api/auth/users/${adminUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -203,7 +203,7 @@ describe('Auth API', () => {
 });
 
 describe('Health Check', () => {
-  it('GET /api/health возвращает ok', async () => {
+  it('GET /api/health should return ok', async () => {
     const res = await request(app).get('/api/health');
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
