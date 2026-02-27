@@ -554,13 +554,14 @@ function IntegrationsTab() {
             <div className="flex items-center gap-2">
               <select
                 className="input flex-1"
-                value={getVal('openaiModel', 'gpt-4o-mini')}
+                value={getVal('openaiModel', 'gpt-4.1-mini')}
                 onChange={(e) => handleChange('openaiModel', e.target.value)}
               >
-                <option value="gpt-4o-mini">GPT-4o Mini (fast, cheap)</option>
-                <option value="gpt-4o">GPT-4o (best quality)</option>
-                <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                <option value="gpt-3.5-turbo">GPT-3.5 Turbo (legacy)</option>
+                <option value="gpt-4.1-mini">GPT-4.1 Mini (fast, cheap)</option>
+                <option value="gpt-4.1">GPT-4.1 (balanced)</option>
+                <option value="gpt-4.1-nano">GPT-4.1 Nano (fastest, cheapest)</option>
+                <option value="o3-mini">o3-mini (reasoning, compact)</option>
+                <option value="o4-mini">o4-mini (reasoning, latest)</option>
               </select>
               {dirty.has('openaiModel') && (
                 <button onClick={() => handleSave('openaiModel')} disabled={saveMutation.isPending} className="btn-primary py-2 px-3 text-xs">

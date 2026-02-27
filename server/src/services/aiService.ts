@@ -18,7 +18,7 @@ export class AIService {
 
     return {
       apiKey: String(map.openaiApiKey),
-      model: String(map.openaiModel || 'gpt-4o-mini'),
+      model: String(map.openaiModel || 'gpt-4.1-mini'),
     };
   }
 
