@@ -488,11 +488,19 @@ function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClos
   );
 }
 
-function StatCard({ label, value, icon: Icon, color }: { label: string; value: string | number; icon: any; color: string }) {
+function StatCard({ label, value, icon, color }: { label: string; value: string | number; icon: React.ReactNode; color: string }) {
+  const colorMap: Record<string, string> = {
+    emerald: 'bg-emerald-500/20 text-emerald-400',
+    yellow: 'bg-yellow-500/20 text-yellow-400',
+    blue: 'bg-blue-500/20 text-blue-400',
+    red: 'bg-red-500/20 text-red-400',
+    scl: 'bg-scl-500/20 text-scl-400',
+    purple: 'bg-purple-500/20 text-purple-400',
+  };
   return (
     <div className="card p-4 flex items-center gap-3">
-      <div className={clsx('w-9 h-9 rounded-lg flex items-center justify-center', color)}>
-        <Icon className="w-4 h-4" />
+      <div className={clsx('w-9 h-9 rounded-lg flex items-center justify-center', colorMap[color] || color)}>
+        {icon}
       </div>
       <div>
         <p className="text-lg font-bold text-dark-100">{value}</p>
