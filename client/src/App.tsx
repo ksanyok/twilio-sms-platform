@@ -11,6 +11,7 @@ import LoginPage from './pages/LoginPage';
 // Lazy-loaded pages for better initial bundle size
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const CampaignsPage = lazy(() => import('./pages/CampaignsPage'));
+const CampaignDetailPage = lazy(() => import('./pages/CampaignDetailPage'));
 const InboxPage = lazy(() => import('./pages/InboxPage'));
 const PipelinePage = lazy(() => import('./pages/PipelinePage'));
 const LeadsPage = lazy(() => import('./pages/LeadsPage'));
@@ -83,6 +84,7 @@ export default function App() {
                       <Routes>
                         <Route path="/" element={<DashboardPage />} />
                         <Route path="campaigns" element={<CampaignsPage />} />
+                        <Route path="campaigns/:id" element={<CampaignDetailPage />} />
                         <Route path="inbox" element={<InboxPage />} />
                         <Route path="pipeline" element={<PipelinePage />} />
                         <Route path="leads" element={<LeadsPage />} />
