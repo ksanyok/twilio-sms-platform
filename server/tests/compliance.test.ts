@@ -2,7 +2,7 @@
  * Compliance Service Tests
  * Tests STOP/HELP keyword handling, suppression list, quiet hours.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import prisma from '../src/config/database';
 import { ComplianceService } from '../src/services/complianceService';
 
@@ -11,6 +11,9 @@ const TEST_PHONE_2 = '+10005550002';
 
 describe('ComplianceService', () => {
   beforeAll(async () => {
+    // Mock isQuietHours so tests don't depend on current time
+    vi.spyOn(ComplianceService, 'isQuietHours').mockResolvedValue(false);
+
     // Clean up test data
     await prisma.suppressionEntry.deleteMany({
       where: { phone: { startsWith: '+1000555' } },
@@ -21,6 +24,7 @@ describe('ComplianceService', () => {
   });
 
   afterAll(async () => {
+    vi.restoreAllMocks();
     await prisma.suppressionEntry.deleteMany({
       where: { phone: { startsWith: '+1000555' } },
     });
