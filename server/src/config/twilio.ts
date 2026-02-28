@@ -24,22 +24,29 @@ function getTwilioClient() {
 }
 
 /**
- * Check if Twilio Test Mode is enabled (uses DB setting with Redis cache).
+ * Get current SMS mode from DB/Redis: 'live' | 'twilio_test' | 'simulation'
  */
-async function isTwilioTestMode(): Promise<boolean> {
+async function getSmsMode(): Promise<string> {
   try {
-    const cached = await redis.get('setting:twilioTestMode');
-    if (cached !== null) return cached === 'true';
+    const cached = await redis.get('setting:smsMode');
+    if (cached !== null) return cached;
 
     const setting = await prisma.systemSetting.findUnique({
-      where: { key: 'twilioTestMode' },
+      where: { key: 'smsMode' },
     });
-    const value = setting?.value === true || setting?.value === 'true';
-    await redis.set('setting:twilioTestMode', String(value), 'EX', 30);
+    const value = (typeof setting?.value === 'string' ? setting.value : 'live') as string;
+    await redis.set('setting:smsMode', value, 'EX', 30);
     return value;
   } catch {
-    return false;
+    return 'live';
   }
+}
+
+/**
+ * Check if Twilio Test Mode is enabled.
+ */
+async function isTwilioTestMode(): Promise<boolean> {
+  return (await getSmsMode()) === 'twilio_test';
 }
 
 /**
@@ -110,4 +117,4 @@ function resetTwilioClients() {
 }
 
 export default getTwilioClient;
-export { getActiveTwilioClient, isTwilioTestMode, resetTwilioClients };
+export { getActiveTwilioClient, isTwilioTestMode, getSmsMode, resetTwilioClients };

@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import getTwilioClient, { getActiveTwilioClient, isTwilioTestMode } from '../config/twilio';
+import getTwilioClient, { getActiveTwilioClient, getSmsMode } from '../config/twilio';
 import { config } from '../config';
 import logger from '../config/logger';
 import { NumberService } from './numberService';
@@ -75,23 +75,10 @@ interface BulkSendOptions {
 export class SendingEngine {
   
   /**
-   * Check if test mode is enabled via system settings
-   * Cached in Redis for 30s to avoid DB hits on every message send
+   * Check if simulation mode is enabled (no API calls at all)
    */
-  static async isTestMode(): Promise<boolean> {
-    try {
-      const cached = await redis.get('setting:testMode');
-      if (cached !== null) return cached === 'true';
-
-      const setting = await prisma.systemSetting.findUnique({
-        where: { key: 'testMode' },
-      });
-      const value = setting?.value === true || setting?.value === 'true';
-      await redis.set('setting:testMode', String(value), 'EX', 30);
-      return value;
-    } catch {
-      return false;
-    }
+  static async isSimulationMode(): Promise<boolean> {
+    return (await getSmsMode()) === 'simulation';
   }
 
   /**
@@ -364,8 +351,9 @@ export class SendingEngine {
         data: { status: 'SENDING' },
       });
 
-      // ── TEST MODE: simulate delivery without calling Twilio ──
-      const testMode = await this.isTestMode();
+      // ── SIMULATION MODE: simulate delivery without calling Twilio ──
+      const smsMode = await getSmsMode();
+      const testMode = smsMode === 'simulation';
       if (testMode) {
         const fakeSid = `TEST_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         
@@ -401,7 +389,7 @@ export class SendingEngine {
           });
         }
 
-        logger.info(`[TEST MODE] Message simulated: ${messageId} → ${toNumber}`, {
+        logger.info(`[SIMULATION] Message simulated: ${messageId} → ${toNumber}`, {
           fakeSid,
           fromNumber,
         });
@@ -414,7 +402,7 @@ export class SendingEngine {
         throw new Error('Twilio client not configured');
       }
 
-      const twilioTestActive = await isTwilioTestMode();
+      const twilioTestActive = smsMode === 'twilio_test';
       const twilioMessage = await client.messages.create({
         body,
         from: fromNumber,

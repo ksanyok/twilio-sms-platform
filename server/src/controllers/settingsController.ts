@@ -23,7 +23,7 @@ export class SettingsController {
   // ── Allowed system settings keys (whitelist) ──
   private static readonly ALLOWED_KEYS = new Set([
     // Compliance & Sending
-    'testMode',
+    'smsMode',
     'quietHoursStart',
     'quietHoursEnd',
     'quietHoursTimezone',
@@ -50,7 +50,6 @@ export class SettingsController {
     'twilioMessagingServiceSid',
     'webhookBaseUrl',
     // Twilio Test Credentials
-    'twilioTestMode',
     'twilioTestAccountSid',
     'twilioTestAuthToken',
     // OpenAI
@@ -520,10 +519,18 @@ export class SettingsController {
     }
 
     // Boolean validations
-    const booleanKeys = ['testMode', 'autoTagEnabled', 'aiAutoReplyEnabled', 'rampUpEnabled'];
+    const booleanKeys = ['autoTagEnabled', 'aiAutoReplyEnabled', 'rampUpEnabled'];
     if (booleanKeys.includes(key)) {
       if (value !== true && value !== false && value !== 'true' && value !== 'false') {
         throw new AppError(`${key} must be a boolean value`, 400);
+      }
+    }
+
+    // smsMode validation
+    if (key === 'smsMode') {
+      const allowed = ['live', 'twilio_test', 'simulation'];
+      if (!allowed.includes(value as string)) {
+        throw new AppError(`smsMode must be one of: ${allowed.join(', ')}`, 400);
       }
     }
   }

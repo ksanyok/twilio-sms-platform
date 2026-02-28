@@ -26,6 +26,9 @@ import {
   ChevronRight,
   Clock,
   TrendingUp,
+  Radio,
+  Zap,
+  Shield,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
@@ -666,31 +669,20 @@ function IntegrationsTab() {
     </div>
   );
 
-  const isTwilioTestMode = settings.twilioTestMode === true || settings.twilioTestMode === 'true';
-
-  const handleTwilioTestToggle = () => {
-    saveMutation.mutate({ key: 'twilioTestMode', value: (!isTwilioTestMode) as any });
-  };
+  const smsMode = settings.smsMode || 'live';
 
   return (
     <div className="space-y-6">
       {/* Twilio */}
       <div className="card p-6 space-y-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-              <Phone className="w-5 h-5 text-red-400" />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold text-dark-100">Twilio</h3>
-              <p className="text-xs text-dark-400">SMS sending, number management, webhooks</p>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+            <Phone className="w-5 h-5 text-red-400" />
           </div>
-          {isTwilioTestMode && (
-            <span className="badge bg-amber-500/20 text-amber-400 text-[10px] uppercase tracking-wider px-2 py-1">
-              Test Mode
-            </span>
-          )}
+          <div>
+            <h3 className="text-base font-semibold text-dark-100">Twilio</h3>
+            <p className="text-xs text-dark-400">SMS sending, number management, webhooks</p>
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-4">
           <IntegrationField label="Account SID" settingKey="twilioAccountSid" />
@@ -699,36 +691,22 @@ function IntegrationsTab() {
           <IntegrationField label="Webhook Base URL" settingKey="webhookBaseUrl" defaultValue="https://yourdomain.com" />
         </div>
 
-        {/* Twilio Test Mode */}
+        {/* Test Credentials — shown when twilio_test mode is active */}
         <div className={clsx(
           'rounded-lg p-4 border transition-colors duration-200',
-          isTwilioTestMode
-            ? 'border-amber-500/40 bg-amber-500/5'
+          smsMode === 'twilio_test'
+            ? 'border-cyan-500/40 bg-cyan-500/5'
             : 'border-dark-700/50 bg-dark-800/30'
         )}>
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <FlaskConical className={clsx('w-4 h-4', isTwilioTestMode ? 'text-amber-400' : 'text-dark-400')} />
-              <span className="text-sm font-medium text-dark-200">Twilio Test Credentials</span>
-            </div>
-            <button
-              onClick={handleTwilioTestToggle}
-              disabled={saveMutation.isPending}
-              className={clsx(
-                'relative inline-flex h-6 w-10 items-center rounded-full transition-colors duration-200 focus:outline-none',
-                isTwilioTestMode ? 'bg-amber-500' : 'bg-dark-600'
-              )}
-            >
-              <span className={clsx(
-                'inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200',
-                isTwilioTestMode ? 'translate-x-5' : 'translate-x-1'
-              )} />
-            </button>
+          <div className="flex items-center gap-2 mb-2">
+            <Shield className={clsx('w-4 h-4', smsMode === 'twilio_test' ? 'text-cyan-400' : 'text-dark-400')} />
+            <span className="text-sm font-medium text-dark-200">Test Credentials</span>
+            {smsMode === 'twilio_test' && (
+              <span className="badge bg-cyan-500/20 text-cyan-400 text-[10px] uppercase tracking-wider">In Use</span>
+            )}
           </div>
           <p className="text-xs text-dark-400 mb-3">
-            {isTwilioTestMode
-              ? 'Active — API calls use test SID/token. Twilio will accept requests but won\'t deliver real SMS.'
-              : 'When enabled, all Twilio API calls use test credentials instead of live ones.'}
+            Used when SMS Mode is set to "Twilio Test" in System settings. API calls work but no real SMS delivered.
           </p>
           <div className="grid grid-cols-1 gap-3">
             <IntegrationField label="Test Account SID" settingKey="twilioTestAccountSid" />
@@ -837,12 +815,11 @@ function SystemTab() {
   const getValue = (key: string, defaultValue: string) =>
     localSettings[key] !== undefined ? localSettings[key] : (settings[key] || defaultValue);
 
-  const isTestMode = settings.testMode === true || settings.testMode === 'true';
+  const smsMode = (settings.smsMode as string) || 'live';
   const isRampUp = settings.rampUpEnabled === true || settings.rampUpEnabled === 'true';
 
-  const handleTestModeToggle = () => {
-    const newValue = !isTestMode;
-    saveMutation.mutate({ key: 'testMode', value: newValue as any });
+  const handleSmsModeChange = (mode: string) => {
+    saveMutation.mutate({ key: 'smsMode', value: mode });
   };
 
   const handleRampUpToggle = () => {
@@ -850,49 +827,94 @@ function SystemTab() {
     saveMutation.mutate({ key: 'rampUpEnabled', value: newValue as any });
   };
 
+  const smsModes = [
+    {
+      value: 'live',
+      label: 'Live',
+      desc: 'Real SMS sent via production Twilio credentials',
+      icon: <Radio className="w-4 h-4" />,
+      color: 'green',
+    },
+    {
+      value: 'twilio_test',
+      label: 'Twilio Test',
+      desc: 'API calls via test credentials — Twilio accepts but doesn\'t deliver',
+      icon: <Shield className="w-4 h-4" />,
+      color: 'cyan',
+    },
+    {
+      value: 'simulation',
+      label: 'Simulation',
+      desc: 'No API calls at all — messages are simulated locally',
+      icon: <FlaskConical className="w-4 h-4" />,
+      color: 'amber',
+    },
+  ] as const;
+
+  const currentMode = smsModes.find(m => m.value === smsMode) || smsModes[0];
+  const colorMap: Record<string, { border: string; bg: string; text: string; dot: string }> = {
+    green: { border: 'border-green-500/50', bg: 'bg-green-500/10', text: 'text-green-400', dot: 'bg-green-500' },
+    cyan: { border: 'border-cyan-500/50', bg: 'bg-cyan-500/10', text: 'text-cyan-400', dot: 'bg-cyan-500' },
+    amber: { border: 'border-amber-500/50', bg: 'bg-amber-500/10', text: 'text-amber-400', dot: 'bg-amber-500' },
+  };
+
   return (
     <div className="space-y-6">
-      {/* Test Mode Banner */}
-      <div className={clsx(
-        'card p-5 flex items-center justify-between border-2 transition-colors duration-200',
-        isTestMode
-          ? 'border-amber-500/50 bg-amber-500/5'
-          : 'border-dark-700/50'
-      )}>
+      {/* SMS Mode Selector */}
+      <div className="card p-5 space-y-4">
         <div className="flex items-center gap-3">
           <div className={clsx(
             'w-10 h-10 rounded-lg flex items-center justify-center',
-            isTestMode ? 'bg-amber-500/20 text-amber-400' : 'bg-dark-700 text-dark-400'
+            colorMap[currentMode.color].bg, colorMap[currentMode.color].text
           )}>
-            <FlaskConical className="w-5 h-5" />
+            <Zap className="w-5 h-5" />
           </div>
           <div>
             <h4 className="text-sm font-semibold text-dark-100 flex items-center gap-2">
-              Test Mode
-              {isTestMode && (
-                <span className="badge bg-amber-500/20 text-amber-400 text-[10px] uppercase tracking-wider">Active</span>
-              )}
+              SMS Sending Mode
+              <span className={clsx(
+                'badge text-[10px] uppercase tracking-wider',
+                colorMap[currentMode.color].bg, colorMap[currentMode.color].text
+              )}>
+                {currentMode.label}
+              </span>
             </h4>
-            <p className="text-xs text-dark-400 mt-0.5">
-              {isTestMode
-                ? 'SMS sending is simulated — no real messages are sent via Twilio'
-                : 'Enable to test automations and campaigns without actually sending SMS'}
-            </p>
+            <p className="text-xs text-dark-400 mt-0.5">{currentMode.desc}</p>
           </div>
         </div>
-        <button
-          onClick={handleTestModeToggle}
-          disabled={saveMutation.isPending}
-          className={clsx(
-            'relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 focus:outline-none',
-            isTestMode ? 'bg-amber-500' : 'bg-dark-600'
-          )}
-        >
-          <span className={clsx(
-            'inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200',
-            isTestMode ? 'translate-x-6' : 'translate-x-1'
-          )} />
-        </button>
+
+        <div className="grid grid-cols-3 gap-3">
+          {smsModes.map((mode) => {
+            const active = smsMode === mode.value;
+            const c = colorMap[mode.color];
+            return (
+              <button
+                key={mode.value}
+                onClick={() => handleSmsModeChange(mode.value)}
+                disabled={saveMutation.isPending}
+                className={clsx(
+                  'relative rounded-lg p-4 border-2 text-left transition-all duration-200 focus:outline-none',
+                  active
+                    ? [c.border, c.bg]
+                    : 'border-dark-700/50 hover:border-dark-600 bg-dark-800/30'
+                )}
+              >
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className={clsx(active ? c.text : 'text-dark-400')}>
+                    {mode.icon}
+                  </span>
+                  <span className={clsx('text-sm font-medium', active ? 'text-dark-100' : 'text-dark-300')}>
+                    {mode.label}
+                  </span>
+                </div>
+                <p className="text-xs text-dark-400 leading-relaxed">{mode.desc}</p>
+                {active && (
+                  <div className={clsx('absolute top-3 right-3 w-2.5 h-2.5 rounded-full', c.dot)} />
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="card p-6 space-y-6">
