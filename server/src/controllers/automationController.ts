@@ -175,6 +175,9 @@ export class AutomationController {
   static async pauseRun(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
 
+    const run = await prisma.automationRun.findUnique({ where: { id } });
+    if (!run) throw new AppError('Automation run not found', 404);
+
     await prisma.automationRun.update({
       where: { id },
       data: { isPaused: true, pauseReason: 'manual' },
@@ -185,6 +188,9 @@ export class AutomationController {
 
   static async resumeRun(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
+
+    const run = await prisma.automationRun.findUnique({ where: { id } });
+    if (!run) throw new AppError('Automation run not found', 404);
 
     await prisma.automationRun.update({
       where: { id },

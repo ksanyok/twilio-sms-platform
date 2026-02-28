@@ -47,7 +47,7 @@ export class PipelineController {
   }
 
   static async createStage(req: AuthRequest, res: Response): Promise<void> {
-    const { name, color } = req.body;
+    const { name, color, mappedStatus } = req.body;
 
     if (!name) throw new AppError('Stage name is required', 400);
 
@@ -61,6 +61,7 @@ export class PipelineController {
         name,
         color: color || '#6366f1',
         order: (maxOrder?.order || 0) + 1,
+        mappedStatus: mappedStatus || null,
       },
     });
 
@@ -69,7 +70,7 @@ export class PipelineController {
 
   static async updateStage(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
-    const { name, color, order } = req.body;
+    const { name, color, order, mappedStatus } = req.body;
 
     const stage = await prisma.pipelineStage.update({
       where: { id },
@@ -77,6 +78,7 @@ export class PipelineController {
         ...(name && { name }),
         ...(color && { color }),
         ...(order !== undefined && { order }),
+        ...(mappedStatus !== undefined && { mappedStatus: mappedStatus || null }),
       },
     });
 
@@ -136,22 +138,11 @@ export class PipelineController {
       }).catch(() => {}); // fire and forget
     }
 
-    // Update lead status based on pipeline stage (configurable mapping)
-    const STAGE_STATUS_MAP: Record<string, string> = {
-      'New': 'NEW',
-      'Contacted': 'CONTACTED',
-      'Replied': 'REPLIED',
-      'Interested': 'INTERESTED',
-      'Docs Requested': 'DOCS_REQUESTED',
-      'Submitted': 'SUBMITTED',
-      'Funded': 'FUNDED',
-    };
-
-    const newStatus = STAGE_STATUS_MAP[card.stage.name];
-    if (newStatus && card.lead) {
+    // Update lead status based on pipeline stage mapped status
+    if (card.stage.mappedStatus && card.lead) {
       await prisma.lead.update({
         where: { id: card.leadId },
-        data: { status: newStatus as any },
+        data: { status: card.stage.mappedStatus },
       });
     }
 

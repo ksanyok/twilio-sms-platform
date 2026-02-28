@@ -43,6 +43,15 @@ export default function DashboardPage() {
     refetchInterval: 30000, // Refresh every 30s
   });
 
+  const { data: deliveryMetrics } = useQuery({
+    queryKey: ['delivery-metrics'],
+    queryFn: async () => {
+      const { data } = await api.get('/dashboard/delivery-metrics?days=7');
+      return data;
+    },
+    refetchInterval: 60000,
+  });
+
   if (isLoading) {
     return (
       <div className="p-8">
@@ -235,6 +244,47 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Delivery Health */}
+      {deliveryMetrics?.totals && (
+        <div className="card">
+          <div className="card-header">
+            <h3 className="text-sm font-semibold text-dark-200">Delivery Health (7 Days)</h3>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+              {[
+                { label: 'Sent', value: deliveryMetrics.totals.sent, color: 'text-dark-200' },
+                { label: 'Delivered', value: deliveryMetrics.totals.delivered, color: 'text-green-400' },
+                { label: 'Failed', value: deliveryMetrics.totals.failed, color: 'text-red-400' },
+                { label: 'Blocked', value: deliveryMetrics.totals.blocked, color: 'text-yellow-400' },
+                { label: 'Replies', value: deliveryMetrics.totals.replies, color: 'text-blue-400' },
+                { label: 'Opt-Outs', value: deliveryMetrics.totals.optOuts, color: 'text-orange-400' },
+              ].map(m => (
+                <div key={m.label} className="text-center">
+                  <p className={`text-2xl font-bold ${m.color}`}>
+                    {(m.value || 0).toLocaleString()}
+                  </p>
+                  <p className="text-xs text-dark-500 mt-1">{m.label}</p>
+                </div>
+              ))}
+            </div>
+            {deliveryMetrics.totals.sent > 0 && (
+              <div className="mt-4 flex items-center justify-center gap-6 text-xs text-dark-400">
+                <span>Delivery Rate: <strong className="text-green-400">
+                  {((deliveryMetrics.totals.delivered / deliveryMetrics.totals.sent) * 100).toFixed(1)}%
+                </strong></span>
+                <span>Reply Rate: <strong className="text-blue-400">
+                  {((deliveryMetrics.totals.replies / deliveryMetrics.totals.sent) * 100).toFixed(1)}%
+                </strong></span>
+                <span>Opt-Out Rate: <strong className="text-orange-400">
+                  {((deliveryMetrics.totals.optOuts / deliveryMetrics.totals.sent) * 100).toFixed(2)}%
+                </strong></span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Recent Campaigns & Number Health */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

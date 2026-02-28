@@ -27,6 +27,7 @@ import toast from 'react-hot-toast';
 export default function CampaignsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; campaign: Campaign } | null>(null);
   const ctxMenuRef = useRef<HTMLDivElement>(null);
@@ -45,15 +46,20 @@ export default function CampaignsPage() {
   }, [ctxMenu]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campaigns', statusFilter, search],
+    queryKey: ['campaigns', statusFilter, search, page],
     queryFn: async () => {
       const params = new URLSearchParams();
+      params.set('page', page.toString());
+      params.set('limit', '20');
       if (statusFilter) params.set('status', statusFilter);
       if (search) params.set('search', search);
       const { data } = await api.get(`/campaigns?${params}`);
       return data;
     },
   });
+
+  const totalPages = data?.pagination?.pages || 1;
+  const total = data?.pagination?.total || 0;
 
   const startMutation = useMutation({
     mutationFn: (id: string) => api.post(`/campaigns/${id}/start`),
@@ -267,6 +273,30 @@ export default function CampaignsPage() {
             })}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-dark-700/50">
+            <p className="text-xs text-dark-500">{total} campaigns total</p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="btn-ghost py-1 px-2 text-xs disabled:opacity-30"
+              >
+                Previous
+              </button>
+              <span className="text-xs text-dark-400">Page {page} of {totalPages}</span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="btn-ghost py-1 px-2 text-xs disabled:opacity-30"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right-Click Context Menu */}
@@ -381,12 +411,18 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const leadIds = selectAll ? undefined : Array.from(selectedLeadIds);
-    createMutation.mutate({
-      ...formData,
-      leadIds,
-      selectAllWithFilter: selectAll ? { status: leadFilter.status, search: leadFilter.search } : undefined,
-    });
+    if (selectAll) {
+      // Server-side filtering — no 200-lead cap
+      createMutation.mutate({
+        ...formData,
+        filterStatus: leadFilter.status ? [leadFilter.status] : undefined,
+      });
+    } else {
+      createMutation.mutate({
+        ...formData,
+        leadIds: Array.from(selectedLeadIds),
+      });
+    }
   };
 
   const toggleLead = (id: string) => {
@@ -469,6 +505,11 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
                   <option value="CONTACTED">CONTACTED</option>
                   <option value="REPLIED">REPLIED</option>
                   <option value="INTERESTED">INTERESTED</option>
+                  <option value="DOCS_REQUESTED">DOCS_REQUESTED</option>
+                  <option value="SUBMITTED">SUBMITTED</option>
+                  <option value="FUNDED">FUNDED</option>
+                  <option value="NOT_INTERESTED">NOT_INTERESTED</option>
+                  <option value="DNC">DNC</option>
                 </select>
               </div>
               {/* Select all toggle */}

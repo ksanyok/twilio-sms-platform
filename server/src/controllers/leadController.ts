@@ -195,6 +195,9 @@ export class LeadController {
     const { id } = req.params;
     const { firstName, lastName, email, company, state, source, status, assignedRepId, notes } = req.body;
 
+    const existing = await prisma.lead.findUnique({ where: { id } });
+    if (!existing) throw new AppError('Lead not found', 404);
+
     const data: any = {};
     if (firstName) data.firstName = firstName;
     if (lastName !== undefined) data.lastName = lastName;
@@ -505,6 +508,12 @@ export class LeadController {
     const { id } = req.params;
     const { tagId } = req.body;
 
+    const lead = await prisma.lead.findUnique({ where: { id } });
+    if (!lead) throw new AppError('Lead not found', 404);
+
+    const tag = await prisma.tag.findUnique({ where: { id: tagId } });
+    if (!tag) throw new AppError('Tag not found', 404);
+
     await prisma.leadTag.create({
       data: { leadId: id, tagId },
     });
@@ -514,6 +523,9 @@ export class LeadController {
 
   static async removeTag(req: AuthRequest, res: Response): Promise<void> {
     const { id, tagId } = req.params;
+
+    const lead = await prisma.lead.findUnique({ where: { id } });
+    if (!lead) throw new AppError('Lead not found', 404);
 
     await prisma.leadTag.deleteMany({
       where: { leadId: id, tagId },

@@ -48,6 +48,8 @@ interface AutomationRule {
 }
 
 /* ─── Constants ─── */
+const LEAD_STATUSES = ['NEW', 'CONTACTED', 'REPLIED', 'INTERESTED', 'DOCS_REQUESTED', 'SUBMITTED', 'FUNDED', 'NOT_INTERESTED', 'DNC'];
+
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   LEAD_CREATED: { label: 'Lead Created', color: 'text-blue-300', bg: 'bg-blue-500/20' },
   STATUS_CHANGED: { label: 'Status Changed', color: 'text-yellow-300', bg: 'bg-yellow-500/20' },
@@ -55,6 +57,7 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> 
   NO_REPLY: { label: 'No Reply', color: 'text-orange-300', bg: 'bg-orange-500/20' },
   MANUAL: { label: 'Manual', color: 'text-dark-300', bg: 'bg-dark-600' },
   TAG_RULE: { label: 'Tag Rule', color: 'text-emerald-300', bg: 'bg-emerald-500/20' },
+  FOLLOW_UP_SEQUENCE: { label: 'Follow-Up Sequence', color: 'text-cyan-300', bg: 'bg-cyan-500/20' },
 };
 
 const TEMPLATE_VARS = [
@@ -680,6 +683,7 @@ function AutomationModal({ rule, onClose }: { rule?: AutomationRule | null; onCl
                   <option value="KEYWORD_RECEIVED">Keyword Received</option>
                   <option value="NO_REPLY">No Reply (timeout)</option>
                   <option value="TAG_RULE">Tag Applied</option>
+                  <option value="FOLLOW_UP_SEQUENCE">Follow-Up Sequence</option>
                   <option value="MANUAL">Manual Start</option>
                 </select>
               </div>
@@ -856,16 +860,14 @@ function TriggerConfigFields({ type, config, onChange }: { type: string; config:
             <label className="label">From Status</label>
             <select className="input" value={config.fromStatus || ''} onChange={(e) => onChange({ ...config, fromStatus: e.target.value })}>
               <option value="">Any</option>
-              <option value="NEW">NEW</option><option value="CONTACTED">CONTACTED</option><option value="REPLIED">REPLIED</option>
-              <option value="INTERESTED">INTERESTED</option><option value="NOT_INTERESTED">NOT_INTERESTED</option><option value="DNC">DNC</option>
+              {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div>
             <label className="label">To Status</label>
             <select className="input" value={config.toStatus || ''} onChange={(e) => onChange({ ...config, toStatus: e.target.value })}>
               <option value="">Any</option>
-              <option value="CONTACTED">CONTACTED</option><option value="REPLIED">REPLIED</option><option value="INTERESTED">INTERESTED</option>
-              <option value="NOT_INTERESTED">NOT_INTERESTED</option><option value="QUALIFIED">QUALIFIED</option><option value="CONVERTED">CONVERTED</option><option value="DNC">DNC</option>
+              {LEAD_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
         </div>
@@ -902,6 +904,25 @@ function TriggerConfigFields({ type, config, onChange }: { type: string; config:
           <label className="label">Tag Name</label>
           <input className="input" placeholder="e.g., Hot Lead, VIP" value={config.tagName || ''} onChange={(e) => onChange({ ...config, tagName: e.target.value })} />
           <p className="text-xs text-dark-500 mt-1">Trigger when this tag is applied to a lead</p>
+        </div>
+      );
+    case 'FOLLOW_UP_SEQUENCE':
+      return (
+        <div className="space-y-3">
+          <div>
+            <label className="label">Initial Delay (days)</label>
+            <div className="flex items-center gap-2">
+              <input type="number" className="input w-28" min={0} max={90} value={config.initialDelayDays || 1} onChange={(e) => onChange({ ...config, initialDelayDays: parseInt(e.target.value) || 1 })} />
+              <span className="text-sm text-dark-400">days after enrollment</span>
+            </div>
+          </div>
+          <div>
+            <label className="label">Stop on Reply</label>
+            <label className="flex items-center gap-2 text-sm text-dark-300 cursor-pointer">
+              <input type="checkbox" checked={config.stopOnReply !== false} onChange={(e) => onChange({ ...config, stopOnReply: e.target.checked })} className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-scl-500" />
+              Stop sequence when lead replies
+            </label>
+          </div>
         </div>
       );
     default:

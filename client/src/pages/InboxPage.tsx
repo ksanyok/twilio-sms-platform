@@ -34,9 +34,11 @@ export default function InboxPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
+  const [inboxPage, setInboxPage] = useState(1);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; conv: Conversation } | null>(null);
   const ctxMenuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const [wsConnected, setWsConnected] = useState(false);
 
   // Close inbox context menu on outside click
   useEffect(() => {
@@ -58,6 +60,8 @@ export default function InboxPage() {
         auth: { token },
         transports: ['websocket', 'polling'],
       });
+      socket.on('connect', () => setWsConnected(true));
+      socket.on('disconnect', () => setWsConnected(false));
       socket.on('new-message', () => {
         queryClient.invalidateQueries({ queryKey: ['conversations'] });
         queryClient.invalidateQueries({ queryKey: ['conversation'] });
@@ -66,24 +70,27 @@ export default function InboxPage() {
         queryClient.invalidateQueries({ queryKey: ['conversation'] });
       });
     } catch {
-      // Fallback to polling if WebSocket fails
+      setWsConnected(false);
     }
-    return () => { socket?.disconnect(); };
+    return () => { socket?.disconnect(); setWsConnected(false); };
   }, [queryClient]);
 
   const { data: conversationsData, isLoading } = useQuery({
-    queryKey: ['conversations', search, showUnreadOnly],
+    queryKey: ['conversations', search, showUnreadOnly, inboxPage],
     queryFn: async () => {
       const params = new URLSearchParams();
+      params.set('page', inboxPage.toString());
+      params.set('limit', '50');
       if (search) params.set('search', search);
       if (showUnreadOnly) params.set('unreadOnly', 'true');
       const { data } = await api.get(`/inbox?${params}`);
       return data;
     },
-    refetchInterval: 15000, // Fallback polling every 15s
+    refetchInterval: wsConnected ? false : 15000, // Only poll when WebSocket disconnected
   });
 
   const conversations: Conversation[] = conversationsData?.conversations || [];
+  const inboxTotalPages = conversationsData?.pagination?.pages || 1;
 
   return (
     <div className="flex h-full min-h-0">
@@ -151,6 +158,27 @@ export default function InboxPage() {
             />
           ))}
         </div>
+
+        {/* Inbox Pagination */}
+        {inboxTotalPages > 1 && (
+          <div className="flex items-center justify-between px-3 py-2 border-t border-dark-700/50">
+            <button
+              onClick={() => setInboxPage(p => Math.max(1, p - 1))}
+              disabled={inboxPage <= 1}
+              className="text-xs text-dark-400 hover:text-dark-200 disabled:opacity-30"
+            >
+              Prev
+            </button>
+            <span className="text-[10px] text-dark-500">{inboxPage}/{inboxTotalPages}</span>
+            <button
+              onClick={() => setInboxPage(p => Math.min(inboxTotalPages, p + 1))}
+              disabled={inboxPage >= inboxTotalPages}
+              className="text-xs text-dark-400 hover:text-dark-200 disabled:opacity-30"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Inbox Context Menu */}
@@ -175,7 +203,7 @@ export default function InboxPage() {
       {/* Message Thread */}
       <div className="flex-1 flex flex-col bg-dark-950" style={{ backgroundColor: 'var(--bg-primary)' }}>
         {selectedId ? (
-          <MessageThread conversationId={selectedId} />
+          <MessageThread conversationId={selectedId} wsConnected={wsConnected} />
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
@@ -264,7 +292,7 @@ function ConversationItem({
   );
 }
 
-function MessageThread({ conversationId }: { conversationId: string }) {
+function MessageThread({ conversationId, wsConnected }: { conversationId: string; wsConnected: boolean }) {
   const [replyText, setReplyText] = useState('');
   const [showThreadMenu, setShowThreadMenu] = useState(false);
   const [showReassign, setShowReassign] = useState(false);
@@ -290,7 +318,7 @@ function MessageThread({ conversationId }: { conversationId: string }) {
       const { data } = await api.get(`/inbox/${conversationId}`);
       return data;
     },
-    refetchInterval: 8000,
+    refetchInterval: wsConnected ? false : 8000,
   });
 
   const sendMutation = useMutation({

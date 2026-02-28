@@ -28,6 +28,7 @@ import {
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 import { clsx } from 'clsx';
+import LeadDetailDrawer from '../components/leads/LeadDetailDrawer';
 
 const STATUSES = ['NEW', 'CONTACTED', 'REPLIED', 'INTERESTED', 'DOCS_REQUESTED', 'SUBMITTED', 'FUNDED', 'NOT_INTERESTED', 'DNC'];
 
@@ -48,6 +49,7 @@ export default function LeadsPage() {
   const [enrollLeadId, setEnrollLeadId] = useState<string | null>(null);
   const [tagPickerLead, setTagPickerLead] = useState<any | null>(null);
   const tagPickerRef = useRef<HTMLDivElement>(null);
+  const [detailLeadId, setDetailLeadId] = useState<string | null>(null);
 
   // Close menu on outside click
   useEffect(() => {
@@ -294,7 +296,8 @@ export default function LeadsPage() {
               {leads.map((lead: any) => (
                 <tr
                   key={lead.id}
-                  className="border-b border-dark-800/50 hover:bg-dark-800/30 transition-colors cursor-context-menu"
+                  className="border-b border-dark-800/50 hover:bg-dark-800/30 transition-colors cursor-pointer"
+                  onClick={() => setDetailLeadId(lead.id)}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     setCtxMenu({ x: e.clientX, y: e.clientY, lead });
@@ -556,6 +559,11 @@ export default function LeadsPage() {
           onClose={() => { setShowEnroll(false); setEnrollLeadId(null); }}
           onSuccess={() => { setSelected(new Set()); setEnrollLeadId(null); }}
         />
+      )}
+
+      {/* Lead Detail Drawer */}
+      {detailLeadId && (
+        <LeadDetailDrawer leadId={detailLeadId} onClose={() => setDetailLeadId(null)} />
       )}
     </div>
   );

@@ -9,6 +9,7 @@ export interface PipelineStage {
   name: string;
   color: string;
   order: number;
+  mappedStatus?: string | null;
   cards: PipelineCard[];
 }
 

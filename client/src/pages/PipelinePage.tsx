@@ -41,6 +41,7 @@ import {
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 import { useNavigate } from 'react-router-dom';
+import LeadDetailDrawer from '../components/leads/LeadDetailDrawer';
 
 /* ─── Decomposed sub-components ─── */
 import type { ViewMode, PipelineStage, PipelineCard, ContextMenuState } from './pipeline/types';
@@ -65,6 +66,7 @@ export default function PipelinePage() {
   const [filterSearch, setFilterSearch] = useState<string>('');
   const [showNoteModal, setShowNoteModal] = useState<PipelineCard | null>(null);
   const [showAssignModal, setShowAssignModal] = useState<PipelineCard | null>(null);
+  const [detailLeadId, setDetailLeadId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -574,12 +576,12 @@ export default function PipelinePage() {
               </button>
               <button
                 onClick={() => {
-                  navigate(`/leads?id=${contextMenu.card!.leadId}`);
+                  setDetailLeadId(contextMenu.card!.leadId);
                   setContextMenu(null);
                 }}
                 className="ctx-menu-item"
               >
-                <ExternalLink className="w-3.5 h-3.5" /> View Lead
+                <ExternalLink className="w-3.5 h-3.5" /> View Details
               </button>
               <div className="border-t border-dark-700 my-1" />
               <button
@@ -650,6 +652,9 @@ export default function PipelinePage() {
           onSave={(notes) => saveNoteMutation.mutate({ leadId: showNoteModal.leadId, notes })}
           onClose={() => setShowNoteModal(null)}
         />
+      )}
+      {detailLeadId && (
+        <LeadDetailDrawer leadId={detailLeadId} onClose={() => setDetailLeadId(null)} />
       )}
     </div>
   );
