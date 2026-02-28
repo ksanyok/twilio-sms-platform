@@ -25,9 +25,10 @@ export interface PipelineCard {
     status: string;
     company?: string | null;
     assignedRepId?: string | null;
+    notes?: string | null;
     tags: { tag: { id: string; name: string; color: string } }[];
   };
-  notes: string | null;
+  notes?: string | null;
 }
 
 export interface ContextMenuState {

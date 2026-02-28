@@ -88,8 +88,11 @@ export default function SortableCard({ card, stageColor, onContextMenu }: Props)
         </div>
       )}
 
-      {card.notes && (
-        <p className="text-xs text-dark-500 mt-2 line-clamp-2">{card.notes}</p>
+      {(card.lead.notes || card.notes) && (
+        <p className="text-xs text-dark-500 mt-2 line-clamp-2 flex items-start gap-1">
+          <span className="shrink-0">📝</span>
+          <span>{card.lead.notes || card.notes}</span>
+        </p>
       )}
     </div>
   );

@@ -23,6 +23,7 @@ export class PipelineController {
                 phone: true,
                 status: true,
                 company: true,
+                notes: true,
                 lastContactedAt: true,
                 lastRepliedAt: true,
                 assignedRep: {

@@ -57,7 +57,7 @@ export function NoteModal({
   onSave: (notes: string) => void;
   onClose: () => void;
 }) {
-  const [text, setText] = useState(card.notes || '');
+  const [text, setText] = useState(card.lead.notes || card.notes || '');
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
