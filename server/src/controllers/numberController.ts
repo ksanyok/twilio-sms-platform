@@ -237,6 +237,21 @@ export class NumberController {
     res.json({ message: `Synced ${created} new numbers. ${skipped} already existed.`, created, skipped });
   }
 
+  /**
+   * Unassign all numbers from a rep (deactivate today's assignments)
+   */
+  static async unassignFromRep(req: AuthRequest, res: Response): Promise<void> {
+    const { repId } = req.params;
+
+    const result = await prisma.numberAssignment.updateMany({
+      where: { userId: repId, isActive: true },
+      data: { isActive: false },
+    });
+
+    logger.info('Unassigned numbers from rep', { repId, count: result.count });
+    res.json({ message: `Unassigned ${result.count} numbers`, count: result.count });
+  }
+
   static async createPool(req: AuthRequest, res: Response): Promise<void> {
     const { name, description, dailyLimit, phoneNumberIds } = req.body;
 

@@ -9,6 +9,7 @@ router.use(authenticate);
 
 router.get('/', asyncHandler(InboxController.listConversations));
 router.get('/:id', asyncHandler(InboxController.getConversation));
+router.post('/:id/read', asyncHandler(InboxController.markRead));
 router.post('/:id/reply', asyncHandler(InboxController.sendReply));
 router.put('/:id/assign', asyncHandler(InboxController.assignRep));
 

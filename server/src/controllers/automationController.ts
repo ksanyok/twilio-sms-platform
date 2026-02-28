@@ -92,9 +92,14 @@ export class AutomationController {
 
   static async updateRule(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
-    const { name, isActive, triggerConfig, actionConfig, sendAfterHour, sendBeforeHour, sendOnWeekends } = req.body;
+    const { name, isActive, triggerConfig, actionConfig, sendAfterHour, sendBeforeHour, sendOnWeekends, templates } = req.body;
 
-    const rule = await prisma.automationRule.update({
+    // Verify rule exists
+    const existing = await prisma.automationRule.findUnique({ where: { id } });
+    if (!existing) throw new AppError('Automation rule not found', 404);
+
+    // Update rule metadata
+    await prisma.automationRule.update({
       where: { id },
       data: {
         ...(name && { name }),
@@ -105,8 +110,28 @@ export class AutomationController {
         ...(sendBeforeHour !== undefined && { sendBeforeHour }),
         ...(sendOnWeekends !== undefined && { sendOnWeekends }),
       },
+    });
+
+    // Update templates if provided (delete old + recreate)
+    if (templates && Array.isArray(templates)) {
+      await prisma.automationTemplate.deleteMany({ where: { automationRuleId: id } });
+      if (templates.length > 0) {
+        await prisma.automationTemplate.createMany({
+          data: templates.map((t: any, index: number) => ({
+            automationRuleId: id,
+            sequenceOrder: t.sequenceOrder || index + 1,
+            delayDays: t.delayDays || 1,
+            messageTemplate: t.messageTemplate,
+          })),
+        });
+      }
+    }
+
+    const rule = await prisma.automationRule.findUnique({
+      where: { id },
       include: {
         templates: { orderBy: { sequenceOrder: 'asc' } },
+        _count: { select: { runs: true } },
       },
     });
 

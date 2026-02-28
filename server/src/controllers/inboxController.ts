@@ -150,6 +150,22 @@ export class InboxController {
     });
   }
 
+  static async markRead(req: AuthRequest, res: Response): Promise<void> {
+    const { id } = req.params;
+
+    const conversation = await prisma.conversation.findUnique({ where: { id } });
+    if (!conversation) throw new AppError('Conversation not found', 404);
+
+    if (conversation.unreadCount > 0) {
+      await prisma.conversation.update({
+        where: { id },
+        data: { unreadCount: 0 },
+      });
+    }
+
+    res.json({ message: 'Marked as read' });
+  }
+
   static async sendReply(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
     const { body } = req.body;

@@ -21,11 +21,16 @@ import {
   Webhook,
   Eye,
   EyeOff,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  TrendingUp,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
 
-type Tab = 'tags' | 'users' | 'suppression' | 'system' | 'integrations';
+type Tab = 'tags' | 'users' | 'suppression' | 'system' | 'integrations' | 'activity';
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>('tags');
@@ -36,6 +41,7 @@ export default function SettingsPage() {
     { key: 'suppression', label: 'Suppression', icon: <ShieldX className="w-4 h-4" /> },
     { key: 'integrations', label: 'Integrations', icon: <Key className="w-4 h-4" /> },
     { key: 'system', label: 'System', icon: <Settings className="w-4 h-4" /> },
+    { key: 'activity', label: 'Activity Log', icon: <Clock className="w-4 h-4" /> },
   ];
 
   return (
@@ -70,6 +76,7 @@ export default function SettingsPage() {
       {tab === 'suppression' && <SuppressionTab />}
       {tab === 'integrations' && <IntegrationsTab />}
       {tab === 'system' && <SystemTab />}
+      {tab === 'activity' && <ActivityLogTab />}
     </div>
   );
 }
@@ -358,12 +365,16 @@ function UserFormModal({ user, onClose }: { user?: any; onClose: () => void }) {
 /* ─── Suppression ─── */
 function SuppressionTab() {
   const [phones, setPhones] = useState('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
 
   const { data } = useQuery({
-    queryKey: ['suppression'],
+    queryKey: ['suppression', page, search],
     queryFn: async () => {
-      const { data } = await api.get('/settings/suppression');
+      const params = new URLSearchParams({ page: String(page), limit: '25' });
+      if (search) params.set('search', search);
+      const { data } = await api.get(`/settings/suppression?${params}`);
       return data;
     },
   });
@@ -387,11 +398,41 @@ function SuppressionTab() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/settings/suppression/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['suppression'] });
+      toast.success('Removed from suppression list');
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed'),
+  });
+
+  const handleExport = async () => {
+    try {
+      const { data } = await api.get('/settings/suppression/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `suppression-list-${Date.now()}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success('Exported suppression list');
+    } catch {
+      toast.error('Export failed');
+    }
+  };
+
   const entries = data?.entries || [];
+  const pagination = data?.pagination || { page: 1, pages: 1, total: 0 };
 
   return (
     <div className="card p-6 space-y-6">
-      <h3 className="text-base font-semibold text-dark-100">Suppression List</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold text-dark-100">Suppression List</h3>
+        <button onClick={handleExport} className="btn-ghost text-sm">
+          <Download className="w-4 h-4 mr-1" /> Export CSV
+        </button>
+      </div>
       <p className="text-sm text-dark-400">
         Numbers on this list will never receive messages. STOP keywords are automatically added.
       </p>
@@ -400,7 +441,7 @@ function SuppressionTab() {
       <div className="space-y-3">
         <label className="label">Add Numbers (one per line)</label>
         <textarea
-          className="input min-h-[120px] font-mono text-sm"
+          className="input min-h-[100px] font-mono text-sm"
           placeholder={"+12125551234\n+13105559876"}
           value={phones}
           onChange={(e) => setPhones(e.target.value)}
@@ -415,31 +456,79 @@ function SuppressionTab() {
         </button>
       </div>
 
-      {/* Count */}
-      <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-lg">
-        <ShieldX className="w-5 h-5 text-red-400" />
-        <div>
+      {/* Stats + Search */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 p-3 bg-dark-800/50 rounded-lg flex-1">
+          <ShieldX className="w-5 h-5 text-red-400" />
           <p className="text-sm font-medium text-dark-200">
-            {data?.pagination?.total || 0} suppressed numbers
+            {pagination.total} suppressed numbers
           </p>
-          <p className="text-xs text-dark-500">
-            Last 20 shown below
-          </p>
+        </div>
+        <div className="relative w-64">
+          <Search className="w-4 h-4 text-dark-500 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search by phone..."
+            className="input pl-9 py-2 text-sm"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          />
         </div>
       </div>
 
-      {/* Recent List */}
+      {/* Entries List */}
       <div className="space-y-1">
-        {entries.slice(0, 20).map((entry: any) => (
+        {entries.map((entry: any) => (
           <div
             key={entry.id}
-            className="flex items-center justify-between py-2 px-3 bg-dark-800/30 rounded text-sm"
+            className="flex items-center justify-between py-2 px-3 bg-dark-800/30 rounded text-sm group hover:bg-dark-700/30 transition-colors"
           >
-            <span className="font-mono text-dark-300">{entry.phone}</span>
-            <span className="text-xs text-dark-500">{entry.reason}</span>
+            <div className="flex items-center gap-4">
+              <span className="font-mono text-dark-300">{entry.phone}</span>
+              <span className="text-xs text-dark-500">{entry.reason}</span>
+              <span className="text-xs text-dark-600">
+                {new Date(entry.createdAt).toLocaleDateString()}
+              </span>
+            </div>
+            <button
+              onClick={() => deleteMutation.mutate(entry.id)}
+              className="btn-ghost p-1 text-dark-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </div>
         ))}
+        {entries.length === 0 && (
+          <p className="text-sm text-dark-500 text-center py-4">
+            {search ? 'No matching entries' : 'Suppression list is empty'}
+          </p>
+        )}
       </div>
+
+      {/* Pagination */}
+      {pagination.pages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <span className="text-xs text-dark-500">
+            Page {pagination.page} of {pagination.pages}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="btn-ghost p-1.5 disabled:opacity-30"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setPage(p => Math.min(pagination.pages, p + 1))}
+              disabled={page >= pagination.pages}
+              className="btn-ghost p-1.5 disabled:opacity-30"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -637,10 +726,16 @@ function SystemTab() {
     localSettings[key] !== undefined ? localSettings[key] : (settings[key] || defaultValue);
 
   const isTestMode = settings.testMode === true || settings.testMode === 'true';
+  const isRampUp = settings.rampUpEnabled === true || settings.rampUpEnabled === 'true';
 
   const handleTestModeToggle = () => {
     const newValue = !isTestMode;
     saveMutation.mutate({ key: 'testMode', value: newValue as any });
+  };
+
+  const handleRampUpToggle = () => {
+    const newValue = !isRampUp;
+    saveMutation.mutate({ key: 'rampUpEnabled', value: newValue as any });
   };
 
   return (
@@ -721,6 +816,169 @@ function SystemTab() {
         ))}
       </div>
     </div>
+
+      {/* Ramp-Up Configuration */}
+      <div className="card p-5 space-y-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={clsx(
+              'w-10 h-10 rounded-lg flex items-center justify-center',
+              isRampUp ? 'bg-green-500/20 text-green-400' : 'bg-dark-700 text-dark-400'
+            )}>
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-dark-100 flex items-center gap-2">
+                Number Ramp-Up
+                {isRampUp && (
+                  <span className="badge bg-green-500/20 text-green-400 text-[10px] uppercase tracking-wider">Active</span>
+                )}
+              </h4>
+              <p className="text-xs text-dark-400 mt-0.5">
+                {isRampUp
+                  ? 'New numbers gradually increase daily sending limits to build reputation'
+                  : 'Enable to warm up new numbers and avoid carrier flags'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleRampUpToggle}
+            disabled={saveMutation.isPending}
+            className={clsx(
+              'relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 focus:outline-none',
+              isRampUp ? 'bg-green-500' : 'bg-dark-600'
+            )}
+          >
+            <span className={clsx(
+              'inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200',
+              isRampUp ? 'translate-x-6' : 'translate-x-1'
+            )} />
+          </button>
+        </div>
+
+        {isRampUp && (
+          <div className="grid grid-cols-2 gap-4 pt-2 border-t border-dark-700/50">
+            <div>
+              <label className="label">Start Limit (msgs/day)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  className="input flex-1"
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={getValue('rampUpStartLimit', '10')}
+                  onChange={(e) => {
+                    setLocalSettings(prev => ({ ...prev, rampUpStartLimit: e.target.value }));
+                    setDirty(prev => new Set(prev).add('rampUpStartLimit'));
+                  }}
+                />
+                {dirty.has('rampUpStartLimit') && (
+                  <button
+                    onClick={() => saveMutation.mutate({ key: 'rampUpStartLimit', value: getValue('rampUpStartLimit', '10') })}
+                    disabled={saveMutation.isPending}
+                    className="btn-primary py-2 px-3 text-xs"
+                  >
+                    <Save className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-dark-500 mt-1">How many messages a new number can send on day 1</p>
+            </div>
+            <div>
+              <label className="label">Daily Increase</label>
+              <div className="flex items-center gap-2">
+                <input
+                  className="input flex-1"
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={getValue('rampUpDailyIncrease', '5')}
+                  onChange={(e) => {
+                    setLocalSettings(prev => ({ ...prev, rampUpDailyIncrease: e.target.value }));
+                    setDirty(prev => new Set(prev).add('rampUpDailyIncrease'));
+                  }}
+                />
+                {dirty.has('rampUpDailyIncrease') && (
+                  <button
+                    onClick={() => saveMutation.mutate({ key: 'rampUpDailyIncrease', value: getValue('rampUpDailyIncrease', '5') })}
+                    disabled={saveMutation.isPending}
+                    className="btn-primary py-2 px-3 text-xs"
+                  >
+                    <Save className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-dark-500 mt-1">Additional messages allowed each day</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Activity Log ─── */
+function ActivityLogTab() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['activityLog'],
+    queryFn: async () => {
+      const { data } = await api.get('/settings/activity?limit=100');
+      return data;
+    },
+  });
+
+  const logs: any[] = data?.logs || [];
+
+  const actionColor = (action: string) => {
+    if (action.includes('delete') || action.includes('remove')) return 'text-red-400 bg-red-500/10';
+    if (action.includes('create') || action.includes('add')) return 'text-green-400 bg-green-500/10';
+    if (action.includes('update') || action.includes('edit') || action.includes('assign')) return 'text-blue-400 bg-blue-500/10';
+    if (action.includes('login') || action.includes('auth')) return 'text-purple-400 bg-purple-500/10';
+    return 'text-dark-400 bg-dark-700/50';
+  };
+
+  return (
+    <div className="card p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold text-dark-100">Activity Log</h3>
+        <span className="text-xs text-dark-500">{logs.length} recent events</span>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="h-12 bg-dark-800/50 rounded-lg animate-pulse" />
+          ))}
+        </div>
+      ) : logs.length === 0 ? (
+        <p className="text-sm text-dark-500 text-center py-8">No activity recorded yet</p>
+      ) : (
+        <div className="space-y-1.5">
+          {logs.map((log: any) => (
+            <div
+              key={log.id}
+              className="flex items-center gap-3 py-2.5 px-3 bg-dark-800/30 rounded-lg hover:bg-dark-700/30 transition-colors"
+            >
+              <div className={clsx('px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider', actionColor(log.action))}>
+                {log.action}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-dark-200 truncate">
+                  {log.description || log.details || log.action}
+                </p>
+              </div>
+              {log.user && (
+                <span className="text-xs text-dark-500 shrink-0">
+                  {log.user.firstName} {log.user.lastName}
+                </span>
+              )}
+              <span className="text-xs text-dark-600 shrink-0">
+                {new Date(log.createdAt).toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
