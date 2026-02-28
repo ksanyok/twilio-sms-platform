@@ -16,6 +16,9 @@ import {
   ChevronLeft,
   Menu,
   Shield,
+  Radio,
+  FlaskConical,
+  Zap,
 } from 'lucide-react';
 import { useState } from 'react';
 import { clsx } from 'clsx';
@@ -32,6 +35,12 @@ const navigation = [
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'] },
 ];
 
+const SMS_MODE_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string; icon: any }> = {
+  live: { label: 'Live', color: 'text-green-400', bg: 'bg-green-500/10', dot: 'bg-green-500', icon: Radio },
+  twilio_test: { label: 'Twilio Test', color: 'text-cyan-400', bg: 'bg-cyan-500/10', dot: 'bg-cyan-500', icon: Shield },
+  simulation: { label: 'Simulation', color: 'text-amber-400', bg: 'bg-amber-500/10', dot: 'bg-amber-500', icon: FlaskConical },
+};
+
 export default function AppLayout({ children }: { children?: React.ReactNode }) {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
@@ -47,6 +56,19 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
     refetchInterval: 30000,
   });
   const unreadCount = inboxData?.conversations?.length || 0;
+
+  // SMS mode from diagnostics
+  const { data: diagData } = useQuery({
+    queryKey: ['sms-mode'],
+    queryFn: async () => {
+      const { data } = await api.get('/dashboard/diagnostics');
+      return data;
+    },
+    refetchInterval: 30000,
+  });
+  const smsMode = diagData?.smsMode || 'live';
+  const modeConfig = SMS_MODE_CONFIG[smsMode] || SMS_MODE_CONFIG.live;
+  const ModeIcon = modeConfig.icon;
 
   const handleLogout = () => {
     logout();
@@ -122,8 +144,30 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
           ))}
         </nav>
 
-        {/* User section */}
+        {/* SMS Mode Indicator + User section */}
         <div className="border-t p-3 space-y-2" style={{ borderColor: 'var(--border-subtle)' }}>
+          {/* SMS Mode pill */}
+          <NavLink
+            to="/settings"
+            className={clsx(
+              'flex items-center gap-2 rounded-lg px-3 py-2 transition-colors cursor-pointer',
+              modeConfig.bg, 'hover:opacity-80',
+              collapsed && 'justify-center px-2'
+            )}
+            title={collapsed ? `SMS: ${modeConfig.label}` : undefined}
+          >
+            <div className="relative shrink-0">
+              <ModeIcon className={clsx('w-4 h-4', modeConfig.color)} />
+              <span className={clsx('absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ring-2 ring-dark-900', modeConfig.dot)} />
+            </div>
+            {!collapsed && (
+              <div className="flex-1 min-w-0">
+                <p className={clsx('text-xs font-semibold', modeConfig.color)}>{modeConfig.label}</p>
+                <p className="text-[10px] text-dark-500 truncate">SMS Mode</p>
+              </div>
+            )}
+          </NavLink>
+
           {!collapsed && (
             <div className="flex justify-center px-1 pb-1">
               <ThemeToggle />

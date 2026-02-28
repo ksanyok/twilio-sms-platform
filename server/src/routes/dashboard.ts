@@ -9,5 +9,6 @@ router.use(authenticate);
 
 router.get('/stats', asyncHandler(DashboardController.getStats));
 router.get('/delivery-metrics', asyncHandler(DashboardController.getDeliveryMetrics));
+router.get('/diagnostics', asyncHandler(DashboardController.getDiagnostics));
 
 export default router;
