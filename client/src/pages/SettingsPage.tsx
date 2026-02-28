@@ -771,7 +771,7 @@ function IntegrationsTab() {
       </div>
 
       {/* Webhooks Outbound */}
-      <div className="card p-6 space-y-5">
+      <div className="card p-6 space-y-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
             <Webhook className="w-5 h-5 text-purple-400" />
@@ -781,12 +781,166 @@ function IntegrationsTab() {
             <p className="text-xs text-dark-400">Send events to external services (CRM, Zapier, Make)</p>
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-4">
-          <IntegrationField label="New Reply Webhook URL" settingKey="webhookOnReply" />
-          <IntegrationField label="Opt-Out Webhook URL" settingKey="webhookOnOptOut" />
-          <IntegrationField label="Stage Change Webhook URL" settingKey="webhookOnStageChange" />
+
+        {/* How it works */}
+        <div className="rounded-lg border border-dark-700/50 bg-dark-800/40 p-4 space-y-2">
+          <p className="text-xs font-semibold text-dark-200">How Outbound Webhooks Work</p>
+          <ul className="text-xs text-dark-400 space-y-1.5 list-disc list-inside">
+            <li>When an event fires, we send a <span className="text-dark-200 font-mono">POST</span> request to your URL with a JSON payload</li>
+            <li>Each payload includes <span className="text-dark-200 font-mono">event</span>, <span className="text-dark-200 font-mono">timestamp</span>, and <span className="text-dark-200 font-mono">source: "scl-sms-platform"</span></li>
+            <li>Requests timeout after <strong className="text-dark-200">10 seconds</strong>. Non-200 responses are logged but not retried</li>
+            <li>Use services like <strong className="text-dark-200">Zapier Webhooks</strong>, <strong className="text-dark-200">Make (Integromat)</strong>, <strong className="text-dark-200">n8n</strong>, or your own API endpoint</li>
+          </ul>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6">
+          {/* Reply Webhook */}
+          <WebhookField
+            label="New Reply Webhook URL"
+            settingKey="webhookOnReply"
+            description="Triggered when a lead replies to an SMS. Use this to push replies to your CRM, notify your team in Slack, or trigger follow-up automations."
+            examplePayload={`{
+  "event": "reply",
+  "leadId": "clx123...",
+  "phone": "+13051234567",
+  "body": "Yes, I'm interested!",
+  "conversationId": "conv_456...",
+  "timestamp": "2026-02-28T15:30:00Z",
+  "source": "scl-sms-platform"
+}`}
+            exampleUrl="https://hooks.zapier.com/hooks/catch/123456/abcdef/"
+            getVal={getVal}
+            handleChange={handleChange}
+            handleSave={handleSave}
+            dirty={dirty}
+            isSaving={saveMutation.isPending}
+          />
+
+          {/* Opt-Out Webhook */}
+          <WebhookField
+            label="Opt-Out Webhook URL"
+            settingKey="webhookOnOptOut"
+            description="Triggered when a contact sends STOP/UNSUBSCRIBE. Use this to update your CRM's DNC list, suppress in other systems, or notify compliance."
+            examplePayload={`{
+  "event": "opt_out",
+  "phone": "+13051234567",
+  "leadId": "clx123...",
+  "timestamp": "2026-02-28T15:30:00Z",
+  "source": "scl-sms-platform"
+}`}
+            exampleUrl="https://hook.us1.make.com/abcdefghijk"
+            getVal={getVal}
+            handleChange={handleChange}
+            handleSave={handleSave}
+            dirty={dirty}
+            isSaving={saveMutation.isPending}
+          />
+
+          {/* Stage Change Webhook */}
+          <WebhookField
+            label="Stage Change Webhook URL"
+            settingKey="webhookOnStageChange"
+            description="Triggered when a lead moves between pipeline stages (e.g. New → Interested → Funded). Use this to sync pipeline changes to your CRM or trigger stage-specific workflows."
+            examplePayload={`{
+  "event": "stage_change",
+  "leadId": "clx123...",
+  "fromStage": "New",
+  "toStage": "Interested",
+  "timestamp": "2026-02-28T15:30:00Z",
+  "source": "scl-sms-platform"
+}`}
+            exampleUrl="https://n8n.yourdomain.com/webhook/stage-change"
+            getVal={getVal}
+            handleChange={handleChange}
+            handleSave={handleSave}
+            dirty={dirty}
+            isSaving={saveMutation.isPending}
+          />
+        </div>
+
+        {/* Quick Tips */}
+        <div className="rounded-lg border border-dark-700/50 bg-dark-800/40 p-4 flex items-start gap-3">
+          <Brain className="w-4 h-4 text-scl-400 mt-0.5 shrink-0" />
+          <div className="text-xs text-dark-400 space-y-1">
+            <p><strong className="text-dark-200">Zapier:</strong> Create a "Webhooks by Zapier" trigger → "Catch Hook" and paste the URL here</p>
+            <p><strong className="text-dark-200">Make.com:</strong> Add a "Webhooks" module → "Custom webhook" and paste the generated URL</p>
+            <p><strong className="text-dark-200">n8n:</strong> Add a "Webhook" node, set method to POST, and use the production URL</p>
+            <p><strong className="text-dark-200">Custom API:</strong> Create a POST endpoint that accepts JSON body with Content-Type: application/json</p>
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ─── Webhook Field Component ─── */
+function WebhookField({
+  label,
+  settingKey,
+  description,
+  examplePayload,
+  exampleUrl,
+  getVal,
+  handleChange,
+  handleSave,
+  dirty,
+  isSaving,
+}: {
+  label: string;
+  settingKey: string;
+  description: string;
+  examplePayload: string;
+  exampleUrl: string;
+  getVal: (key: string, def?: string) => string;
+  handleChange: (key: string, val: string) => void;
+  handleSave: (key: string) => void;
+  dirty: Set<string>;
+  isSaving: boolean;
+}) {
+  const [showPayload, setShowPayload] = useState(false);
+  const currentVal = getVal(settingKey);
+  const isConfigured = currentVal && currentVal.startsWith('http');
+
+  return (
+    <div className="rounded-lg border border-dark-700/30 p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-dark-200">{label}</label>
+          {isConfigured && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-500/15 text-green-400">
+              ● Connected
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowPayload(!showPayload)}
+          className="text-[11px] text-dark-500 hover:text-dark-300 transition-colors"
+        >
+          {showPayload ? 'Hide payload ↑' : 'Show payload ↓'}
+        </button>
+      </div>
+      <p className="text-xs text-dark-400 leading-relaxed">{description}</p>
+      <div className="flex items-center gap-2">
+        <input
+          className="input font-mono text-sm flex-1"
+          type="url"
+          value={currentVal}
+          onChange={(e) => handleChange(settingKey, e.target.value)}
+          placeholder={exampleUrl}
+        />
+        {dirty.has(settingKey) && (
+          <button onClick={() => handleSave(settingKey)} disabled={isSaving} className="btn-primary py-2 px-3 text-xs">
+            <Save className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+      {showPayload && (
+        <div className="rounded-md bg-dark-900/80 border border-dark-700/40 p-3 overflow-x-auto">
+          <p className="text-[10px] text-dark-500 uppercase tracking-wider mb-1.5 font-semibold">Example JSON Payload (POST)</p>
+          <pre className="text-[11px] text-dark-300 font-mono leading-relaxed whitespace-pre">{examplePayload}</pre>
+        </div>
+      )}
     </div>
   );
 }
