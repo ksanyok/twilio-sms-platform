@@ -3,7 +3,7 @@ import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { NumberService } from '../services/numberService';
-import getTwilioClient from '../config/twilio';
+import getTwilioClient, { getActiveTwilioClient } from '../config/twilio';
 import logger from '../config/logger';
 
 export class NumberController {

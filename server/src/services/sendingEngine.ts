@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import getTwilioClient from '../config/twilio';
+import getTwilioClient, { getActiveTwilioClient, isTwilioTestMode } from '../config/twilio';
 import { config } from '../config';
 import logger from '../config/logger';
 import { NumberService } from './numberService';
@@ -408,11 +408,13 @@ export class SendingEngine {
         return;
       }
 
-      // ── REAL MODE: Send via Twilio ──
-      const client = getTwilioClient();
+      // ── REAL MODE: Send via Twilio (test or live credentials) ──
+      const client = await getActiveTwilioClient();
       if (!client) {
         throw new Error('Twilio client not configured');
       }
+
+      const twilioTestActive = await isTwilioTestMode();
       const twilioMessage = await client.messages.create({
         body,
         from: fromNumber,
@@ -451,9 +453,10 @@ export class SendingEngine {
         });
       }
 
-      logger.info(`Message sent: ${messageId} → ${toNumber}`, {
+      logger.info(`${twilioTestActive ? '[TWILIO TEST] ' : ''}Message sent: ${messageId} → ${toNumber}`, {
         twilioSid: twilioMessage.sid,
         fromNumber,
+        twilioTestMode: twilioTestActive,
       });
     } catch (error: any) {
       const isBlocked = error.code === 30007 || error.code === 30034;

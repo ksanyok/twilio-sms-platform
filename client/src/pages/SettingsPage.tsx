@@ -598,6 +598,7 @@ function SuppressionTab() {
 function IntegrationsTab() {
   const queryClient = useQueryClient();
   const [showTwilioToken, setShowTwilioToken] = useState(false);
+  const [showTestToken, setShowTestToken] = useState(false);
   const [showOpenAIKey, setShowOpenAIKey] = useState(false);
 
   const { data } = useQuery({
@@ -665,24 +666,74 @@ function IntegrationsTab() {
     </div>
   );
 
+  const isTwilioTestMode = settings.twilioTestMode === true || settings.twilioTestMode === 'true';
+
+  const handleTwilioTestToggle = () => {
+    saveMutation.mutate({ key: 'twilioTestMode', value: (!isTwilioTestMode) as any });
+  };
+
   return (
     <div className="space-y-6">
       {/* Twilio */}
       <div className="card p-6 space-y-5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
-            <Phone className="w-5 h-5 text-red-400" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+              <Phone className="w-5 h-5 text-red-400" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-dark-100">Twilio</h3>
+              <p className="text-xs text-dark-400">SMS sending, number management, webhooks</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-base font-semibold text-dark-100">Twilio</h3>
-            <p className="text-xs text-dark-400">SMS sending, number management, webhooks</p>
-          </div>
+          {isTwilioTestMode && (
+            <span className="badge bg-amber-500/20 text-amber-400 text-[10px] uppercase tracking-wider px-2 py-1">
+              Test Mode
+            </span>
+          )}
         </div>
         <div className="grid grid-cols-1 gap-4">
           <IntegrationField label="Account SID" settingKey="twilioAccountSid" />
           <IntegrationField label="Auth Token" settingKey="twilioAuthToken" isSecret showSecret={showTwilioToken} onToggle={() => setShowTwilioToken(!showTwilioToken)} />
           <IntegrationField label="Messaging Service SID" settingKey="twilioMessagingServiceSid" />
           <IntegrationField label="Webhook Base URL" settingKey="webhookBaseUrl" defaultValue="https://yourdomain.com" />
+        </div>
+
+        {/* Twilio Test Mode */}
+        <div className={clsx(
+          'rounded-lg p-4 border transition-colors duration-200',
+          isTwilioTestMode
+            ? 'border-amber-500/40 bg-amber-500/5'
+            : 'border-dark-700/50 bg-dark-800/30'
+        )}>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <FlaskConical className={clsx('w-4 h-4', isTwilioTestMode ? 'text-amber-400' : 'text-dark-400')} />
+              <span className="text-sm font-medium text-dark-200">Twilio Test Credentials</span>
+            </div>
+            <button
+              onClick={handleTwilioTestToggle}
+              disabled={saveMutation.isPending}
+              className={clsx(
+                'relative inline-flex h-6 w-10 items-center rounded-full transition-colors duration-200 focus:outline-none',
+                isTwilioTestMode ? 'bg-amber-500' : 'bg-dark-600'
+              )}
+            >
+              <span className={clsx(
+                'inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200',
+                isTwilioTestMode ? 'translate-x-5' : 'translate-x-1'
+              )} />
+            </button>
+          </div>
+          <p className="text-xs text-dark-400 mb-3">
+            {isTwilioTestMode
+              ? 'Active — API calls use test SID/token. Twilio will accept requests but won\'t deliver real SMS.'
+              : 'When enabled, all Twilio API calls use test credentials instead of live ones.'}
+          </p>
+          <div className="grid grid-cols-1 gap-3">
+            <IntegrationField label="Test Account SID" settingKey="twilioTestAccountSid" />
+            <IntegrationField label="Test Auth Token" settingKey="twilioTestAuthToken" isSecret showSecret={showTestToken} onToggle={() => setShowTestToken(!showTestToken)} />
+          </div>
         </div>
       </div>
 

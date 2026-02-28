@@ -4,6 +4,7 @@ import redis from '../config/redis';
 import logger from '../config/logger';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
+import { resetTwilioClients } from '../config/twilio';
 
 /**
  * SettingsController — Manages system configuration, tags, and suppression list.
@@ -48,6 +49,10 @@ export class SettingsController {
     'twilioAuthToken',
     'twilioMessagingServiceSid',
     'webhookBaseUrl',
+    // Twilio Test Credentials
+    'twilioTestMode',
+    'twilioTestAccountSid',
+    'twilioTestAuthToken',
     // OpenAI
     'openaiApiKey',
     'openaiModel',
@@ -65,6 +70,7 @@ export class SettingsController {
   // Keys that contain sensitive data (masked in read responses)
   private static readonly SENSITIVE_KEYS = new Set([
     'twilioAuthToken',
+    'twilioTestAuthToken',
     'openaiApiKey',
     'webhookSecret',
   ]);
@@ -534,6 +540,11 @@ export class SettingsController {
     // Invalidate related caches based on the key
     if (key.startsWith('quietHours')) {
       pipeline.del('compliance:quiet_hours_config');
+    }
+
+    // Reset Twilio clients when credentials or test mode change
+    if (key.startsWith('twilio')) {
+      resetTwilioClients();
     }
 
     await pipeline.exec().catch((err) => {

@@ -1,10 +1,12 @@
 const twilio = require('twilio');
-const client = twilio('AC20b8b8e9f1c3dad7910b4d32d8c6c672', 'cb26edca7d49a222123f61462b6866c');
+require('dotenv').config();
+const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
 
 async function check() {
   console.log('=== ACCOUNT INFO ===');
   try {
-    const account = await client.api.accounts('AC20b8b8e9f1c3dad7910b4d32d8c6c672').fetch();
+    const account = await client.api.accounts(accountSid).fetch();
     console.log('Name:', account.friendlyName);
     console.log('Status:', account.status);
     console.log('Type:', account.type);
