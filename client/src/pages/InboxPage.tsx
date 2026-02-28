@@ -267,6 +267,7 @@ function ConversationItem({
 function MessageThread({ conversationId }: { conversationId: string }) {
   const [replyText, setReplyText] = useState('');
   const [showThreadMenu, setShowThreadMenu] = useState(false);
+  const [showReassign, setShowReassign] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const threadMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -316,6 +317,27 @@ function MessageThread({ conversationId }: { conversationId: string }) {
       toast.success('Lead status updated');
     },
     onError: () => toast.error('Failed to update status'),
+  });
+
+  const { data: usersData } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const { data } = await api.get('/auth/users');
+      return data;
+    },
+    enabled: showReassign,
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: (repId: string) => api.put(`/inbox/${conversationId}/assign`, { repId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      toast.success('Conversation reassigned');
+      setShowReassign(false);
+      setShowThreadMenu(false);
+    },
+    onError: () => toast.error('Failed to reassign'),
   });
 
   useEffect(() => {
@@ -395,6 +417,34 @@ function MessageThread({ conversationId }: { conversationId: string }) {
                 >
                   <Bell className="w-3.5 h-3.5" /> Mark as Read
                 </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowReassign(!showReassign)}
+                    className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" /> Reassign
+                  </button>
+                  {showReassign && (
+                    <div className="absolute left-full top-0 ml-1 w-48 bg-dark-800 border border-dark-700 rounded-lg shadow-xl z-50 py-1">
+                      <p className="px-3 py-1.5 text-[10px] text-dark-500 font-medium uppercase tracking-wider">Assign to Rep</p>
+                      {(usersData?.users || []).map((user: any) => (
+                        <button
+                          key={user.id}
+                          onClick={() => assignMutation.mutate(user.id)}
+                          className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+                        >
+                          <div className="w-5 h-5 rounded-full bg-scl-600/20 flex items-center justify-center text-[10px] text-scl-400 font-bold">
+                            {user.name?.[0] || user.email?.[0] || '?'}
+                          </div>
+                          <span className="truncate">{user.name || user.email}</span>
+                        </button>
+                      ))}
+                      {(!usersData?.users || usersData.users.length === 0) && (
+                        <p className="px-3 py-2 text-xs text-dark-500">Loading users...</p>
+                      )}
+                    </div>
+                  )}
+                </div>
                 {conversation?.lead && (
                   <>
                     <button

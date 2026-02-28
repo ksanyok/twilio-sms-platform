@@ -22,6 +22,8 @@ import {
   Ban,
   MessageSquare,
   ArrowRightLeft,
+  Play,
+  Zap,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -42,6 +44,10 @@ export default function LeadsPage() {
   const ctxMenuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [showEnroll, setShowEnroll] = useState(false);
+  const [enrollLeadId, setEnrollLeadId] = useState<string | null>(null);
+  const [tagPickerLead, setTagPickerLead] = useState<any | null>(null);
+  const tagPickerRef = useRef<HTMLDivElement>(null);
 
   // Close menu on outside click
   useEffect(() => {
@@ -52,8 +58,11 @@ export default function LeadsPage() {
       if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target as Node)) {
         setCtxMenu(null);
       }
+      if (tagPickerRef.current && !tagPickerRef.current.contains(e.target as Node)) {
+        setTagPickerLead(null);
+      }
     };
-    if (openMenuId || ctxMenu) document.addEventListener('mousedown', handleClick);
+    if (openMenuId || ctxMenu || tagPickerLead) document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [openMenuId, ctxMenu]);
 
@@ -118,6 +127,36 @@ export default function LeadsPage() {
     },
     onError: () => toast.error('Update failed'),
   });
+
+  const addTagMutation = useMutation({
+    mutationFn: ({ leadId, tagId }: { leadId: string; tagId: string }) =>
+      api.post(`/leads/${leadId}/tags`, { tagId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      toast.success('Tag added');
+      setTagPickerLead(null);
+    },
+    onError: () => toast.error('Failed to add tag'),
+  });
+
+  const removeTagMutation = useMutation({
+    mutationFn: ({ leadId, tagId }: { leadId: string; tagId: string }) =>
+      api.delete(`/leads/${leadId}/tags/${tagId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      toast.success('Tag removed');
+    },
+    onError: () => toast.error('Failed to remove tag'),
+  });
+
+  const { data: tagsData } = useQuery({
+    queryKey: ['tags'],
+    queryFn: async () => {
+      const { data } = await api.get('/settings/tags');
+      return data;
+    },
+  });
+  const allTags = tagsData?.tags || [];
 
   return (
     <div className="p-6 space-y-6">
@@ -188,6 +227,13 @@ export default function LeadsPage() {
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
+            <button
+              onClick={() => setShowEnroll(true)}
+              className="btn-ghost text-sm text-purple-400 hover:text-purple-300 flex items-center gap-1.5"
+            >
+              <Zap className="w-4 h-4" />
+              Start Automation
+            </button>
             <button
               onClick={() =>
                 bulkMutation.mutate({
@@ -288,19 +334,49 @@ export default function LeadsPage() {
                     <span className="text-sm text-dark-400">{lead.source || '—'}</span>
                   </td>
                   <td className="table-td">
-                    <div className="flex gap-1">
+                    <div className="flex items-center gap-1 relative">
                       {lead.tags?.slice(0, 3).map((lt: any) => (
                         <span
                           key={lt.tag.id}
-                          className="text-[10px] px-1.5 py-0.5 rounded"
+                          className="text-[10px] px-1.5 py-0.5 rounded cursor-pointer group/tag inline-flex items-center gap-0.5"
                           style={{
                             backgroundColor: lt.tag.color + '33',
                             color: lt.tag.color,
                           }}
+                          title={`Click to remove "${lt.tag.name}"`}
+                          onClick={(e) => { e.stopPropagation(); removeTagMutation.mutate({ leadId: lead.id, tagId: lt.tag.id }); }}
                         >
                           {lt.tag.name}
+                          <X className="w-2.5 h-2.5 opacity-0 group-hover/tag:opacity-100 transition-opacity" />
                         </span>
                       ))}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setTagPickerLead(tagPickerLead?.id === lead.id ? null : lead); }}
+                        className="w-5 h-5 rounded flex items-center justify-center text-dark-500 hover:text-scl-400 hover:bg-scl-600/10 transition-colors"
+                        title="Add tag"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                      {tagPickerLead?.id === lead.id && (
+                        <div
+                          ref={tagPickerRef}
+                          className="absolute left-0 top-full mt-1 z-50 w-44 bg-dark-800 border border-dark-700 rounded-lg shadow-xl py-1 max-h-48 overflow-y-auto"
+                        >
+                          {allTags.length === 0 && (
+                            <p className="text-xs text-dark-500 px-3 py-2">No tags found. Create tags in Settings.</p>
+                          )}
+                          {allTags.filter((t: any) => !lead.tags?.some((lt: any) => lt.tag.id === t.id)).map((tag: any) => (
+                            <button
+                              key={tag.id}
+                              onClick={(e) => { e.stopPropagation(); addTagMutation.mutate({ leadId: lead.id, tagId: tag.id }); }}
+                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-dark-700/50 flex items-center gap-2"
+                            >
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
+                              <span className="text-dark-300">{tag.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </td>
                   <td className="table-td">
@@ -351,6 +427,16 @@ export default function LeadsPage() {
                           >
                             <Mail className="w-3.5 h-3.5" /> Open Conversation
                           </button>
+                          <button
+                            onClick={() => {
+                              setOpenMenuId(null);
+                              setEnrollLeadId(lead.id);
+                              setShowEnroll(true);
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm text-purple-300 hover:bg-dark-700/50 flex items-center gap-2"
+                          >
+                            <Zap className="w-3.5 h-3.5" /> Start Automation
+                          </button>
                           <div className="border-t border-dark-700 my-1" />
                           <button
                             onClick={() => {
@@ -397,6 +483,12 @@ export default function LeadsPage() {
               className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
             >
               <Copy className="w-3.5 h-3.5" /> Copy Phone
+            </button>
+            <button
+              onClick={() => { setEnrollLeadId(ctxMenu.lead.id); setShowEnroll(true); setCtxMenu(null); }}
+              className="w-full text-left px-3 py-2 text-sm text-purple-300 hover:bg-dark-700/50 flex items-center gap-2"
+            >
+              <Zap className="w-3.5 h-3.5" /> Start Automation
             </button>
             <div className="border-t border-dark-700 my-1" />
             <button
@@ -456,6 +548,15 @@ export default function LeadsPage() {
 
       {/* Create Modal */}
       {showCreate && <CreateLeadModal onClose={() => setShowCreate(false)} />}
+
+      {/* Enroll Automation Modal */}
+      {showEnroll && (
+        <EnrollAutomationModal
+          leadIds={enrollLeadId ? [enrollLeadId] : Array.from(selected)}
+          onClose={() => { setShowEnroll(false); setEnrollLeadId(null); }}
+          onSuccess={() => { setSelected(new Set()); setEnrollLeadId(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -936,6 +1037,127 @@ function CreateLeadModal({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Enroll in Automation Modal ─── */
+function EnrollAutomationModal({ leadIds, onClose, onSuccess }: { leadIds: string[]; onClose: () => void; onSuccess: () => void }) {
+  const [selectedRule, setSelectedRule] = useState<string>('');
+  const queryClient = useQueryClient();
+
+  const { data } = useQuery({
+    queryKey: ['automation-rules-active'],
+    queryFn: async () => {
+      const { data } = await api.get('/automation/rules');
+      return data;
+    },
+  });
+
+  const rules = (data?.rules || []).filter((r: any) => r.isActive);
+
+  const startMutation = useMutation({
+    mutationFn: () => {
+      if (leadIds.length === 1) {
+        return api.post('/automation/start', { ruleId: selectedRule, leadId: leadIds[0] });
+      }
+      return api.post('/automation/start-bulk', { ruleId: selectedRule, leadIds });
+    },
+    onSuccess: () => {
+      const count = leadIds.length;
+      toast.success(`Automation started for ${count} lead${count > 1 ? 's' : ''}`);
+      queryClient.invalidateQueries({ queryKey: ['automations'] });
+      onSuccess();
+      onClose();
+    },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to start automation'),
+  });
+
+  const selected = rules.find((r: any) => r.id === selectedRule);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="card w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-bold text-dark-50 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-purple-400" />
+              Start Automation
+            </h3>
+            <p className="text-xs text-dark-500 mt-1">
+              Enroll {leadIds.length} lead{leadIds.length > 1 ? 's' : ''} in an automation sequence
+            </p>
+          </div>
+          <button onClick={onClose} className="btn-ghost p-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="label">Automation Rule</label>
+            {rules.length === 0 ? (
+              <p className="text-sm text-dark-400 bg-dark-800/50 rounded-lg p-3">
+                No active automation rules. Create one on the Automation page first.
+              </p>
+            ) : (
+              <select
+                className="input"
+                value={selectedRule}
+                onChange={(e) => setSelectedRule(e.target.value)}
+              >
+                <option value="">Select a rule...</option>
+                {rules.map((rule: any) => (
+                  <option key={rule.id} value={rule.id}>
+                    {rule.name} ({rule.type.replace(/_/g, ' ')}) — {rule.templates?.length || 0} steps
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {selected && (
+            <div className="bg-dark-800/50 rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-dark-300">{selected.name}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300">
+                  {selected.type.replace(/_/g, ' ')}
+                </span>
+              </div>
+              <p className="text-xs text-dark-500">
+                {selected.templates?.length || 0} steps · Sends {selected.sendAfterHour}:00–{selected.sendBeforeHour}:00
+                {selected.sendOnWeekends ? '' : ' · Weekdays only'}
+              </p>
+              {selected.templates?.length > 0 && (
+                <div className="text-xs text-dark-500 border-t border-dark-700/50 pt-2 mt-2">
+                  <p className="text-dark-400 font-medium mb-1">Sequence preview:</p>
+                  {selected.templates.slice(0, 3).map((t: any, i: number) => (
+                    <p key={i} className="truncate">
+                      Step {t.sequenceOrder}: {t.messageTemplate.slice(0, 60)}...
+                      {i > 0 && <span className="text-dark-600"> (day {t.delayDays})</span>}
+                    </p>
+                  ))}
+                  {selected.templates.length > 3 && (
+                    <p className="text-dark-600">+{selected.templates.length - 3} more steps</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
+            <button
+              onClick={() => startMutation.mutate()}
+              disabled={!selectedRule || startMutation.isPending}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Play className="w-4 h-4" />
+              {startMutation.isPending ? 'Starting...' : `Start for ${leadIds.length} Lead${leadIds.length > 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

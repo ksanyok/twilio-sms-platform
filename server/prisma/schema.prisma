@@ -460,10 +460,13 @@ model PipelineCard {
 // ============================================
 
 enum AutomationType {
-  FOLLOW_UP_SEQUENCE
-  KEYWORD_TRIGGER
-  STATUS_CHANGE
+  LEAD_CREATED
+  STATUS_CHANGED
+  KEYWORD_RECEIVED
+  NO_REPLY
+  MANUAL
   TAG_RULE
+  FOLLOW_UP_SEQUENCE
 }
 
 model AutomationRule {

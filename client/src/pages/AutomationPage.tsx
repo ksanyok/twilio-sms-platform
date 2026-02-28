@@ -12,14 +12,17 @@ import {
   ArrowRight,
   X,
   Play,
+  Pause,
   ChevronDown,
   ChevronUp,
   Copy,
   AlertCircle,
   Calendar,
+  Users,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
+import { format, formatDistanceToNow } from 'date-fns';
 
 /* ─── Types ─── */
 interface AutomationTemplate {
@@ -362,6 +365,9 @@ export default function AutomationPage() {
                     </h5>
                     <TriggerDetails type={rule.type} config={rule.triggerConfig} />
                   </div>
+
+                  {/* Runs Panel */}
+                  <RunsPanel ruleId={rule.id} />
                 </div>
               )}
             </div>
@@ -431,6 +437,134 @@ function TriggerDetails({ type, config }: { type: string; config: Record<string,
     default:
       return <p className="text-xs text-dark-300">Manually triggered</p>;
   }
+}
+
+/* ─── Runs Panel ─── */
+function RunsPanel({ ruleId }: { ruleId: string }) {
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['automation-runs', ruleId],
+    queryFn: async () => {
+      const { data } = await api.get(`/automation/rules/${ruleId}`);
+      return data;
+    },
+  });
+
+  const pauseMutation = useMutation({
+    mutationFn: (runId: string) => api.post(`/automation/runs/${runId}/pause`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['automation-runs', ruleId] });
+      queryClient.invalidateQueries({ queryKey: ['automations'] });
+      toast.success('Run paused');
+    },
+    onError: () => toast.error('Failed to pause run'),
+  });
+
+  const resumeMutation = useMutation({
+    mutationFn: (runId: string) => api.post(`/automation/runs/${runId}/resume`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['automation-runs', ruleId] });
+      queryClient.invalidateQueries({ queryKey: ['automations'] });
+      toast.success('Run resumed');
+    },
+    onError: () => toast.error('Failed to resume run'),
+  });
+
+  const runs = data?.rule?.runs || [];
+
+  return (
+    <div className="mt-5">
+      <h5 className="text-[10px] text-dark-500 uppercase tracking-wider font-semibold mb-3 flex items-center gap-1.5">
+        <Users className="w-3 h-3" />
+        Active Runs ({runs.length})
+      </h5>
+
+      {isLoading && (
+        <div className="space-y-2">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="h-10 bg-dark-800/50 rounded animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {runs.length === 0 && !isLoading && (
+        <p className="text-xs text-dark-500 italic bg-dark-800/30 rounded-lg p-3 border border-dark-700/30">
+          No leads enrolled yet. Use "Start Automation" from the Leads page to enroll leads.
+        </p>
+      )}
+
+      {runs.length > 0 && (
+        <div className="bg-dark-800/30 rounded-lg border border-dark-700/30 overflow-hidden">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-dark-700/50 bg-dark-800/50">
+                <th className="px-3 py-2 text-left text-dark-500 font-medium">Lead</th>
+                <th className="px-3 py-2 text-left text-dark-500 font-medium">Step</th>
+                <th className="px-3 py-2 text-left text-dark-500 font-medium">Status</th>
+                <th className="px-3 py-2 text-left text-dark-500 font-medium">Next Run</th>
+                <th className="px-3 py-2 text-right text-dark-500 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {runs.map((run: any) => (
+                <tr key={run.id} className="border-b border-dark-700/30 last:border-0">
+                  <td className="px-3 py-2">
+                    <span className="text-dark-200 font-medium">
+                      {run.lead?.firstName} {run.lead?.lastName || ''}
+                    </span>
+                    <span className="text-dark-500 ml-1.5 font-mono">{run.lead?.phone}</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="text-dark-300">Step {run.currentStep + 1}</span>
+                  </td>
+                  <td className="px-3 py-2">
+                    {run.completedAt ? (
+                      <span className="badge bg-green-500/20 text-green-300">Completed</span>
+                    ) : run.isPaused ? (
+                      <span className="badge bg-yellow-500/20 text-yellow-300">Paused{run.pauseReason ? ` (${run.pauseReason})` : ''}</span>
+                    ) : run.isActive ? (
+                      <span className="badge bg-scl-500/20 text-scl-300">Active</span>
+                    ) : (
+                      <span className="badge bg-dark-700 text-dark-400">Stopped</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-dark-400">
+                    {run.nextRunAt
+                      ? formatDistanceToNow(new Date(run.nextRunAt), { addSuffix: true })
+                      : run.completedAt
+                        ? format(new Date(run.completedAt), 'MMM d')
+                        : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {run.isActive && !run.completedAt && (
+                      run.isPaused ? (
+                        <button
+                          onClick={() => resumeMutation.mutate(run.id)}
+                          className="btn-ghost p-1 text-green-400 hover:text-green-300"
+                          title="Resume"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => pauseMutation.mutate(run.id)}
+                          className="btn-ghost p-1 text-yellow-400 hover:text-yellow-300"
+                          title="Pause"
+                        >
+                          <Pause className="w-3.5 h-3.5" />
+                        </button>
+                      )
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ─── Automation Modal (Create/Edit) ─── */
