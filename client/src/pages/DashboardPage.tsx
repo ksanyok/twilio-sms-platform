@@ -205,7 +205,7 @@ export default function DashboardPage() {
             </span>
           </div>
           <Link
-            to="/settings"
+            to="/settings?tab=system"
             className="text-xs text-dark-400 hover:text-dark-200 transition-colors"
           >
             Settings →

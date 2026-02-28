@@ -148,7 +148,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
         <div className="border-t p-3 space-y-2" style={{ borderColor: 'var(--border-subtle)' }}>
           {/* SMS Mode pill */}
           <NavLink
-            to="/settings"
+            to="/settings?tab=system"
             className={clsx(
               'flex items-center gap-2 rounded-lg px-3 py-2 transition-colors cursor-pointer',
               modeConfig.bg, 'hover:opacity-80',

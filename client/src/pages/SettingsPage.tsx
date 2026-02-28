@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import {
   Settings,
@@ -36,7 +37,24 @@ import { clsx } from 'clsx';
 type Tab = 'tags' | 'users' | 'suppression' | 'system' | 'integrations' | 'activity';
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<Tab>('tags');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = searchParams.get('tab');
+    if (t && ['tags', 'users', 'suppression', 'system', 'integrations', 'activity'].includes(t)) return t as Tab;
+    return 'tags';
+  });
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && ['tags', 'users', 'suppression', 'system', 'integrations', 'activity'].includes(t)) {
+      setTab(t as Tab);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (key: Tab) => {
+    setTab(key);
+    setSearchParams({ tab: key }, { replace: true });
+  };
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'tags', label: 'Tags', icon: <Tag className="w-4 h-4" /> },
@@ -59,7 +77,7 @@ export default function SettingsPage() {
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => handleTabChange(t.key)}
             className={clsx(
               'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors',
               tab === t.key
