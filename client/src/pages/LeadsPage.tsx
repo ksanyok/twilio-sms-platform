@@ -480,89 +480,379 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function ImportModal({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState<'upload' | 'mapping' | 'importing' | 'done'>('upload');
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const queryClient = useQueryClient();
 
-  const importMutation = useMutation({
+  // Preview data from backend
+  const [previewData, setPreviewData] = useState<{
+    totalRows: number;
+    columns: string[];
+    mappingSuggestions: Record<string, string | null>;
+    previewRows: Record<string, string>[];
+  } | null>(null);
+
+  // Column mapping (field -> csv column name)
+  const [mapping, setMapping] = useState<Record<string, string>>({});
+
+  // Import results
+  const [importResult, setImportResult] = useState<{
+    imported: number;
+    duplicates: number;
+    errors: number;
+    total: number;
+    errorDetails: string[];
+  } | null>(null);
+
+  const LEAD_FIELDS = [
+    { key: 'phone', label: 'Phone *', required: true },
+    { key: 'firstName', label: 'First Name', required: false },
+    { key: 'lastName', label: 'Last Name', required: false },
+    { key: 'email', label: 'Email', required: false },
+    { key: 'company', label: 'Company', required: false },
+    { key: 'city', label: 'City', required: false },
+    { key: 'state', label: 'State', required: false },
+    { key: 'source', label: 'Source', required: false },
+  ];
+
+  // Step 1 → Step 2: Upload & preview
+  const previewMutation = useMutation({
     mutationFn: (formData: FormData) =>
-      api.post('/leads/import', formData, {
+      api.post('/leads/preview', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       }),
     onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['leads'] });
-      toast.success(`Imported ${res.data.imported} leads (${res.data.duplicates} duplicates)`);
-      onClose();
+      const data = res.data;
+      setPreviewData(data);
+      // Apply auto-mapping suggestions
+      const autoMapping: Record<string, string> = {};
+      for (const [field, col] of Object.entries(data.mappingSuggestions)) {
+        if (col) autoMapping[field] = col as string;
+      }
+      setMapping(autoMapping);
+      setStep('mapping');
     },
-    onError: () => toast.error('Import failed'),
+    onError: () => toast.error('Failed to parse CSV file'),
   });
 
-  const handleImport = () => {
+  // Step 2 → Step 3: Import with mapping
+  const importMutation = useMutation({
+    mutationFn: (formData: FormData) =>
+      api.post('/leads/import-mapped', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }),
+    onSuccess: (res) => {
+      setImportResult(res.data);
+      queryClient.invalidateQueries({ queryKey: ['leads'] });
+      setStep('done');
+    },
+    onError: () => {
+      toast.error('Import failed');
+      setStep('mapping');
+    },
+  });
+
+  const handleUpload = () => {
     if (!file) return;
     const formData = new FormData();
     formData.append('file', file);
+    previewMutation.mutate(formData);
+  };
+
+  const handleImport = () => {
+    if (!file || !mapping.phone) return;
+    setStep('importing');
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('mapping', JSON.stringify(mapping));
     importMutation.mutate(formData);
+  };
+
+  const handleFileDrop = (f: File) => {
+    if (f?.name.endsWith('.csv')) {
+      setFile(f);
+      setStep('upload');
+      setPreviewData(null);
+      setMapping({});
+      setImportResult(null);
+    } else {
+      toast.error('Please upload a .csv file');
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="card w-full max-w-lg p-6 space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-dark-50">Import Leads</h3>
+      <div className="card w-full max-w-3xl max-h-[85vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-dark-700/50">
+          <div>
+            <h3 className="text-lg font-bold text-dark-50">Import Leads</h3>
+            <p className="text-xs text-dark-500 mt-0.5">
+              {step === 'upload' && 'Step 1 of 3 — Upload CSV file'}
+              {step === 'mapping' && 'Step 2 of 3 — Map columns to fields'}
+              {step === 'importing' && 'Step 3 of 3 — Importing...'}
+              {step === 'done' && 'Import Complete'}
+            </p>
+          </div>
           <button onClick={onClose} className="btn-ghost p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Drop Zone */}
-        <div
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setIsDragging(false);
-            const f = e.dataTransfer.files[0];
-            if (f?.name.endsWith('.csv')) setFile(f);
-          }}
-          className={clsx(
-            'border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer',
-            isDragging
-              ? 'border-scl-500 bg-scl-500/10'
-              : 'border-dark-600 hover:border-dark-500'
+        {/* Progress Steps */}
+        <div className="flex items-center gap-2 px-6 py-3 bg-dark-800/30">
+          {['Upload', 'Map Fields', 'Import'].map((label, i) => {
+            const stepIdx = ['upload', 'mapping', 'importing', 'done'].indexOf(step);
+            const isActive = i <= stepIdx;
+            const isCurrent = i === Math.min(stepIdx, 2);
+            return (
+              <div key={label} className="flex items-center gap-2 flex-1">
+                <div className={clsx(
+                  'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors',
+                  isCurrent ? 'bg-scl-600 text-white' :
+                  isActive ? 'bg-scl-600/30 text-scl-300' :
+                  'bg-dark-700 text-dark-500'
+                )}>
+                  {i + 1}
+                </div>
+                <span className={clsx(
+                  'text-xs font-medium',
+                  isActive ? 'text-dark-200' : 'text-dark-500'
+                )}>{label}</span>
+                {i < 2 && (
+                  <div className={clsx(
+                    'flex-1 h-px',
+                    isActive && i < stepIdx ? 'bg-scl-600/50' : 'bg-dark-700'
+                  )} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+
+          {/* Step 1: Upload */}
+          {step === 'upload' && (
+            <div className="space-y-4">
+              <div
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragging(false);
+                  const f = e.dataTransfer.files[0];
+                  if (f) handleFileDrop(f);
+                }}
+                className={clsx(
+                  'border-2 border-dashed rounded-xl p-10 text-center transition-colors cursor-pointer',
+                  isDragging
+                    ? 'border-scl-500 bg-scl-500/10'
+                    : 'border-dark-600 hover:border-dark-500'
+                )}
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.csv';
+                  input.onchange = (e) => {
+                    const f = (e.target as HTMLInputElement).files?.[0];
+                    if (f) handleFileDrop(f);
+                  };
+                  input.click();
+                }}
+              >
+                <FileSpreadsheet className="w-12 h-12 mx-auto text-dark-500 mb-3" />
+                {file ? (
+                  <div>
+                    <p className="text-sm text-scl-300 font-medium">{file.name}</p>
+                    <p className="text-xs text-dark-500 mt-1">
+                      {(file.size / 1024).toFixed(1)} KB — Click to change file
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-dark-300 font-medium">Drop CSV file here or click to browse</p>
+                    <p className="text-xs text-dark-500 mt-1">
+                      Required column: phone. Optional: firstName, lastName, email, city, state, source, company
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
           )}
-          onClick={() => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.csv';
-            input.onchange = (e) => {
-              const f = (e.target as HTMLInputElement).files?.[0];
-              if (f) setFile(f);
-            };
-            input.click();
-          }}
-        >
-          <FileSpreadsheet className="w-10 h-10 mx-auto text-dark-500 mb-3" />
-          {file ? (
-            <p className="text-sm text-scl-300 font-medium">{file.name}</p>
-          ) : (
-            <>
-              <p className="text-sm text-dark-300 font-medium">Drop CSV file here or click to browse</p>
-              <p className="text-xs text-dark-500 mt-1">
-                Required columns: phone. Optional: firstName, lastName, email, city, state, source
-              </p>
-            </>
+
+          {/* Step 2: Mapping & Preview */}
+          {step === 'mapping' && previewData && (
+            <div className="space-y-5">
+              {/* Column Mapping */}
+              <div>
+                <h4 className="text-sm font-semibold text-dark-100 mb-3">Column Mapping</h4>
+                <p className="text-xs text-dark-400 mb-3">
+                  Map your CSV columns to lead fields. Columns were auto-detected where possible.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {LEAD_FIELDS.map((field) => (
+                    <div key={field.key} className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-dark-300 w-24 shrink-0">
+                        {field.label}
+                      </label>
+                      <select
+                        className="input text-sm py-1.5 flex-1"
+                        value={mapping[field.key] || ''}
+                        onChange={(e) => setMapping(prev => ({
+                          ...prev,
+                          [field.key]: e.target.value || '',
+                        }))}
+                      >
+                        <option value="">— Skip —</option>
+                        {previewData.columns.map((col) => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Data Preview Table */}
+              <div>
+                <h4 className="text-sm font-semibold text-dark-100 mb-2">
+                  Preview ({previewData.totalRows.toLocaleString()} rows total, showing first {previewData.previewRows.length})
+                </h4>
+                <div className="overflow-x-auto rounded-lg border border-dark-700/50">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-dark-800/60">
+                        <th className="px-3 py-2 text-left text-dark-400 font-medium">#</th>
+                        {previewData.columns.map((col) => {
+                          const mappedTo = Object.entries(mapping).find(([_, v]) => v === col)?.[0];
+                          return (
+                            <th key={col} className="px-3 py-2 text-left text-dark-400 font-medium whitespace-nowrap">
+                              <span>{col}</span>
+                              {mappedTo && (
+                                <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-scl-600/20 text-scl-300 font-semibold">
+                                  → {mappedTo}
+                                </span>
+                              )}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewData.previewRows.map((row, i) => (
+                        <tr key={i} className="border-t border-dark-800/50">
+                          <td className="px-3 py-1.5 text-dark-500">{i + 1}</td>
+                          {previewData.columns.map((col) => (
+                            <td key={col} className="px-3 py-1.5 text-dark-300 whitespace-nowrap max-w-[180px] truncate">
+                              {row[col] || '—'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Importing Progress */}
+          {step === 'importing' && (
+            <div className="flex flex-col items-center justify-center py-12 space-y-5">
+              <div className="w-16 h-16 rounded-full border-4 border-scl-600/30 border-t-scl-500 animate-spin" />
+              <div className="text-center">
+                <p className="text-sm font-medium text-dark-200">Importing leads...</p>
+                <p className="text-xs text-dark-500 mt-1">
+                  Processing {previewData?.totalRows.toLocaleString() || '?'} rows. This may take a moment.
+                </p>
+              </div>
+              {/* Progress bar (indeterminate) */}
+              <div className="w-64 h-1.5 bg-dark-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-scl-600 to-scl-400 rounded-full"
+                  style={{
+                    width: '40%',
+                    animation: 'shimmer 1.5s infinite ease-in-out',
+                    backgroundSize: '200% 100%',
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Done */}
+          {step === 'done' && importResult && (
+            <div className="flex flex-col items-center py-8 space-y-5">
+              <div className="w-14 h-14 rounded-full bg-green-500/20 flex items-center justify-center">
+                <FileSpreadsheet className="w-7 h-7 text-green-400" />
+              </div>
+              <div className="text-center">
+                <h4 className="text-lg font-bold text-dark-50">Import Complete</h4>
+                <p className="text-sm text-dark-400 mt-1">
+                  {importResult.total.toLocaleString()} rows processed
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-4 w-full max-w-sm">
+                <div className="text-center p-3 bg-dark-800/50 rounded-lg">
+                  <p className="text-lg font-bold text-green-400">{importResult.imported}</p>
+                  <p className="text-xs text-dark-400">Imported</p>
+                </div>
+                <div className="text-center p-3 bg-dark-800/50 rounded-lg">
+                  <p className="text-lg font-bold text-yellow-400">{importResult.duplicates}</p>
+                  <p className="text-xs text-dark-400">Duplicates</p>
+                </div>
+                <div className="text-center p-3 bg-dark-800/50 rounded-lg">
+                  <p className="text-lg font-bold text-red-400">{importResult.errors}</p>
+                  <p className="text-xs text-dark-400">Errors</p>
+                </div>
+              </div>
+              {importResult.errorDetails.length > 0 && (
+                <div className="w-full max-w-sm text-xs text-dark-500 bg-dark-800/30 rounded-lg p-3 space-y-1">
+                  <p className="font-medium text-dark-400 mb-1">Error details (first 10):</p>
+                  {importResult.errorDetails.map((err, i) => (
+                    <p key={i}>• {err}</p>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
-        <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="btn-ghost">Cancel</button>
-          <button
-            onClick={handleImport}
-            disabled={!file || importMutation.isPending}
-            className="btn-primary"
-          >
-            {importMutation.isPending ? 'Importing...' : 'Import'}
-          </button>
+        {/* Footer Actions */}
+        <div className="flex justify-between items-center px-6 py-4 border-t border-dark-700/50">
+          <div>
+            {step === 'mapping' && (
+              <button onClick={() => setStep('upload')} className="btn-ghost text-sm">
+                ← Back
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={onClose} className="btn-ghost">
+              {step === 'done' ? 'Close' : 'Cancel'}
+            </button>
+            {step === 'upload' && (
+              <button
+                onClick={handleUpload}
+                disabled={!file || previewMutation.isPending}
+                className="btn-primary"
+              >
+                {previewMutation.isPending ? 'Parsing...' : 'Preview & Map →'}
+              </button>
+            )}
+            {step === 'mapping' && (
+              <button
+                onClick={handleImport}
+                disabled={!mapping.phone}
+                className="btn-primary"
+              >
+                Import {previewData?.totalRows.toLocaleString()} Leads
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

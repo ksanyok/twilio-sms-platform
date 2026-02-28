@@ -319,6 +319,188 @@ export class LeadController {
     });
   }
 
+  /**
+   * POST /leads/preview — Parse first N rows of CSV for preview + column detection
+   * Returns detected columns, sample data rows, and auto-mapping suggestions.
+   */
+  static async previewCSV(req: AuthRequest, res: Response): Promise<void> {
+    if (!req.file) {
+      throw new AppError('CSV file is required', 400);
+    }
+
+    const csvContent = req.file.buffer.toString('utf-8');
+    const records = parse(csvContent, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    });
+
+    if (records.length === 0) {
+      throw new AppError('CSV file is empty or has no data rows', 400);
+    }
+
+    const csvColumns = Object.keys(records[0]);
+
+    // Auto-detect column mappings
+    const fieldMappingSuggestions: Record<string, string | null> = {
+      phone: null,
+      firstName: null,
+      lastName: null,
+      email: null,
+      company: null,
+      city: null,
+      state: null,
+      source: null,
+    };
+
+    const columnAliases: Record<string, string[]> = {
+      phone: ['phone', 'phone_number', 'phonenumber', 'mobile', 'cell', 'tel', 'telephone', 'number'],
+      firstName: ['firstname', 'first_name', 'first', 'fname', 'given_name'],
+      lastName: ['lastname', 'last_name', 'last', 'lname', 'surname', 'family_name'],
+      email: ['email', 'email_address', 'emailaddress', 'e_mail'],
+      company: ['company', 'company_name', 'companyname', 'business', 'organization', 'org'],
+      city: ['city', 'town', 'locality'],
+      state: ['state', 'province', 'region', 'st'],
+      source: ['source', 'lead_source', 'leadsource', 'origin', 'channel', 'utm_source'],
+    };
+
+    for (const [field, aliases] of Object.entries(columnAliases)) {
+      for (const col of csvColumns) {
+        if (aliases.includes(col.toLowerCase().trim())) {
+          fieldMappingSuggestions[field] = col;
+          break;
+        }
+      }
+    }
+
+    // Return preview data (first 10 rows only)
+    const previewRows = records.slice(0, 10);
+    const totalRows = records.length;
+
+    res.json({
+      totalRows,
+      columns: csvColumns,
+      mappingSuggestions: fieldMappingSuggestions,
+      previewRows,
+    });
+  }
+
+  /**
+   * POST /leads/import-mapped — Import CSV with explicit column mapping from frontend
+   */
+  static async importMappedCSV(req: AuthRequest, res: Response): Promise<void> {
+    if (!req.file) {
+      throw new AppError('CSV file is required', 400);
+    }
+
+    const mappingStr = req.body.mapping;
+    if (!mappingStr) {
+      throw new AppError('Column mapping is required', 400);
+    }
+
+    let mapping: Record<string, string>;
+    try {
+      mapping = JSON.parse(mappingStr);
+    } catch {
+      throw new AppError('Invalid mapping JSON', 400);
+    }
+
+    if (!mapping.phone) {
+      throw new AppError('Phone column mapping is required', 400);
+    }
+
+    const csvContent = req.file.buffer.toString('utf-8');
+    const records = parse(csvContent, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    });
+
+    let imported = 0;
+    let duplicates = 0;
+    let errors = 0;
+    const errorDetails: string[] = [];
+
+    const defaultStage = await prisma.pipelineStage.findFirst({
+      where: { isDefault: true },
+    });
+
+    const CHUNK_SIZE = 500;
+    for (let chunk = 0; chunk < records.length; chunk += CHUNK_SIZE) {
+      const batch = records.slice(chunk, chunk + CHUNK_SIZE);
+      const leadsToUpsert: Array<{
+        phone: string;
+        firstName: string;
+        lastName: string;
+        email: string | null;
+        company: string | null;
+        state: string | null;
+        city: string | null;
+        source: string;
+      }> = [];
+
+      for (const record of batch) {
+        const rawPhone = (mapping.phone ? record[mapping.phone] : '').replace(/\D/g, '');
+        if (!rawPhone) {
+          errors++;
+          errorDetails.push('Row missing phone number');
+          continue;
+        }
+
+        const e164Phone = rawPhone.startsWith('1') ? `+${rawPhone}` : `+1${rawPhone}`;
+
+        leadsToUpsert.push({
+          phone: e164Phone,
+          firstName: mapping.firstName ? (record[mapping.firstName] || 'Unknown') : 'Unknown',
+          lastName: mapping.lastName ? (record[mapping.lastName] || '') : '',
+          email: mapping.email ? (record[mapping.email] || null) : null,
+          company: mapping.company ? (record[mapping.company] || null) : null,
+          city: mapping.city ? (record[mapping.city] || null) : null,
+          state: mapping.state ? (record[mapping.state] || null) : null,
+          source: mapping.source ? (record[mapping.source] || 'csv_import') : 'csv_import',
+        });
+      }
+
+      if (leadsToUpsert.length > 0) {
+        const results = await prisma.$transaction(
+          leadsToUpsert.map(lead =>
+            prisma.lead.upsert({
+              where: { phone: lead.phone },
+              create: lead,
+              update: {
+                lastName: { set: lead.lastName || undefined },
+                email: lead.email || undefined,
+                company: lead.company || undefined,
+              },
+            })
+          )
+        );
+
+        const newLeads = results.filter(r => r.createdAt.getTime() > Date.now() - 10000);
+        imported += newLeads.length;
+        duplicates += results.length - newLeads.length;
+
+        if (defaultStage && newLeads.length > 0) {
+          await prisma.pipelineCard.createMany({
+            data: newLeads.map(lead => ({
+              leadId: lead.id,
+              stageId: defaultStage.id,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+    }
+
+    res.json({
+      imported,
+      duplicates,
+      errors,
+      total: records.length,
+      errorDetails: errorDetails.slice(0, 10),
+    });
+  }
+
   static async addTag(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
     const { tagId } = req.body;

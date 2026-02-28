@@ -72,13 +72,16 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
       >
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 h-16 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
-          <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-scl-600 shrink-0">
+          <div className="flex items-center justify-center w-9 h-9 rounded-lg shrink-0" style={{
+            background: 'linear-gradient(135deg, #4c63e6 0%, #2f3fb3 100%)',
+            boxShadow: '0 2px 8px rgba(76, 99, 230, 0.3)',
+          }}>
             <Shield className="w-5 h-5 text-white" />
           </div>
           {!collapsed && (
             <div className="flex flex-col min-w-0">
-              <span className="text-sm font-bold truncate" style={{ color: 'var(--text-primary)' }}>SecureCreditLines</span>
-              <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-faint)' }}>SMS Platform</span>
+              <span className="text-sm font-bold tracking-tight truncate" style={{ color: 'var(--text-primary)' }}>Secure Credit Lines</span>
+              <span className="text-[10px] uppercase tracking-widest font-medium" style={{ color: 'var(--text-faint)' }}>SMS Platform</span>
             </div>
           )}
           <button
@@ -132,7 +135,9 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
               collapsed && 'justify-center px-0'
             )}
           >
-            <div className="w-8 h-8 rounded-full bg-scl-600/30 flex items-center justify-center text-scl-400 text-xs font-bold shrink-0">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{
+              background: 'linear-gradient(135deg, #4c63e6 0%, #2f3fb3 100%)',
+            }}>
               {user?.firstName?.[0]}{user?.lastName?.[0]}
             </div>
             {!collapsed && (
