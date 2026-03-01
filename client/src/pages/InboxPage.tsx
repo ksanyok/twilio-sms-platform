@@ -141,8 +141,11 @@ export default function InboxPage() {
           )}
           {conversations.length === 0 && !isLoading && (
             <div className="p-8 text-center">
-              <MessageSquare className="w-10 h-10 mx-auto text-dark-600 mb-3" />
-              <p className="text-sm text-dark-500">No conversations</p>
+              <div className="w-14 h-14 rounded-2xl bg-dark-800/80 flex items-center justify-center mx-auto mb-3">
+                <MessageSquare className="w-7 h-7 text-dark-500" />
+              </div>
+              <p className="text-sm font-medium text-dark-300">No conversations yet</p>
+              <p className="text-xs text-dark-500 mt-1.5">Conversations appear here when leads are contacted via campaigns or direct messages</p>
             </div>
           )}
           {conversations.map((conv) => (

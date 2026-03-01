@@ -162,7 +162,7 @@ export class SendingEngine {
     const errors: string[] = [];
 
     const sendingSpeed = options.sendingSpeed || config.sms.maxPerMinute;
-    const delayBetweenMs = Math.ceil(60000 / sendingSpeed);
+    const baseDelayBetweenMs = Math.ceil(60000 / sendingSpeed);
 
     // ── BATCH PRE-FETCH: compliance data in 2 queries instead of 2 per lead ──
     const phones = options.leads.map(l => l.phone);
@@ -303,6 +303,11 @@ export class SendingEngine {
         const message = messages[i];
         const msgData = messageDataToCreate[i];
 
+        // Calculate delay: base interval + jitter + optional time distribution
+        const jitteredDelay = this.calculateJitteredDelay(baseDelayBetweenMs);
+        const timeDistDelay = this.calculateTimeDistributedDelay(jobIndex, messageDataToCreate.length);
+        const totalDelay = timeDistDelay > 0 ? timeDistDelay : jobIndex * jitteredDelay;
+
         jobsToQueue.push({
           name: 'send-sms',
           data: {
@@ -315,7 +320,7 @@ export class SendingEngine {
             leadId: msgData.leadId,
           },
           opts: {
-            delay: jobIndex * delayBetweenMs,
+            delay: totalDelay,
             priority: 5,
           },
         });
@@ -472,15 +477,106 @@ export class SendingEngine {
   }
 
   /**
-   * Template interpolation with {{variable}} syntax
+   * Template interpolation with {{variable}} syntax + spintax support
+   * Spintax: {Hello|Hi|Hey} → randomly selects one variant
+   * This prevents carrier fingerprinting of identical messages
    */
   static interpolateTemplate(
     template: string,
     variables: Record<string, string>
   ): string {
-    return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+    // First, resolve variables
+    let result = template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
       return variables[key] || match;
     });
+
+    // Then, resolve spintax {option1|option2|option3}
+    if (config.sms.spintaxEnabled) {
+      result = this.resolveSpintax(result);
+    }
+
+    return result;
+  }
+
+  /**
+   * Resolve spintax patterns: {Hello|Hi|Hey} → randomly picks one
+   * Supports nested spintax: {Good {morning|afternoon}|Hello}
+   */
+  static resolveSpintax(text: string): string {
+    // Resolve innermost spintax first (non-greedy, no nested braces)
+    const spintaxRegex = /\{([^{}]+)\}/g;
+    let result = text;
+    let iterations = 0;
+    
+    while (spintaxRegex.test(result) && iterations < 10) {
+      result = result.replace(spintaxRegex, (_, options) => {
+        // Only treat as spintax if there's a pipe separator
+        if (!options.includes('|')) return `{${options}}`;
+        const choices = options.split('|');
+        return choices[Math.floor(Math.random() * choices.length)];
+      });
+      iterations++;
+    }
+
+    return result;
+  }
+
+  /**
+   * Calculate delay with jitter for anti-fingerprinting
+   * Adds ±N% random variation to the base delay
+   */
+  static calculateJitteredDelay(baseDelayMs: number): number {
+    const jitter = config.sms.jitterPercent / 100;
+    const min = baseDelayMs * (1 - jitter);
+    const max = baseDelayMs * (1 + jitter);
+    return Math.round(min + Math.random() * (max - min));
+  }
+
+  /**
+   * Calculate time-distributed delay to spread messages across business hours
+   * Instead of sending all at once, spreads evenly from now until business hours end
+   */
+  static calculateTimeDistributedDelay(index: number, totalMessages: number): number {
+    if (!config.sms.timeDistributionEnabled || totalMessages < 100) {
+      return 0; // Don't distribute small batches
+    }
+
+    const now = new Date();
+    const endHour = config.sms.businessHoursEnd;
+    const endTime = new Date(now);
+    endTime.setHours(endHour, 0, 0, 0);
+
+    // If past business hours, don't add distribution delay
+    if (now >= endTime) return 0;
+
+    const remainingMs = endTime.getTime() - now.getTime();
+    // Spread across 80% of remaining time (leave 20% buffer)
+    const spreadWindow = remainingMs * 0.8;
+    const baseDelay = (spreadWindow / totalMessages) * index;
+
+    // Add jitter to the distribution
+    return Math.round(baseDelay + (Math.random() - 0.5) * (spreadWindow / totalMessages));
+  }
+
+  /**
+   * Check circuit breaker: pause campaign if failure rate is too high
+   */
+  static async checkCircuitBreaker(campaignId: string): Promise<boolean> {
+    const recentMessages = await prisma.message.findMany({
+      where: { campaignId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { status: true },
+    });
+
+    if (recentMessages.length < 20) return false; // Not enough data
+
+    const failedCount = recentMessages.filter(
+      m => m.status === 'FAILED' || m.status === 'BLOCKED'
+    ).length;
+
+    const failRate = (failedCount / recentMessages.length) * 100;
+    return failRate >= config.sms.circuitBreakerThreshold;
   }
 
   /**

@@ -47,6 +47,14 @@ export const config = {
       parseInt(process.env.RAMP_DAY_6_LIMIT || '300', 10),
       parseInt(process.env.RAMP_DAY_7_LIMIT || '350', 10),
     ],
+    // Anti-blocking features
+    jitterPercent: parseInt(process.env.SMS_JITTER_PERCENT || '40', 10), // ±40% delay randomization
+    spintaxEnabled: process.env.SPINTAX_ENABLED !== 'false', // enabled by default
+    circuitBreakerThreshold: parseInt(process.env.CIRCUIT_BREAKER_THRESHOLD || '30', 10), // pause campaign if >30% fail in last 50 msgs
+    deliveryRateThrottleAt: parseInt(process.env.DELIVERY_RATE_THROTTLE_AT || '80', 10), // slow down number if delivery rate < 80%
+    timeDistributionEnabled: process.env.TIME_DISTRIBUTION_ENABLED !== 'false', // spread across business hours
+    businessHoursStart: parseInt(process.env.BUSINESS_HOURS_START || '9', 10),
+    businessHoursEnd: parseInt(process.env.BUSINESS_HOURS_END || '18', 10),
   },
 
   compliance: {

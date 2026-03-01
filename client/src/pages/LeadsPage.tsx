@@ -8,6 +8,7 @@ import {
   Plus,
   Tag,
   UserPlus,
+  Users,
   Trash2,
   MoreHorizontal,
   ChevronDown,
@@ -293,6 +294,29 @@ export default function LeadsPage() {
                     ))}
                   </tr>
                 ))}
+              {!isLoading && leads.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-14 h-14 rounded-2xl bg-dark-800/80 flex items-center justify-center">
+                        <Users className="w-7 h-7 text-dark-500" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-dark-300">No leads yet</p>
+                        <p className="text-xs text-dark-500 mt-1">Add your first lead to get started with campaigns</p>
+                      </div>
+                      <div className="flex gap-2 mt-1">
+                        <button onClick={() => setShowCreate(true)} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5">
+                          <Plus className="w-3.5 h-3.5" /> Add Lead
+                        </button>
+                        <button onClick={() => setShowImport(true)} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5">
+                          <Upload className="w-3.5 h-3.5" /> Import CSV
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )}
               {leads.map((lead: any) => (
                 <tr
                   key={lead.id}

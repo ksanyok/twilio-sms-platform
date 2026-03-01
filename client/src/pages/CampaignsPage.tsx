@@ -175,9 +175,18 @@ export default function CampaignsPage() {
             {data?.campaigns?.length === 0 && (
               <tr>
                 <td colSpan={10} className="p-12 text-center text-dark-500">
-                  <Send className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                  <p>No campaigns yet</p>
-                  <p className="text-xs mt-1">Create your first campaign to get started</p>
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl bg-dark-800/80 flex items-center justify-center">
+                      <Send className="w-7 h-7 opacity-40" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-dark-300">No campaigns yet</p>
+                      <p className="text-xs mt-1">Create your first campaign to start reaching leads</p>
+                    </div>
+                    <button onClick={() => setShowCreateModal(true)} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 mt-1">
+                      <Plus className="w-3.5 h-3.5" /> New Campaign
+                    </button>
+                  </div>
                 </td>
               </tr>
             )}

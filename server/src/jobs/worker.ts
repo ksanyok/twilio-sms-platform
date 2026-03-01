@@ -12,7 +12,25 @@ import logger from '../config/logger';
 const smsWorker = new Worker(
   'sms-send',
   async (job: Job) => {
-    const { messageId, fromNumber, toNumber, body, phoneNumberId } = job.data;
+    const { messageId, fromNumber, toNumber, body, phoneNumberId, campaignId } = job.data;
+
+    // Circuit breaker: check if campaign has too many failures
+    if (campaignId) {
+      const shouldBreak = await SendingEngine.checkCircuitBreaker(campaignId);
+      if (shouldBreak) {
+        // Auto-pause the campaign
+        await prisma.campaign.update({
+          where: { id: campaignId },
+          data: { status: 'PAUSED' },
+        });
+        await prisma.message.update({
+          where: { id: messageId },
+          data: { status: 'FAILED', errorMessage: 'Campaign paused by circuit breaker — high failure rate' },
+        });
+        logger.warn(`Circuit breaker triggered for campaign ${campaignId} — auto-paused`);
+        return;
+      }
+    }
 
     logger.debug(`Processing SMS job ${job.id}: ${messageId} → ${toNumber}`);
 

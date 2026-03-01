@@ -1219,6 +1219,184 @@ function SystemTab() {
           </div>
         )}
       </div>
+
+      {/* Anti-Blocking Engine */}
+      <AntiBlockingSection
+        settings={settings}
+        getValue={getValue}
+        localSettings={localSettings}
+        setLocalSettings={setLocalSettings}
+        dirty={dirty}
+        setDirty={setDirty}
+        saveMutation={saveMutation}
+      />
+    </div>
+  );
+}
+
+/* ─── Anti-Blocking Section ─── */
+function AntiBlockingSection({
+  settings, getValue, localSettings, setLocalSettings, dirty, setDirty, saveMutation,
+}: {
+  settings: Record<string, any>;
+  getValue: (key: string, def: string) => string;
+  localSettings: Record<string, string>;
+  setLocalSettings: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  dirty: Set<string>;
+  setDirty: React.Dispatch<React.SetStateAction<Set<string>>>;
+  saveMutation: any;
+}) {
+  const isSpintax = settings.spintaxEnabled === true || settings.spintaxEnabled === 'true';
+  const isTimeDist = settings.timeDistributionEnabled === true || settings.timeDistributionEnabled === 'true';
+
+  const toggleSetting = (key: string, current: boolean) => {
+    saveMutation.mutate({ key, value: (!current).toString() });
+  };
+
+  const ToggleRow = ({ label, desc, isOn, settingKey }: { label: string; desc: string; isOn: boolean; settingKey: string }) => (
+    <div className="flex items-center justify-between py-3">
+      <div>
+        <p className="text-sm font-medium text-dark-200">{label}</p>
+        <p className="text-xs text-dark-500 mt-0.5">{desc}</p>
+      </div>
+      <button
+        onClick={() => toggleSetting(settingKey, isOn)}
+        disabled={saveMutation.isPending}
+        className={clsx(
+          'relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 focus:outline-none',
+          isOn ? 'bg-scl-500' : 'bg-dark-600'
+        )}
+      >
+        <span className={clsx(
+          'inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200',
+          isOn ? 'translate-x-6' : 'translate-x-1'
+        )} />
+      </button>
+    </div>
+  );
+
+  const NumericField = ({ label, desc, settingKey, defaultValue, min, max, unit }: {
+    label: string; desc: string; settingKey: string; defaultValue: string; min: number; max: number; unit?: string;
+  }) => (
+    <div>
+      <label className="label">{label} {unit && <span className="text-dark-500">({unit})</span>}</label>
+      <div className="flex items-center gap-2">
+        <input
+          className="input flex-1"
+          type="number"
+          min={min}
+          max={max}
+          value={getValue(settingKey, defaultValue)}
+          onChange={(e) => {
+            setLocalSettings(prev => ({ ...prev, [settingKey]: e.target.value }));
+            setDirty(prev => new Set(prev).add(settingKey));
+          }}
+        />
+        {dirty.has(settingKey) && (
+          <button
+            onClick={() => saveMutation.mutate({ key: settingKey, value: getValue(settingKey, defaultValue) })}
+            disabled={saveMutation.isPending}
+            className="btn-primary py-2 px-3 text-xs"
+          >
+            <Save className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-dark-500 mt-1">{desc}</p>
+    </div>
+  );
+
+  return (
+    <div className="card p-5 space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-purple-500/15 text-purple-400">
+          <Brain className="w-5 h-5" />
+        </div>
+        <div>
+          <h4 className="text-sm font-semibold text-dark-100 flex items-center gap-2">
+            Anti-Blocking Engine
+            <span className="badge bg-purple-500/15 text-purple-400 text-[10px] uppercase tracking-wider">25k/day</span>
+          </h4>
+          <p className="text-xs text-dark-400 mt-0.5">Advanced settings to avoid carrier filtering and improve deliverability</p>
+        </div>
+      </div>
+
+      {/* Toggles */}
+      <div className="divide-y divide-dark-700/50">
+        <ToggleRow
+          label="Spintax Content Variation"
+          desc='Randomize messages using {Hello|Hi|Hey} syntax to avoid fingerprinting'
+          isOn={isSpintax}
+          settingKey="spintaxEnabled"
+        />
+        <ToggleRow
+          label="Time Distribution"
+          desc="Spread bulk sends evenly across business hours instead of sending all at once"
+          isOn={isTimeDist}
+          settingKey="timeDistributionEnabled"
+        />
+      </div>
+
+      {/* Numeric fields */}
+      <div className="grid grid-cols-2 gap-4 pt-2 border-t border-dark-700/50">
+        <NumericField
+          label="Delay Jitter"
+          desc="Random variation applied to delay between messages (e.g. 40 = ±40%)"
+          settingKey="jitterPercent"
+          defaultValue="40"
+          min={0}
+          max={100}
+          unit="%"
+        />
+        <NumericField
+          label="Circuit Breaker Threshold"
+          desc="Auto-pause campaign if this % of last 50 messages failed"
+          settingKey="circuitBreakerThreshold"
+          defaultValue="30"
+          min={5}
+          max={100}
+          unit="%"
+        />
+        <NumericField
+          label="Delivery Rate Throttle"
+          desc="Slow down numbers with delivery rate below this value"
+          settingKey="deliveryRateThrottleAt"
+          defaultValue="80"
+          min={50}
+          max={100}
+          unit="%"
+        />
+        <NumericField
+          label="Business Hours"
+          desc="Start and end hour for time-distributed sends (24h format)"
+          settingKey="businessHoursStart"
+          defaultValue="9"
+          min={0}
+          max={23}
+          unit="start hour"
+        />
+        <NumericField
+          label="Business Hours End"
+          desc="End hour for time-distributed sends (24h format)"
+          settingKey="businessHoursEnd"
+          defaultValue="18"
+          min={0}
+          max={23}
+          unit="end hour"
+        />
+      </div>
+
+      {/* Spintax help */}
+      {isSpintax && (
+        <div className="rounded-lg p-4 border border-purple-500/20 bg-purple-500/5 space-y-2">
+          <p className="text-xs font-semibold text-purple-300">Spintax Template Examples</p>
+          <div className="text-xs text-dark-400 space-y-1 font-mono">
+            <p>{'{Hello|Hi|Hey}'} {'{{firstName}}'}, {'{'} this is|I\'m{'}'} calling about your credit application.</p>
+            <p>{'{'} Please call us|Give us a call|Reach out{'}'} at {'{{companyPhone}}'}.</p>
+          </div>
+          <p className="text-xs text-dark-500">Each recipient receives a uniquely varied message, reducing carrier pattern detection.</p>
+        </div>
+      )}
     </div>
   );
 }

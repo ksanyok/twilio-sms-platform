@@ -18,6 +18,7 @@ import { PhoneNumber, NumberStatus } from '@prisma/client';
 export class NumberService {
 
   private static readonly NUMBERS_CACHE_TTL = 30; // 30 seconds
+  private static roundRobinIndex = 0; // In-memory round-robin counter
 
   /**
    * Get active numbers with Redis caching (30s TTL)
@@ -75,7 +76,8 @@ export class NumberService {
   
   /**
    * Get the best available number for sending
-   * Considers: daily limit, ramp schedule, health, cooling status
+   * Uses round-robin across eligible numbers to prevent stale-cache uneven distribution
+   * Also applies delivery-rate based proactive throttling
    */
   static async getBestAvailableNumber(
     excludeNumbers: string[] = [],
@@ -83,15 +85,27 @@ export class NumberService {
   ): Promise<PhoneNumber | null> {
     const numbers = await this.getActiveNumbersCached(excludeNumbers, poolId);
 
-    // Filter by daily limit (considering ramp-up)
-    for (const number of numbers) {
+    // Filter by daily limit (considering ramp-up) and delivery rate
+    const eligible = numbers.filter(number => {
       const limit = this.getDailyLimit(number);
-      if (number.dailySentCount < limit) {
-        return number;
-      }
-    }
+      if (number.dailySentCount >= limit) return false;
 
-    return null;
+      // Proactive throttling: reduce capacity for underperforming numbers
+      if (number.totalSent > 50 && number.deliveryRate < config.sms.deliveryRateThrottleAt) {
+        // Only allow 50% of normal capacity for low-delivery numbers
+        const reducedLimit = Math.floor(limit * 0.5);
+        if (number.dailySentCount >= reducedLimit) return false;
+      }
+
+      return true;
+    });
+
+    if (eligible.length === 0) return null;
+
+    // Round-robin selection for even distribution across numbers
+    const index = this.roundRobinIndex % eligible.length;
+    this.roundRobinIndex++;
+    return eligible[index];
   }
 
   /**
