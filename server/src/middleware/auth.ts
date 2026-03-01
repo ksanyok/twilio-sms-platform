@@ -12,6 +12,7 @@ export interface AuthRequest extends Request {
     firstName: string;
     lastName: string;
   };
+  requestId?: string;
 }
 
 const USER_CACHE_TTL = 60; // seconds

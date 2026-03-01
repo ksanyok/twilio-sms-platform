@@ -1,16 +1,17 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
+import { AuthRequest } from './auth';
 import logger from '../config/logger';
 
 /**
  * Detailed HTTP request/response logging middleware.
  * Logs every request with method, path, status, duration, and user context.
  */
-export const requestLogger = (req: Request, res: Response, next: NextFunction): void => {
+export const requestLogger = (req: AuthRequest, res: Response, next: NextFunction): void => {
   const startTime = Date.now();
   const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   
   // Attach request ID for correlation
-  (req as any).requestId = requestId;
+  req.requestId = requestId;
 
   // Log incoming request
   const logData: any = {
@@ -47,9 +48,9 @@ export const requestLogger = (req: Request, res: Response, next: NextFunction): 
     };
     
     // Log auth context if available
-    if ((req as any).user) {
-      responseLog.userId = (req as any).user.id;
-      responseLog.userEmail = (req as any).user.email;
+    if (req.user) {
+      responseLog.userId = req.user.id;
+      responseLog.userEmail = req.user.email;
     }
 
     // Log error responses with body

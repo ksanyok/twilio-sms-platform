@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { Conversation, Message } from '../types';
 import { useDebounce } from '../hooks/useDebounce';
 import { SmsCounter } from '../components/SmsCounter';
+import { useWebSocketStore, useWebSocketEvent } from '../stores/webSocketStore';
 import {
   Search,
   Send,
@@ -30,7 +31,6 @@ import {
 import { format, formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
-import { io, Socket } from 'socket.io-client';
 
 export default function InboxPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -41,7 +41,8 @@ export default function InboxPage() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; conv: Conversation } | null>(null);
   const ctxMenuRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
-  const [wsConnected, setWsConnected] = useState(false);
+  const wsConnected = useWebSocketStore((s) => s.connected);
+  const socket = useWebSocketStore((s) => s.socket);
 
   // Close inbox context menu on outside click
   useEffect(() => {
@@ -54,29 +55,12 @@ export default function InboxPage() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // WebSocket for real-time message updates
+  // Join specific conversation channel when selected
   useEffect(() => {
-    let socket: Socket | null = null;
-    try {
-      const token = localStorage.getItem('scl_token');
-      socket = io(window.location.origin, {
-        auth: { token },
-        transports: ['websocket', 'polling'],
-      });
-      socket.on('connect', () => setWsConnected(true));
-      socket.on('disconnect', () => setWsConnected(false));
-      socket.on('new-message', () => {
-        queryClient.invalidateQueries({ queryKey: ['conversations'] });
-        queryClient.invalidateQueries({ queryKey: ['conversation'] });
-      });
-      socket.on('message-status', () => {
-        queryClient.invalidateQueries({ queryKey: ['conversation'] });
-      });
-    } catch {
-      setWsConnected(false);
+    if (socket && selectedId) {
+      socket.emit('join:conversation', selectedId);
     }
-    return () => { socket?.disconnect(); setWsConnected(false); };
-  }, [queryClient]);
+  }, [socket, selectedId]);
 
   const { data: conversationsData, isLoading } = useQuery({
     queryKey: ['conversations', debouncedSearch, showUnreadOnly, inboxPage],

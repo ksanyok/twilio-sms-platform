@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useThemeStore } from '../../stores/themeStore';
+import { useWebSocketStore, useWebSocketQuerySync } from '../../stores/webSocketStore';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
 import {
@@ -55,6 +56,17 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const commandInputRef = useRef<HTMLInputElement>(null);
+
+  // Global WebSocket connection — connect on mount, disconnect on logout
+  const { connect, disconnect } = useWebSocketStore();
+  useEffect(() => {
+    const token = localStorage.getItem('scl_token');
+    if (token) connect(token);
+    return () => disconnect();
+  }, [connect, disconnect]);
+
+  // Auto-invalidate queries on WebSocket events (messages, campaigns, leads)
+  useWebSocketQuerySync();
 
   // Unread inbox count for badge
   const { data: inboxData } = useQuery({

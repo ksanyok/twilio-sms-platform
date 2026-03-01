@@ -13,7 +13,7 @@ export class AuthController {
     const { email, password } = req.body;
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
     const userAgent = req.get('user-agent') || 'unknown';
-    const requestId = (req as any).requestId || '-';
+    const requestId = req.requestId || '-';
 
     authLogger.info('Login attempt', { requestId, email, ip, userAgent });
 
@@ -84,7 +84,7 @@ export class AuthController {
   static async register(req: AuthRequest, res: Response): Promise<void> {
     const { email, password, firstName, lastName, role } = req.body;
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
-    const requestId = (req as any).requestId || '-';
+    const requestId = req.requestId || '-';
 
     authLogger.info('User registration attempt', {
       requestId,
@@ -154,7 +154,7 @@ export class AuthController {
   }
 
   static async getMe(req: AuthRequest, res: Response): Promise<void> {
-    const requestId = (req as any).requestId || '-';
+    const requestId = req.requestId || '-';
     authLogger.info('Token verification (getMe)', {
       requestId,
       userId: req.user?.id,
@@ -165,7 +165,7 @@ export class AuthController {
 
   static async refresh(req: AuthRequest, res: Response): Promise<void> {
     const { refreshToken } = req.body;
-    const requestId = (req as any).requestId || '-';
+    const requestId = req.requestId || '-';
 
     if (!refreshToken) {
       throw new AppError('Refresh token required', 400);
@@ -245,7 +245,7 @@ export class AuthController {
   static async updateUser(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
     const { firstName, lastName, role, isActive, password } = req.body;
-    const requestId = (req as any).requestId || '-';
+    const requestId = req.requestId || '-';
 
     authLogger.info('User update attempt', {
       requestId,

@@ -20,7 +20,7 @@ export class LeadController {
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
-    const where: any = { deletedAt: null } as any;
+    const where: any = { deletedAt: null };
 
     if (search) {
       where.OR = [
@@ -597,7 +597,7 @@ export class LeadController {
     // Soft-delete: mark as deleted instead of destroying data
     await prisma.lead.update({
       where: { id },
-      data: { deletedAt: new Date() } as any,
+      data: { deletedAt: new Date() },
     });
 
     res.json({ message: 'Lead deleted successfully' });

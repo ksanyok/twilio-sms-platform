@@ -76,6 +76,17 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter);
 
+// Strict auth rate limit: 10 login/register attempts per 15 min per IP
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again in 15 minutes' },
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+
 // Logging
 app.use(requestLogger);
 

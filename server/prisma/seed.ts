@@ -265,6 +265,154 @@ async function seed() {
   });
   console.log('  ✅ Primary number pool created');
 
+  // Create demo phone number
+  const demoPhoneNumber = process.env.TWILIO_PHONE_NUMBER || '+17866487512';
+  const demoNumber = await prisma.phoneNumber.upsert({
+    where: { phoneNumber: demoPhoneNumber },
+    update: {},
+    create: {
+      twilioSid: `PN_DEMO_${Date.now()}`,
+      phoneNumber: demoPhoneNumber,
+      friendlyName: 'Primary Number',
+      status: 'ACTIVE',
+      dailyLimit: 350,
+    },
+  });
+
+  // Add number to pool
+  try {
+    await prisma.numberPoolMembership.create({
+      data: { phoneNumberId: demoNumber.id, poolId: 'primary-pool' },
+    });
+  } catch { /* already exists */ }
+  console.log(`  ✅ Demo phone number created: ${demoPhoneNumber}`);
+
+  // Seed Twilio API keys from .env into system_settings
+  const twilioSettings = [
+    { key: 'twilioAccountSid', value: process.env.TWILIO_ACCOUNT_SID || '' },
+    { key: 'twilioAuthToken', value: process.env.TWILIO_AUTH_TOKEN || '' },
+    { key: 'twilioTestAccountSid', value: process.env.TWILIO_TEST_ACCOUNT_SID || '' },
+    { key: 'twilioTestAuthToken', value: process.env.TWILIO_TEST_AUTH_TOKEN || '' },
+    { key: 'smsMode', value: 'simulation' },
+  ];
+
+  for (const setting of twilioSettings) {
+    if (setting.value) {
+      await prisma.systemSetting.upsert({
+        where: { key: setting.key },
+        update: {},
+        create: { key: setting.key, value: setting.value },
+      });
+    }
+  }
+  console.log('  ✅ Twilio API settings seeded from .env');
+
+  // Create sample conversations with messages for realistic demo
+  const sampleConversations = [
+    {
+      phone: '+15551234004', // Emily Taylor — CONTACTED
+      messages: [
+        { direction: 'OUTBOUND' as const, body: 'Hi Emily, this is SCL. We have business funding options that might be perfect for Taylor Industries. Would you like to learn more? Reply STOP to opt out.', status: 'DELIVERED' as const },
+      ],
+    },
+    {
+      phone: '+15551234006', // Jennifer Martinez — REPLIED
+      messages: [
+        { direction: 'OUTBOUND' as const, body: 'Hi Jennifer, this is SCL. We help businesses like JM Services access capital quickly. Interested in a quick chat? Reply STOP to opt out.', status: 'DELIVERED' as const },
+        { direction: 'INBOUND' as const, body: 'Yes, I Need about $50k for equipment. What are the rates?', status: 'RECEIVED' as const },
+      ],
+    },
+    {
+      phone: '+15551234008', // Amanda Garcia — INTERESTED
+      messages: [
+        { direction: 'OUTBOUND' as const, body: 'Hi Amanda, this is SCL. We have business funding options for Garcia Inc. Want to learn more?', status: 'DELIVERED' as const },
+        { direction: 'INBOUND' as const, body: 'Tell me more about your rates and terms', status: 'RECEIVED' as const },
+        { direction: 'OUTBOUND' as const, body: 'Great! We offer $10K-$500K with terms from 3-24 months. Rates start at 1.1 factor. Shall I run a quick pre-qualification?', status: 'DELIVERED' as const },
+        { direction: 'INBOUND' as const, body: 'Yes please, what do you need from me?', status: 'RECEIVED' as const },
+      ],
+    },
+    {
+      phone: '+15551234011', // Carlos Ramirez — DOCS REQUESTED
+      messages: [
+        { direction: 'OUTBOUND' as const, body: 'Hi Carlos, this is SCL. We specialize in funding for businesses like CR Transport LLC.', status: 'DELIVERED' as const },
+        { direction: 'INBOUND' as const, body: 'I need funding for new trucks. How fast can you move?', status: 'RECEIVED' as const },
+        { direction: 'OUTBOUND' as const, body: 'We can fund in as little as 24-48 hours! Could you send me your last 3 months bank statements to get started?', status: 'DELIVERED' as const },
+        { direction: 'INBOUND' as const, body: 'Will send them tonight', status: 'RECEIVED' as const },
+      ],
+    },
+  ];
+
+  for (const conv of sampleConversations) {
+    const lead = await prisma.lead.findUnique({ where: { phone: conv.phone } });
+    if (!lead) continue;
+
+    const conversation = await prisma.conversation.upsert({
+      where: { leadId: lead.id },
+      update: {},
+      create: {
+        leadId: lead.id,
+        assignedRepId: rep.id,
+        stickyNumberId: demoNumber.id,
+        isActive: true,
+        unreadCount: conv.messages.filter(m => m.direction === 'INBOUND').length,
+        lastMessageAt: new Date(),
+      },
+    });
+
+    // Create messages if conversation is new (no messages yet)
+    const existingMsgCount = await prisma.message.count({ where: { conversationId: conversation.id } });
+    if (existingMsgCount === 0) {
+      let minuteOffset = -conv.messages.length * 15;
+      for (const msg of conv.messages) {
+        const sentAt = new Date(Date.now() + minuteOffset * 60000);
+        await prisma.message.create({
+          data: {
+            conversationId: conversation.id,
+            direction: msg.direction,
+            body: msg.body,
+            status: msg.status,
+            fromNumber: msg.direction === 'OUTBOUND' ? demoPhoneNumber : conv.phone,
+            toNumber: msg.direction === 'OUTBOUND' ? conv.phone : demoPhoneNumber,
+            sentAt,
+            phoneNumberId: demoNumber.id,
+          },
+        });
+        minuteOffset += 15;
+      }
+    }
+  }
+  console.log('  ✅ Sample conversations with messages created');
+
+  // Create a demo campaign
+  const allLeads = await prisma.lead.findMany({ where: { status: 'NEW' }, take: 5 });
+  const demoCampaign = await prisma.campaign.upsert({
+    where: { id: 'demo-campaign' },
+    update: {},
+    create: {
+      id: 'demo-campaign',
+      name: 'February Outreach',
+      messageTemplate: 'Hi {{firstName}}, this is Secure Credit Lines. We help businesses like {{company}} access fast capital. Interested? Reply STOP to opt out.',
+      status: 'DRAFT',
+      createdById: admin.id,
+      numberPoolId: 'primary-pool',
+      totalLeads: allLeads.length,
+      sendingSpeed: 4,
+    },
+  });
+
+  for (const lead of allLeads) {
+    try {
+      await prisma.campaignLead.create({
+        data: {
+          campaignId: demoCampaign.id,
+          leadId: lead.id,
+          status: 'PENDING',
+        },
+      });
+    } catch { /* already exists */ }
+  }
+  console.log('  ✅ Demo campaign created with leads');
+
   // Create test mode system setting (disabled by default)
   await prisma.systemSetting.upsert({
     where: { key: 'testMode' },

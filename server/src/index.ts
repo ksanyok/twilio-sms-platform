@@ -30,6 +30,7 @@ io.use((socket, next) => {
   }
   try {
     const decoded = jwt.verify(token, config.jwt.secret) as { userId: string; email: string; role: string };
+    // Socket.IO doesn't have native data property typing — attach userId
     (socket as any).userId = decoded.userId;
     next();
   } catch {
@@ -38,7 +39,7 @@ io.use((socket, next) => {
 });
 
 io.on('connection', (socket) => {
-  const authenticatedUserId = (socket as any).userId;
+  const authenticatedUserId: string | undefined = (socket as any).userId;
   logger.debug(`Socket connected: ${socket.id} (user: ${authenticatedUserId})`);
 
   // Only allow joining own inbox channel
