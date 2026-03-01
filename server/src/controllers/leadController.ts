@@ -20,7 +20,7 @@ export class LeadController {
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
-    const where: any = {};
+    const where: any = { deletedAt: null } as any;
 
     if (search) {
       where.OR = [
@@ -594,22 +594,17 @@ export class LeadController {
     const lead = await prisma.lead.findUnique({ where: { id } });
     if (!lead) throw new AppError('Lead not found', 404);
 
-    // Delete related data in correct order (FK constraints)
-    await prisma.$transaction([
-      prisma.leadTag.deleteMany({ where: { leadId: id } }),
-      prisma.automationRun.deleteMany({ where: { leadId: id } }),
-      prisma.pipelineCard.deleteMany({ where: { leadId: id } }),
-      prisma.campaignLead.deleteMany({ where: { leadId: id } }),
-      prisma.message.deleteMany({ where: { conversation: { leadId: id } } }),
-      prisma.conversation.deleteMany({ where: { leadId: id } }),
-      prisma.lead.delete({ where: { id } }),
-    ]);
+    // Soft-delete: mark as deleted instead of destroying data
+    await prisma.lead.update({
+      where: { id },
+      data: { deletedAt: new Date() } as any,
+    });
 
     res.json({ message: 'Lead deleted successfully' });
   }
 
   /**
-   * GET /leads/export — Export leads as CSV
+   * GET /leads/export — Export leads as streaming CSV (cursor-based, OOM-safe)
    */
   static async exportCSV(req: AuthRequest, res: Response): Promise<void> {
     const { status, tags, assignedRepId, search } = req.query;
@@ -628,32 +623,8 @@ export class LeadController {
     if (tags) where.tags = { some: { tagId: { in: (tags as string).split(',') } } };
     if (assignedRepId) where.assignedRepId = assignedRepId;
     if (req.user?.role === 'REP') where.assignedRepId = req.user.id;
-
-    const leads = await prisma.lead.findMany({
-      where,
-      include: {
-        tags: { include: { tag: true } },
-        assignedRep: { select: { firstName: true, lastName: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    // Build CSV
-    const headers = ['First Name', 'Last Name', 'Phone', 'Email', 'Company', 'State', 'Status', 'Source', 'Tags', 'Assigned Rep', 'Created At', 'Last Contacted'];
-    const rows = leads.map(l => [
-      l.firstName,
-      l.lastName || '',
-      l.phone,
-      l.email || '',
-      l.company || '',
-      l.state || '',
-      l.status,
-      l.source || '',
-      l.tags.map(t => t.tag.name).join('; '),
-      l.assignedRep ? `${l.assignedRep.firstName} ${l.assignedRep.lastName}` : '',
-      l.createdAt.toISOString(),
-      l.lastContactedAt?.toISOString() || '',
-    ]);
+    // Exclude soft-deleted
+    where.deletedAt = null;
 
     const escapeCSV = (val: string) => {
       if (val.includes(',') || val.includes('"') || val.includes('\n')) {
@@ -662,10 +633,57 @@ export class LeadController {
       return val;
     };
 
-    const csv = [headers.join(','), ...rows.map(r => r.map(escapeCSV).join(','))].join('\n');
-
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename=leads-export-${new Date().toISOString().split('T')[0]}.csv`);
-    res.send(csv);
+
+    // Write header
+    const headers = ['First Name', 'Last Name', 'Phone', 'Email', 'Company', 'State', 'Status', 'Source', 'Tags', 'Assigned Rep', 'Created At', 'Last Contacted'];
+    res.write(headers.join(',') + '\n');
+
+    // Stream in batches of 500
+    const BATCH_SIZE = 500;
+    let cursor: string | undefined;
+    let hasMore = true;
+
+    while (hasMore) {
+      const leads = await prisma.lead.findMany({
+        where,
+        include: {
+          tags: { include: { tag: true } },
+          assignedRep: { select: { firstName: true, lastName: true } },
+        },
+        orderBy: { id: 'asc' },
+        take: BATCH_SIZE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      });
+
+      if (leads.length === 0) {
+        hasMore = false;
+        break;
+      }
+
+      for (const l of leads) {
+        const row = [
+          l.firstName,
+          l.lastName || '',
+          l.phone,
+          l.email || '',
+          l.company || '',
+          l.state || '',
+          l.status,
+          l.source || '',
+          l.tags.map(t => t.tag.name).join('; '),
+          l.assignedRep ? `${l.assignedRep.firstName} ${l.assignedRep.lastName}` : '',
+          l.createdAt.toISOString(),
+          l.lastContactedAt?.toISOString() || '',
+        ];
+        res.write(row.map(escapeCSV).join(',') + '\n');
+      }
+
+      cursor = leads[leads.length - 1].id;
+      if (leads.length < BATCH_SIZE) hasMore = false;
+    }
+
+    res.end();
   }
 }

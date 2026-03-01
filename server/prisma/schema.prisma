@@ -95,6 +95,7 @@ model PhoneNumber {
   assignments         NumberAssignment[]
   messages            Message[]
   poolMemberships     NumberPoolMembership[]
+  stickyConversations Conversation[]
 
   @@index([status])
   @@index([dailySentCount])
@@ -110,8 +111,8 @@ model NumberAssignment {
   assignedDate  DateTime @default(now()) // Date-based assignment
   isActive      Boolean  @default(true)
   
-  user          User        @relation(fields: [userId], references: [id])
-  phoneNumber   PhoneNumber @relation(fields: [phoneNumberId], references: [id])
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phoneNumber   PhoneNumber @relation(fields: [phoneNumberId], references: [id], onDelete: Cascade)
 
   @@unique([userId, phoneNumberId, assignedDate])
   @@index([userId, isActive])
@@ -141,8 +142,8 @@ model NumberPoolMembership {
   poolId        String
   addedAt       DateTime    @default(now())
 
-  phoneNumber   PhoneNumber @relation(fields: [phoneNumberId], references: [id])
-  pool          NumberPool  @relation(fields: [poolId], references: [id])
+  phoneNumber   PhoneNumber @relation(fields: [phoneNumberId], references: [id], onDelete: Cascade)
+  pool          NumberPool  @relation(fields: [poolId], references: [id], onDelete: Cascade)
 
   @@unique([phoneNumberId, poolId])
   @@map("number_pool_memberships")
@@ -175,9 +176,12 @@ model Lead {
   source          String?    // Lead source
   status          LeadStatus @default(NEW)
   
+  // Soft-delete for compliance
+  deletedAt       DateTime?
+  
   // Assignment
   assignedRepId   String?
-  assignedRep     User?      @relation(fields: [assignedRepId], references: [id])
+  assignedRep     User?      @relation(fields: [assignedRepId], references: [id], onDelete: SetNull)
   
   // Suppression & Compliance
   isSuppressed    Boolean    @default(false)
@@ -211,6 +215,8 @@ model Lead {
   @@index([isSuppressed, optedOut])
   @@index([lastContactedAt])
   @@index([createdAt])
+  @@index([source])
+  @@index([deletedAt])
   @@map("leads")
 }
 
@@ -256,12 +262,14 @@ model Conversation {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  lead            Lead      @relation(fields: [leadId], references: [id])
-  assignedRep     User?     @relation(fields: [assignedRepId], references: [id])
+  stickyNumber    PhoneNumber? @relation(fields: [stickyNumberId], references: [id], onDelete: SetNull)
+  lead            Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedRep     User?        @relation(fields: [assignedRepId], references: [id], onDelete: SetNull)
   messages        Message[]
 
   @@unique([leadId])
   @@index([assignedRepId, lastMessageAt])
+  @@index([assignedRepId])
   @@index([lastMessageAt])
   @@index([unreadCount])
   @@map("conversations")
@@ -313,10 +321,10 @@ model Message {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  conversation    Conversation     @relation(fields: [conversationId], references: [id])
-  sentByUser      User?            @relation(fields: [sentByUserId], references: [id])
-  phoneNumber     PhoneNumber?     @relation(fields: [phoneNumberId], references: [id])
-  campaign        Campaign?        @relation(fields: [campaignId], references: [id])
+  conversation    Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sentByUser      User?            @relation(fields: [sentByUserId], references: [id], onDelete: SetNull)
+  phoneNumber     PhoneNumber?     @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  campaign        Campaign?        @relation(fields: [campaignId], references: [id], onDelete: SetNull)
 
   @@index([conversationId, createdAt])
   @@index([status])
@@ -324,6 +332,9 @@ model Message {
   @@index([campaignId])
   @@index([sentAt])
   @@index([direction, createdAt])
+  @@index([phoneNumberId])
+  @@index([sentByUserId])
+  @@index([automationRunId])
   @@map("messages")
 }
 
@@ -372,8 +383,8 @@ model Campaign {
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
-  createdBy         User           @relation(fields: [createdById], references: [id])
-  numberPool        NumberPool?    @relation(fields: [numberPoolId], references: [id])
+  createdBy         User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  numberPool        NumberPool?    @relation(fields: [numberPoolId], references: [id], onDelete: SetNull)
   leads             CampaignLead[]
   messages          Message[]
 
@@ -448,8 +459,8 @@ model PipelineCard {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  lead        Lead          @relation(fields: [leadId], references: [id])
-  stage       PipelineStage @relation(fields: [stageId], references: [id])
+  lead        Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  stage       PipelineStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
 
   @@unique([leadId])
   @@index([stageId, position])
@@ -536,12 +547,13 @@ model AutomationRun {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
-  automationRule   AutomationRule @relation(fields: [automationRuleId], references: [id])
-  lead             Lead           @relation(fields: [leadId], references: [id])
+  automationRule   AutomationRule @relation(fields: [automationRuleId], references: [id], onDelete: Cascade)
+  lead             Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([isActive, nextRunAt])
   @@index([leadId])
   @@index([automationRuleId])
+  @@index([automationRuleId, isActive])
   @@map("automation_runs")
 }
 
@@ -556,7 +568,6 @@ model SuppressionEntry {
   source      String?  // Where the suppression came from
   createdAt   DateTime @default(now())
 
-  @@index([phone])
   @@map("suppression_list")
 }
 
@@ -631,6 +642,7 @@ model MessageQueue {
 
   @@index([status, scheduledFor, priority])
   @@index([campaignId, status])
+  @@index([leadId])
   @@map("message_queue")
 }
 
@@ -656,6 +668,5 @@ model DailyNumberStats {
 
   @@unique([phoneNumberId, date])
   @@index([date])
-  @@index([phoneNumberId, date])
   @@map("daily_number_stats")
 }

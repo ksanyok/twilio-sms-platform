@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { Campaign, CampaignStatus } from '../types';
+import { useDebounce } from '../hooks/useDebounce';
+import { SmsCounter } from '../components/SmsCounter';
 import {
   Plus,
   Search,
@@ -27,6 +29,7 @@ import toast from 'react-hot-toast';
 export default function CampaignsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [page, setPage] = useState(1);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; campaign: Campaign } | null>(null);
@@ -46,13 +49,13 @@ export default function CampaignsPage() {
   }, [ctxMenu]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campaigns', statusFilter, search, page],
+    queryKey: ['campaigns', statusFilter, debouncedSearch, page],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set('page', page.toString());
       params.set('limit', '20');
       if (statusFilter) params.set('status', statusFilter);
-      if (search) params.set('search', search);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       const { data } = await api.get(`/campaigns?${params}`);
       return data;
     },
@@ -487,9 +490,12 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
               placeholder="Hi {{firstName}}, this is SCL..."
               required
             />
-            <p className="text-xs text-dark-500 mt-1">
-              Available variables: {'{{firstName}}'}, {'{{lastName}}'}, {'{{company}}'}
-            </p>
+            <div className="flex justify-between items-center mt-1">
+              <p className="text-xs text-dark-500">
+                Available variables: {'{{firstName}}'}, {'{{lastName}}'}, {'{{company}}'}
+              </p>
+              <SmsCounter text={formData.messageTemplate} />
+            </div>
           </div>
 
           {/* Lead Selection */}

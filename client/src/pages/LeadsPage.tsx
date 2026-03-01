@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useDebounce } from '../hooks/useDebounce';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
@@ -35,6 +36,7 @@ const STATUSES = ['NEW', 'CONTACTED', 'REPLIED', 'INTERESTED', 'DOCS_REQUESTED',
 
 export default function LeadsPage() {
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -70,12 +72,12 @@ export default function LeadsPage() {
   }, [openMenuId, ctxMenu]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['leads', search, statusFilter, page],
+    queryKey: ['leads', debouncedSearch, statusFilter, page],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set('page', page.toString());
       params.set('limit', '50');
-      if (search) params.set('search', search);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       if (statusFilter) params.set('status', statusFilter);
       const { data } = await api.get(`/leads?${params}`);
       return data;

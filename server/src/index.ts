@@ -49,8 +49,29 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('join:conversation', (conversationId: string) => {
-    socket.join(`conversation:${conversationId}`);
+  socket.on('join:conversation', async (conversationId: string) => {
+    // Authorization: verify the user has access to this conversation
+    try {
+      const conversation = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: { assignedRepId: true },
+      });
+      if (!conversation) return;
+
+      // Get user role
+      const user = await prisma.user.findUnique({
+        where: { id: authenticatedUserId },
+        select: { role: true },
+      });
+      // ADMIN/MANAGER can join any conversation; REP only their own
+      if (user?.role === 'REP' && conversation.assignedRepId !== authenticatedUserId) {
+        logger.warn(`Socket: REP ${authenticatedUserId} denied access to conversation ${conversationId}`);
+        return;
+      }
+      socket.join(`conversation:${conversationId}`);
+    } catch (err) {
+      logger.error('Socket join:conversation error:', err);
+    }
   });
 
   socket.on('disconnect', () => {

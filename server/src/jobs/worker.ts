@@ -52,8 +52,48 @@ const smsWorker = new Worker(
   }
 );
 
-smsWorker.on('completed', (job: Job) => {
+smsWorker.on('completed', async (job: Job) => {
   logger.debug(`SMS job ${job.id} completed`);
+
+  // ── Auto-complete campaign when all messages are processed ──
+  const campaignId = job.data?.campaignId;
+  if (campaignId) {
+    try {
+      const pending = await prisma.message.count({
+        where: { campaignId, status: { in: ['QUEUED', 'SENDING'] } },
+      });
+      if (pending === 0) {
+        const campaign = await prisma.campaign.findUnique({
+          where: { id: campaignId },
+          select: { status: true },
+        });
+        if (campaign && campaign.status === 'SENDING') {
+          const stats = await prisma.message.groupBy({
+            by: ['status'],
+            where: { campaignId },
+            _count: true,
+          });
+          const delivered = stats.find(s => s.status === 'DELIVERED')?._count ?? 0;
+          const sent = stats.find(s => s.status === 'SENT')?._count ?? 0;
+          const failed = stats.find(s => s.status === 'FAILED')?._count ?? 0;
+
+          await prisma.campaign.update({
+            where: { id: campaignId },
+            data: {
+              status: 'COMPLETED',
+              completedAt: new Date(),
+              totalDelivered: delivered,
+              totalFailed: failed,
+              totalSent: sent + delivered,
+            },
+          });
+          logger.info(`Campaign ${campaignId} auto-completed: ${delivered} delivered, ${failed} failed`);
+        }
+      }
+    } catch (err: any) {
+      logger.error(`Campaign completion check error: ${err.message}`);
+    }
+  }
 });
 
 smsWorker.on('failed', (job: Job | undefined, error: Error) => {

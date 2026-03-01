@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { AnalyticsController } from '../controllers/analyticsController';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requireRole } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
 
 router.use(authenticate);
+router.use(requireRole('ADMIN', 'MANAGER'));
 
 router.get('/overview', asyncHandler(AnalyticsController.getOverview));
 router.get('/lead-funnel', asyncHandler(AnalyticsController.getLeadFunnel));

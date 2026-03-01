@@ -2,8 +2,10 @@ import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { subDays, subHours, startOfDay, endOfDay } from 'date-fns';
-import { getSmsMode } from '../config/twilio';
+import getTwilioClient, { getSmsMode, getActiveTwilioClient } from '../config/twilio';
 import redis from '../config/redis';
+import { config } from '../config';
+import logger from '../config/logger';
 
 export class DashboardController {
 
@@ -376,5 +378,221 @@ export class DashboardController {
         failedAt: e.failedAt,
       })),
     });
+  }
+
+  /**
+   * Full Twilio Account Diagnostics
+   * Fetches: balance, account status, A2P brand/campaign info,
+   * messaging services, phone numbers, usage records
+   */
+  static async getTwilioDiagnostics(req: AuthRequest, res: Response): Promise<void> {
+    const client = getTwilioClient();
+    if (!client) {
+      res.status(503).json({ error: 'Twilio client not configured' });
+      return;
+    }
+
+    const smsMode = await getSmsMode();
+    const diagnostics: Record<string, any> = {
+      timestamp: new Date().toISOString(),
+      smsMode,
+      configuredSid: config.twilio.accountSid?.slice(0, 8) + '...',
+    };
+
+    // ── 1) Account Info & Balance ──
+    try {
+      const account = await client.api.accounts(config.twilio.accountSid).fetch();
+      diagnostics.account = {
+        friendlyName: account.friendlyName,
+        status: account.status, // active, suspended, closed
+        type: account.type,     // Full, Trial
+        dateCreated: account.dateCreated,
+        ownerAccountSid: account.ownerAccountSid,
+      };
+    } catch (err: any) {
+      diagnostics.account = { error: err.message };
+    }
+
+    try {
+      const balance = await client.api.accounts(config.twilio.accountSid).balance.fetch();
+      diagnostics.balance = {
+        currency: balance.currency,
+        balance: balance.balance,
+        accountSid: balance.accountSid,
+      };
+    } catch (err: any) {
+      diagnostics.balance = { error: err.message };
+    }
+
+    // ── 2) Phone Numbers ──
+    try {
+      const numbers = await client.incomingPhoneNumbers.list({ limit: 100 });
+      diagnostics.phoneNumbers = numbers.map(n => ({
+        sid: n.sid,
+        phoneNumber: n.phoneNumber,
+        friendlyName: n.friendlyName,
+        smsEnabled: n.capabilities?.sms ?? false,
+        mmsEnabled: n.capabilities?.mms ?? false,
+        voiceEnabled: n.capabilities?.voice ?? false,
+        statusCallback: n.statusCallback,
+        smsUrl: n.smsUrl,
+      }));
+      diagnostics.phoneNumberCount = numbers.length;
+    } catch (err: any) {
+      diagnostics.phoneNumbers = { error: err.message };
+    }
+
+    // ── 3) Messaging Services ──
+    try {
+      const services = await client.messaging.v1.services.list({ limit: 20 });
+      diagnostics.messagingServices = services.map(s => ({
+        sid: s.sid,
+        friendlyName: s.friendlyName,
+        inboundRequestUrl: s.inboundRequestUrl,
+        statusCallback: s.statusCallback,
+        useInboundWebhookOnNumber: s.useInboundWebhookOnNumber,
+        // A2P compliance
+        usecase: s.usecase,
+        areaToBind: s.areaCodeGeomatch,
+        stickySender: s.stickySender,
+        fallbackToLongCode: s.fallbackToLongCode,
+      }));
+    } catch (err: any) {
+      diagnostics.messagingServices = { error: err.message };
+    }
+
+    // ── 4) A2P 10DLC Brand Registrations ──
+    try {
+      const brands = await client.messaging.v1.brandRegistrations.list({ limit: 20 });
+      diagnostics.a2pBrands = brands.map(b => ({
+        sid: b.sid,
+        // @ts-ignore — Twilio SDK types lag behind API
+        brandName: b.customerProfileBundleSid,
+        status: (b as any).brandRegistrationStatus || (b as any).status,
+        brandType: b.brandType,
+        dateCreated: b.dateCreated,
+        dateUpdated: b.dateUpdated,
+        // @ts-ignore
+        failureReason: b.failureReason || null,
+      }));
+    } catch (err: any) {
+      diagnostics.a2pBrands = { error: err.message };
+    }
+
+    // ── 5) A2P Campaign Registrations ──
+    try {
+      // Fetch campaigns for known messaging services
+      if (diagnostics.messagingServices && Array.isArray(diagnostics.messagingServices)) {
+        const campaigns: any[] = [];
+        for (const svc of diagnostics.messagingServices) {
+          try {
+            const usAppToPersonList = await client.messaging.v1
+              .services(svc.sid)
+              .usAppToPerson
+              .list({ limit: 10 });
+            for (const c of usAppToPersonList) {
+              campaigns.push({
+                sid: c.sid,
+                messagingServiceSid: svc.sid,
+                brandRegistrationSid: c.brandRegistrationSid,
+                description: c.description,
+                usecase: (c as any).usecase,
+                campaignStatus: (c as any).campaignStatus,
+                dateCreated: c.dateCreated,
+                dateUpdated: c.dateUpdated,
+              });
+            }
+          } catch { /* service may not have A2P campaigns */ }
+        }
+        diagnostics.a2pCampaigns = campaigns;
+      }
+    } catch (err: any) {
+      diagnostics.a2pCampaigns = { error: err.message };
+    }
+
+    // ── 6) Usage Records (last 30 days — SMS sent/received/cost) ──
+    try {
+      const usage = await client.usage.records.list({
+        category: 'sms' as any,
+        startDate: subDays(new Date(), 30),
+        endDate: new Date(),
+        limit: 5,
+      });
+      diagnostics.usage = usage.map(u => ({
+        category: u.category,
+        description: u.description,
+        count: u.count,
+        countUnit: u.countUnit,
+        price: u.price,
+        priceUnit: u.priceUnit,
+        startDate: u.startDate,
+        endDate: u.endDate,
+      }));
+    } catch (err: any) {
+      diagnostics.usage = { error: err.message };
+    }
+
+    // ── 7) Toll-Free Verification (if applicable) ──
+    try {
+      const tfVerifications = await (client as any).messaging.v1.tollfreeVerifications.list({ limit: 10 });
+      diagnostics.tollFreeVerifications = tfVerifications.map((v: any) => ({
+        sid: v.sid,
+        status: v.status,
+        phoneNumber: v.phoneNumber?.toString(),
+        dateCreated: v.dateCreated,
+        dateUpdated: v.dateUpdated,
+      }));
+    } catch (err: any) {
+      diagnostics.tollFreeVerifications = { error: err.message };
+    }
+
+    // ── 8) Rate Limits & Sending Limits ──
+    try {
+      // Check daily sending volume in our DB
+      const today = new Date();
+      const startOfToday = startOfDay(today);
+      const sentToday = await prisma.message.count({
+        where: {
+          direction: 'OUTBOUND',
+          createdAt: { gte: startOfToday },
+          status: { in: ['SENT', 'DELIVERED', 'SENDING'] },
+        },
+      });
+      const failedToday = await prisma.message.count({
+        where: {
+          direction: 'OUTBOUND',
+          createdAt: { gte: startOfToday },
+          status: 'FAILED',
+        },
+      });
+      diagnostics.todayVolume = {
+        sent: sentToday,
+        failed: failedToday,
+        total: sentToday + failedToday,
+        failureRate: (sentToday + failedToday) > 0
+          ? +(failedToday / (sentToday + failedToday) * 100).toFixed(2)
+          : 0,
+      };
+    } catch (err: any) {
+      diagnostics.todayVolume = { error: err.message };
+    }
+
+    // ── 9) Regulatory Compliance Bundles ──
+    try {
+      const bundles = await client.numbers.v2.regulatoryCompliance.bundles.list({ limit: 10 });
+      diagnostics.complianceBundles = bundles.map(b => ({
+        sid: b.sid,
+        friendlyName: b.friendlyName,
+        status: b.status,
+        regulationSid: b.regulationSid,
+        dateCreated: b.dateCreated,
+        dateUpdated: b.dateUpdated,
+      }));
+    } catch (err: any) {
+      diagnostics.complianceBundles = { error: err.message };
+    }
+
+    logger.info('Twilio diagnostics fetched', { by: req.user?.email });
+    res.json(diagnostics);
   }
 }

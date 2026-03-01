@@ -1,6 +1,7 @@
 import { AutomationService } from '../services/automationService';
 import { NumberService } from '../services/numberService';
 import logger from '../config/logger';
+import redis from '../config/redis';
 
 /**
  * Automation Worker
@@ -8,6 +9,9 @@ import logger from '../config/logger';
  * 1. Process due follow-up sequences
  * 2. Reset daily number counters at midnight
  * 3. Execute scheduled automation rules
+ * 
+ * Uses distributed lock (Redis SETNX) to prevent duplicate processing
+ * in multi-instance deployments.
  */
 
 // Automation processing interval (every 60 seconds)
@@ -16,13 +20,38 @@ const AUTOMATION_CHECK_INTERVAL = 60_000;
 // Daily reset interval check (every 5 minutes)
 const DAILY_RESET_CHECK_INTERVAL = 300_000;
 
+const LOCK_KEY = 'lock:automation-worker';
+const LOCK_TTL = 55; // seconds — just under interval
+
 let lastResetDate = '';
 
+/** Acquire a distributed lock. Returns true if lock obtained. */
+async function acquireLock(key: string, ttl: number): Promise<boolean> {
+  try {
+    const result = await redis.set(key, process.pid.toString(), 'EX', ttl, 'NX');
+    return result === 'OK';
+  } catch {
+    // Redis down — allow processing as fallback (single-instance safe)
+    return true;
+  }
+}
+
+async function releaseLock(key: string): Promise<void> {
+  try { await redis.del(key); } catch { /* non-fatal */ }
+}
+
 async function checkAndProcessAutomations(): Promise<void> {
+  const locked = await acquireLock(LOCK_KEY, LOCK_TTL);
+  if (!locked) {
+    logger.debug('Automation lock held by another instance, skipping');
+    return;
+  }
   try {
     await AutomationService.processScheduledAutomations();
   } catch (error: any) {
     logger.error('Automation processing error:', { error: error.message });
+  } finally {
+    await releaseLock(LOCK_KEY);
   }
 }
 

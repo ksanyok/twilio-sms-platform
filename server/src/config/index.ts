@@ -1,24 +1,26 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { env } from './env';
+
 export const config = {
-  env: process.env.NODE_ENV || 'development',
-  port: parseInt(process.env.PORT || '3001', 10),
-  clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+  env: env.NODE_ENV,
+  port: env.PORT,
+  clientUrl: env.CLIENT_URL,
 
   database: {
-    url: process.env.DATABASE_URL!,
+    url: env.DATABASE_URL,
   },
 
   redis: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    url: env.REDIS_URL,
   },
 
   jwt: {
-    secret: process.env.JWT_SECRET || 'dev-secret-change-me',
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
-    refreshSecret: process.env.JWT_REFRESH_SECRET || 'dev-refresh-secret-change-me',
-    refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
+    secret: env.JWT_SECRET,
+    expiresIn: env.JWT_EXPIRES_IN,
+    refreshSecret: env.JWT_REFRESH_SECRET,
+    refreshExpiresIn: env.JWT_REFRESH_EXPIRES_IN,
   },
 
   // Alias for backward compatibility
@@ -27,17 +29,17 @@ export const config = {
   },
 
   twilio: {
-    accountSid: process.env.TWILIO_ACCOUNT_SID || '',
-    authToken: process.env.TWILIO_AUTH_TOKEN || '',
-    messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID || '',
+    accountSid: env.TWILIO_ACCOUNT_SID,
+    authToken: env.TWILIO_AUTH_TOKEN,
+    messagingServiceSid: env.TWILIO_MESSAGING_SERVICE_SID,
   },
 
-  webhookBaseUrl: process.env.WEBHOOK_BASE_URL || 'http://localhost:3001',
+  webhookBaseUrl: env.WEBHOOK_BASE_URL,
 
   sms: {
-    maxDailyPerNumber: parseInt(process.env.MAX_DAILY_MESSAGES_PER_NUMBER || '350', 10),
-    maxPerMinute: parseInt(process.env.MAX_MESSAGES_PER_MINUTE || '300', 10),
-    rampUpEnabled: process.env.RAMP_UP_ENABLED === 'true',
+    maxDailyPerNumber: env.MAX_DAILY_MESSAGES_PER_NUMBER,
+    maxPerMinute: env.MAX_MESSAGES_PER_MINUTE,
+    rampUpEnabled: env.RAMP_UP_ENABLED === 'true',
     rampSchedule: [
       parseInt(process.env.RAMP_DAY_1_LIMIT || '50', 10),
       parseInt(process.env.RAMP_DAY_2_LIMIT || '100', 10),
@@ -48,30 +50,30 @@ export const config = {
       parseInt(process.env.RAMP_DAY_7_LIMIT || '350', 10),
     ],
     // Anti-blocking features
-    jitterPercent: parseInt(process.env.SMS_JITTER_PERCENT || '40', 10), // ±40% delay randomization
-    spintaxEnabled: process.env.SPINTAX_ENABLED !== 'false', // enabled by default
-    circuitBreakerThreshold: parseInt(process.env.CIRCUIT_BREAKER_THRESHOLD || '30', 10), // pause campaign if >30% fail in last 50 msgs
-    deliveryRateThrottleAt: parseInt(process.env.DELIVERY_RATE_THROTTLE_AT || '80', 10), // slow down number if delivery rate < 80%
-    timeDistributionEnabled: process.env.TIME_DISTRIBUTION_ENABLED !== 'false', // spread across business hours
-    businessHoursStart: parseInt(process.env.BUSINESS_HOURS_START || '9', 10),
-    businessHoursEnd: parseInt(process.env.BUSINESS_HOURS_END || '18', 10),
+    jitterPercent: env.SMS_JITTER_PERCENT,
+    spintaxEnabled: env.SPINTAX_ENABLED !== 'false',
+    circuitBreakerThreshold: env.CIRCUIT_BREAKER_THRESHOLD,
+    deliveryRateThrottleAt: env.DELIVERY_RATE_THROTTLE_AT,
+    timeDistributionEnabled: env.TIME_DISTRIBUTION_ENABLED !== 'false',
+    businessHoursStart: env.BUSINESS_HOURS_START,
+    businessHoursEnd: env.BUSINESS_HOURS_END,
   },
 
   compliance: {
-    quietHoursStart: parseInt(process.env.COMPLIANCE_QUIET_HOURS_START || '20', 10),
-    quietHoursEnd: parseInt(process.env.COMPLIANCE_QUIET_HOURS_END || '9', 10),
-    timezone: process.env.COMPLIANCE_TIMEZONE || 'America/New_York',
-    supportPhone: process.env.SUPPORT_PHONE || '(786) 648-7512',
+    quietHoursStart: env.COMPLIANCE_QUIET_HOURS_START,
+    quietHoursEnd: env.COMPLIANCE_QUIET_HOURS_END,
+    timezone: env.COMPLIANCE_TIMEZONE,
+    supportPhone: env.SUPPORT_PHONE,
   },
 
   admin: {
-    email: process.env.ADMIN_EMAIL || 'admin@securecreditlines.com',
-    password: process.env.ADMIN_PASSWORD || 'admin123',
-    firstName: process.env.ADMIN_FIRST_NAME || 'Admin',
-    lastName: process.env.ADMIN_LAST_NAME || 'SCL',
+    email: env.ADMIN_EMAIL,
+    password: env.ADMIN_PASSWORD,
+    firstName: env.ADMIN_FIRST_NAME,
+    lastName: env.ADMIN_LAST_NAME,
   },
 
   logging: {
-    level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+    level: env.LOG_LEVEL || (env.NODE_ENV === 'production' ? 'info' : 'debug'),
   },
 };

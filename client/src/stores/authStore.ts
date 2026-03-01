@@ -97,6 +97,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           localStorage.removeItem('scl_token');
           localStorage.removeItem('scl_refresh_token');
           localStorage.removeItem('scl_user');
+          set({ user: null, token: null, isAuthenticated: false, isLoading: false, initialized: true });
         }
       }
     } else {

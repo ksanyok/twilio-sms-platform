@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { Conversation, Message } from '../types';
+import { useDebounce } from '../hooks/useDebounce';
+import { SmsCounter } from '../components/SmsCounter';
 import {
   Search,
   Send,
@@ -33,6 +35,7 @@ import { io, Socket } from 'socket.io-client';
 export default function InboxPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [inboxPage, setInboxPage] = useState(1);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; conv: Conversation } | null>(null);
@@ -76,12 +79,12 @@ export default function InboxPage() {
   }, [queryClient]);
 
   const { data: conversationsData, isLoading } = useQuery({
-    queryKey: ['conversations', search, showUnreadOnly, inboxPage],
+    queryKey: ['conversations', debouncedSearch, showUnreadOnly, inboxPage],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set('page', inboxPage.toString());
       params.set('limit', '50');
-      if (search) params.set('search', search);
+      if (debouncedSearch) params.set('search', debouncedSearch);
       if (showUnreadOnly) params.set('unreadOnly', 'true');
       const { data } = await api.get(`/inbox?${params}`);
       return data;
@@ -557,7 +560,11 @@ function MessageThread({ conversationId, wsConnected }: { conversationId: string
                 }
               }}
               rows={1}
+              aria-label="Reply message"
             />
+            {replyText.length > 0 && (
+              <SmsCounter text={replyText} className="absolute -top-5 right-14" />
+            )}
             <button
               type="submit"
               disabled={!replyText.trim() || sendMutation.isPending}

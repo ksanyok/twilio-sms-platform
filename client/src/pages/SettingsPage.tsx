@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import {
   Settings,
   Tag,
@@ -253,7 +254,11 @@ function TagsTab() {
                     <Edit3 className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => deleteMutation.mutate(tag.id)}
+                    onClick={() => {
+                      if (window.confirm(`Delete tag "${tag.name}"? This will remove it from all leads.`)) {
+                        deleteMutation.mutate(tag.id);
+                      }
+                    }}
                     className="btn-ghost p-1 text-dark-500 hover:text-red-400"
                   >
                     <Trash2 className="w-4 h-4" />
