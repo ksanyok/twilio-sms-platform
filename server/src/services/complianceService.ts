@@ -105,7 +105,7 @@ export class ComplianceService {
       return {
         isKeyword: true,
         action: 'help',
-        response: 'Secure Credit Lines. For help, call us at (XXX) XXX-XXXX. Reply STOP to opt out.',
+        response: `Secure Credit Lines. For help, call us at ${config.compliance.supportPhone}. Reply STOP to opt out.`,
       };
     }
 

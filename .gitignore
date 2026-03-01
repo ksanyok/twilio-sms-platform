@@ -5,10 +5,15 @@ node_modules/
 dist/
 build/
 
-# Environment files
+# Environment files (NEVER commit secrets)
 .env
 .env.local
 .env.*.local
+.env.production
+
+# SSL certificates
+ssl/
+certbot/
 
 # Logs
 *.log
@@ -23,9 +28,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
-
-# Package manager locks (опционально — можно убрать если нужен lock)
-# package-lock.json
 
 # Docker volumes
 postgres_data/

@@ -31,9 +31,26 @@ import redis from './config/redis';
 
 const app = express();
 
+// Trust proxy (required behind nginx/load balancer for correct req.ip & rate limiting)
+if (config.env === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Security
 app.use(helmet({
-  contentSecurityPolicy: false, // Disabled for dev
+  contentSecurityPolicy: config.env === 'production' ? {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      connectSrc: ["'self'", 'wss:', 'ws:'],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+    },
+  } : false,
+  crossOriginEmbedderPolicy: config.env === 'production',
 }));
 
 // CORS

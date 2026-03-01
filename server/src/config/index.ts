@@ -53,6 +53,7 @@ export const config = {
     quietHoursStart: parseInt(process.env.COMPLIANCE_QUIET_HOURS_START || '20', 10),
     quietHoursEnd: parseInt(process.env.COMPLIANCE_QUIET_HOURS_END || '9', 10),
     timezone: process.env.COMPLIANCE_TIMEZONE || 'America/New_York',
+    supportPhone: process.env.SUPPORT_PHONE || '(786) 648-7512',
   },
 
   admin: {
@@ -63,6 +64,6 @@ export const config = {
   },
 
   logging: {
-    level: process.env.LOG_LEVEL || 'debug',
+    level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
   },
 };
