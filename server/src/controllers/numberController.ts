@@ -3,11 +3,10 @@ import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { NumberService } from '../services/numberService';
-import getTwilioClient, { getActiveTwilioClient } from '../config/twilio';
+import getTwilioClient from '../config/twilio';
 import logger from '../config/logger';
 
 export class NumberController {
-
   static async list(req: AuthRequest, res: Response): Promise<void> {
     const health = await NumberService.getNumberHealthOverview();
     res.json(health);
@@ -179,7 +178,9 @@ export class NumberController {
   }
 
   /**
-   * Sync phone numbers from Twilio account
+   * Full sync phone numbers from Twilio account.
+   * Creates new, updates existing (capabilities, messagingServiceSid, friendlyName),
+   * marks numbers removed from Twilio as DISABLED.
    */
   static async syncFromTwilio(req: AuthRequest, res: Response): Promise<void> {
     const client = getTwilioClient();
@@ -189,39 +190,57 @@ export class NumberController {
 
     const twilioNumbers = await client.incomingPhoneNumbers.list({ limit: 500 });
     let created = 0;
-    let skipped = 0;
+    let updated = 0;
+
+    const twilioSids = new Set<string>();
 
     for (const tn of twilioNumbers) {
-      const exists = await prisma.phoneNumber.findUnique({
+      twilioSids.add(tn.sid);
+
+      const updatePayload = {
+        friendlyName: tn.friendlyName || tn.phoneNumber,
+        smsCapable: tn.capabilities?.sms ?? true,
+        mmsCapable: tn.capabilities?.mms ?? false,
+        voiceCapable: tn.capabilities?.voice ?? false,
+      };
+
+      // Check by SID first
+      const existsBySid = await prisma.phoneNumber.findUnique({
         where: { twilioSid: tn.sid },
       });
 
-      if (exists) {
-        skipped++;
+      if (existsBySid) {
+        // Always update capabilities and metadata on sync
+        await prisma.phoneNumber.update({
+          where: { id: existsBySid.id },
+          data: updatePayload,
+        });
+        updated++;
         continue;
       }
 
-      // Also check by phone number
+      // Check by phone number
       const existsByPhone = await prisma.phoneNumber.findUnique({
         where: { phoneNumber: tn.phoneNumber },
       });
       if (existsByPhone) {
-        // Update twilioSid if missing
-        if (existsByPhone.twilioSid.startsWith('manual_')) {
-          await prisma.phoneNumber.update({
-            where: { id: existsByPhone.id },
-            data: { twilioSid: tn.sid, friendlyName: tn.friendlyName || existsByPhone.friendlyName },
-          });
-        }
-        skipped++;
+        await prisma.phoneNumber.update({
+          where: { id: existsByPhone.id },
+          data: { twilioSid: tn.sid, ...updatePayload },
+        });
+        updated++;
         continue;
       }
 
+      // Create new number
       await prisma.phoneNumber.create({
         data: {
           phoneNumber: tn.phoneNumber,
           twilioSid: tn.sid,
           friendlyName: tn.friendlyName || tn.phoneNumber,
+          smsCapable: tn.capabilities?.sms ?? true,
+          mmsCapable: tn.capabilities?.mms ?? false,
+          voiceCapable: tn.capabilities?.voice ?? false,
           dailyLimit: 200,
           isRamping: true,
           rampDay: 1,
@@ -232,9 +251,31 @@ export class NumberController {
       created++;
     }
 
+    // Mark numbers that no longer exist in Twilio as RETIRED
+    let retired = 0;
+    const dbNumbers = await prisma.phoneNumber.findMany({
+      where: { status: { not: 'RETIRED' } },
+      select: { id: true, twilioSid: true },
+    });
+    for (const dbNum of dbNumbers) {
+      if (!dbNum.twilioSid.startsWith('manual_') && !twilioSids.has(dbNum.twilioSid)) {
+        await prisma.phoneNumber.update({
+          where: { id: dbNum.id },
+          data: { status: 'RETIRED' },
+        });
+        retired++;
+      }
+    }
+
     await NumberService.invalidateNumbersCache();
-    logger.info('Twilio sync completed', { created, skipped, total: twilioNumbers.length, by: req.user });
-    res.json({ message: `Synced ${created} new numbers. ${skipped} already existed.`, created, skipped });
+    logger.info('Twilio sync completed', { created, updated, retired, total: twilioNumbers.length, by: req.user });
+    res.json({
+      message: `Synced: ${created} new, ${updated} updated, ${retired} retired. Total in Twilio: ${twilioNumbers.length}`,
+      created,
+      updated,
+      retired,
+      twilioTotal: twilioNumbers.length,
+    });
   }
 
   /**

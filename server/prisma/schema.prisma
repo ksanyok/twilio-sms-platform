@@ -67,6 +67,13 @@ model PhoneNumber {
   messagingServiceSid String?
   status              NumberStatus @default(ACTIVE)
   
+  // Twilio capabilities & metadata
+  smsCapable          Boolean      @default(true)
+  mmsCapable          Boolean      @default(false)
+  voiceCapable        Boolean      @default(false)
+  numberType          String?      // local, toll-free, short-code, mobile
+  locality            String?      // City / State
+  
   // Health & Reputation Tracking
   dailySentCount      Int          @default(0)
   dailyLimit          Int          @default(350)

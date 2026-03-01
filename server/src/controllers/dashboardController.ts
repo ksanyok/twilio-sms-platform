@@ -1,14 +1,13 @@
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
-import { subDays, subHours, startOfDay, endOfDay } from 'date-fns';
-import getTwilioClient, { getSmsMode, getActiveTwilioClient } from '../config/twilio';
+import { subDays, subHours, startOfDay } from 'date-fns';
+import getTwilioClient, { getSmsMode } from '../config/twilio';
 import redis from '../config/redis';
 import { config } from '../config';
 import logger from '../config/logger';
 
 export class DashboardController {
-
   static async getStats(req: AuthRequest, res: Response): Promise<void> {
     const now = new Date();
     const last24h = subDays(now, 1);
@@ -326,8 +325,8 @@ export class DashboardController {
       };
     };
 
-    const agg24h = aggregate(stats24h.map(s => ({ status: s.status, _count: s._count })));
-    const agg7d = aggregate(stats7d.map(s => ({ status: s.status, _count: s._count })));
+    const agg24h = aggregate(stats24h.map((s) => ({ status: s.status, _count: s._count })));
+    const agg7d = aggregate(stats7d.map((s) => ({ status: s.status, _count: s._count })));
 
     // Number summary
     const numberSummary: Record<string, number> = {};
@@ -337,7 +336,12 @@ export class DashboardController {
 
     // Redis check
     let redisOk = false;
-    try { await redis.ping(); redisOk = true; } catch { /* */ }
+    try {
+      await redis.ping();
+      redisOk = true;
+    } catch {
+      /* */
+    }
 
     res.json({
       smsMode,
@@ -373,11 +377,11 @@ export class DashboardController {
         disabled: numberSummary.DISABLED || 0,
       },
       conversations: totalConversations,
-      errorBreakdown: errorBreakdown.map(e => ({
+      errorBreakdown: errorBreakdown.map((e) => ({
         code: e.errorCode,
         count: e._count,
       })),
-      recentErrors: recentErrors.map(e => ({
+      recentErrors: recentErrors.map((e) => ({
         id: e.id,
         status: e.status,
         errorCode: e.errorCode,
@@ -414,7 +418,7 @@ export class DashboardController {
       diagnostics.account = {
         friendlyName: account.friendlyName,
         status: account.status, // active, suspended, closed
-        type: account.type,     // Full, Trial
+        type: account.type, // Full, Trial
         dateCreated: account.dateCreated,
         ownerAccountSid: account.ownerAccountSid,
       };
@@ -436,7 +440,7 @@ export class DashboardController {
     // ── 2) Phone Numbers ──
     try {
       const numbers = await client.incomingPhoneNumbers.list({ limit: 100 });
-      diagnostics.phoneNumbers = numbers.map(n => ({
+      diagnostics.phoneNumbers = numbers.map((n) => ({
         sid: n.sid,
         phoneNumber: n.phoneNumber,
         friendlyName: n.friendlyName,
@@ -454,7 +458,7 @@ export class DashboardController {
     // ── 3) Messaging Services ──
     try {
       const services = await client.messaging.v1.services.list({ limit: 20 });
-      diagnostics.messagingServices = services.map(s => ({
+      diagnostics.messagingServices = services.map((s) => ({
         sid: s.sid,
         friendlyName: s.friendlyName,
         inboundRequestUrl: s.inboundRequestUrl,
@@ -473,15 +477,15 @@ export class DashboardController {
     // ── 4) A2P 10DLC Brand Registrations ──
     try {
       const brands = await client.messaging.v1.brandRegistrations.list({ limit: 20 });
-      diagnostics.a2pBrands = brands.map(b => ({
+      diagnostics.a2pBrands = brands.map((b) => ({
         sid: b.sid,
-        // @ts-ignore — Twilio SDK types lag behind API
+        // @ts-expect-error — Twilio SDK types lag behind API
         brandName: b.customerProfileBundleSid,
         status: (b as any).brandRegistrationStatus || (b as any).status,
         brandType: b.brandType,
         dateCreated: b.dateCreated,
         dateUpdated: b.dateUpdated,
-        // @ts-ignore
+        // @ts-expect-error — Twilio SDK types incomplete for failureReason
         failureReason: b.failureReason || null,
       }));
     } catch (err: any) {
@@ -495,10 +499,7 @@ export class DashboardController {
         const campaigns: any[] = [];
         for (const svc of diagnostics.messagingServices) {
           try {
-            const usAppToPersonList = await client.messaging.v1
-              .services(svc.sid)
-              .usAppToPerson
-              .list({ limit: 10 });
+            const usAppToPersonList = await client.messaging.v1.services(svc.sid).usAppToPerson.list({ limit: 10 });
             for (const c of usAppToPersonList) {
               campaigns.push({
                 sid: c.sid,
@@ -511,7 +512,9 @@ export class DashboardController {
                 dateUpdated: c.dateUpdated,
               });
             }
-          } catch { /* service may not have A2P campaigns */ }
+          } catch {
+            /* service may not have A2P campaigns */
+          }
         }
         diagnostics.a2pCampaigns = campaigns;
       }
@@ -527,7 +530,7 @@ export class DashboardController {
         endDate: new Date(),
         limit: 5,
       });
-      diagnostics.usage = usage.map(u => ({
+      diagnostics.usage = usage.map((u) => ({
         category: u.category,
         description: u.description,
         count: u.count,
@@ -578,9 +581,7 @@ export class DashboardController {
         sent: sentToday,
         failed: failedToday,
         total: sentToday + failedToday,
-        failureRate: (sentToday + failedToday) > 0
-          ? +(failedToday / (sentToday + failedToday) * 100).toFixed(2)
-          : 0,
+        failureRate: sentToday + failedToday > 0 ? +((failedToday / (sentToday + failedToday)) * 100).toFixed(2) : 0,
       };
     } catch (err: any) {
       diagnostics.todayVolume = { error: err.message };
@@ -589,7 +590,7 @@ export class DashboardController {
     // ── 9) Regulatory Compliance Bundles ──
     try {
       const bundles = await client.numbers.v2.regulatoryCompliance.bundles.list({ limit: 10 });
-      diagnostics.complianceBundles = bundles.map(b => ({
+      diagnostics.complianceBundles = bundles.map((b) => ({
         sid: b.sid,
         friendlyName: b.friendlyName,
         status: b.status,
@@ -602,6 +603,78 @@ export class DashboardController {
     }
 
     logger.info('Twilio diagnostics fetched', { by: req.user?.email });
+
+    // ── 10) Trust Hub Customer Profiles ──
+    try {
+      const profiles = await (client as any).trusthub.v1.customerProfiles.list({ limit: 10 });
+      diagnostics.trustHubProfiles = profiles.map((p: any) => ({
+        sid: p.sid,
+        friendlyName: p.friendlyName,
+        status: p.status,
+        statusCallback: p.statusCallback,
+        policySid: p.policySid,
+        dateCreated: p.dateCreated,
+        dateUpdated: p.dateUpdated,
+      }));
+    } catch (err: any) {
+      diagnostics.trustHubProfiles = { error: err.message };
+    }
+
+    // ── 11) Sub-accounts (if main account) ──
+    try {
+      const subAccounts = await client.api.accounts.list({ limit: 20 });
+      diagnostics.subAccounts = subAccounts
+        .filter((a: any) => a.sid !== config.twilio.accountSid)
+        .map((a: any) => ({
+          sid: a.sid,
+          friendlyName: a.friendlyName,
+          status: a.status,
+          type: a.type,
+          dateCreated: a.dateCreated,
+        }));
+    } catch (err: any) {
+      diagnostics.subAccounts = { error: err.message };
+    }
+
+    // ── 12) Usage by category (sms, sms-inbound, phone numbers) ──
+    try {
+      const allUsage = await client.usage.records.list({
+        startDate: subDays(new Date(), 30),
+        endDate: new Date(),
+        limit: 30,
+      });
+      diagnostics.usageByCategory = allUsage
+        .filter((u: any) => parseFloat(u.price || '0') !== 0 || parseInt(u.count || '0', 10) > 0)
+        .map((u: any) => ({
+          category: u.category,
+          description: u.description,
+          count: u.count,
+          price: u.price,
+          priceUnit: u.priceUnit,
+        }));
+    } catch (err: any) {
+      diagnostics.usageByCategory = { error: err.message };
+    }
+
+    // ── 13) Message statistics from Twilio (last 24h) ──
+    try {
+      const recentMessages = await client.messages.list({
+        dateSentAfter: subDays(new Date(), 1),
+        limit: 20,
+      });
+      const statusMap: Record<string, number> = {};
+      for (const m of recentMessages) {
+        const s = m.status;
+        statusMap[s] = (statusMap[s] || 0) + 1;
+      }
+      diagnostics.twilioMessageStats24h = {
+        sample: recentMessages.length,
+        statuses: statusMap,
+      };
+    } catch (err: any) {
+      diagnostics.twilioMessageStats24h = { error: err.message };
+    }
+
     res.json(diagnostics);
   }
 }
