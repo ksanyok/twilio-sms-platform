@@ -81,6 +81,8 @@ export class CampaignController {
       leadIds,
       filterTags,
       filterStatus,
+      filterSource,
+      filterState,
     } = req.body;
 
     if (!name || !messageTemplate) {
@@ -118,6 +120,12 @@ export class CampaignController {
       }
       if (filterStatus && filterStatus.length > 0) {
         leadQuery.status = { in: filterStatus };
+      }
+      if (filterSource) {
+        leadQuery.source = filterSource;
+      }
+      if (filterState) {
+        leadQuery.state = filterState;
       }
     }
 

@@ -379,18 +379,20 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
     sendingSpeed: 60,
     scheduledAt: '',
   });
-  const [leadFilter, setLeadFilter] = useState({ status: '', search: '' });
+  const [leadFilter, setLeadFilter] = useState({ status: '', search: '', source: '', state: '' });
   const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(new Set());
   const [selectAll, setSelectAll] = useState(false);
 
   // Load available leads for selection
   const { data: leadsData } = useQuery({
-    queryKey: ['campaign-leads', leadFilter.status, leadFilter.search],
+    queryKey: ['campaign-leads', leadFilter.status, leadFilter.search, leadFilter.source, leadFilter.state],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set('limit', '200');
       if (leadFilter.status) params.set('status', leadFilter.status);
       if (leadFilter.search) params.set('search', leadFilter.search);
+      if (leadFilter.source) params.set('source', leadFilter.source);
+      if (leadFilter.state) params.set('state', leadFilter.state);
       const { data } = await api.get(`/leads?${params}`);
       return data;
     },
@@ -416,6 +418,8 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
       createMutation.mutate({
         ...formData,
         filterStatus: leadFilter.status ? [leadFilter.status] : undefined,
+        filterSource: leadFilter.source || undefined,
+        filterState: leadFilter.state || undefined,
       });
     } else {
       createMutation.mutate({
@@ -487,10 +491,10 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
             </label>
             <div className="bg-dark-800/50 rounded-lg border border-dark-700/50 p-3 space-y-3">
               {/* Lead filters */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="text"
-                  className="input py-1.5 text-sm flex-1"
+                  className="input py-1.5 text-sm flex-1 min-w-[140px]"
                   placeholder="Search leads..."
                   value={leadFilter.search}
                   onChange={(e) => setLeadFilter(f => ({ ...f, search: e.target.value }))}
@@ -511,6 +515,20 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
                   <option value="NOT_INTERESTED">NOT_INTERESTED</option>
                   <option value="DNC">DNC</option>
                 </select>
+                <input
+                  type="text"
+                  className="input py-1.5 text-sm w-[120px]"
+                  placeholder="Source..."
+                  value={leadFilter.source}
+                  onChange={(e) => setLeadFilter(f => ({ ...f, source: e.target.value }))}
+                />
+                <input
+                  type="text"
+                  className="input py-1.5 text-sm w-[80px]"
+                  placeholder="State..."
+                  value={leadFilter.state}
+                  onChange={(e) => setLeadFilter(f => ({ ...f, state: e.target.value }))}
+                />
               </div>
               {/* Select all toggle */}
               <div className="flex items-center gap-3">

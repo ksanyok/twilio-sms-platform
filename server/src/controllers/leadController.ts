@@ -46,6 +46,14 @@ export class LeadController {
       where.assignedRepId = assignedRepId;
     }
 
+    if (req.query.source) {
+      where.source = { contains: req.query.source as string, mode: 'insensitive' };
+    }
+
+    if (req.query.state) {
+      where.state = { contains: req.query.state as string, mode: 'insensitive' };
+    }
+
     // Rep can only see their leads
     if (req.user?.role === 'REP') {
       where.assignedRepId = req.user.id;
