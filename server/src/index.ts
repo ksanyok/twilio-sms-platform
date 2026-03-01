@@ -1,3 +1,10 @@
+import 'dotenv/config';
+
+// Fix BigInt serialization for JSON.stringify (Prisma raw queries return BigInt)
+(BigInt.prototype as any).toJSON = function () {
+  return Number(this);
+};
+
 import app from './app';
 import { config } from './config';
 import logger from './config/logger';

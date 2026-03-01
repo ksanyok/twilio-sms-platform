@@ -9,8 +9,8 @@
     "build:server": "cd server && npm run build",
     "build:client": "cd client && npm run build",
     "build": "npm run build:server && npm run build:client",
-    "lint": "eslint . --ext .ts,.tsx --ignore-path .gitignore",
-    "lint:fix": "eslint . --ext .ts,.tsx --ignore-path .gitignore --fix",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,json,md}\"",
     "prepare": "husky"

@@ -118,6 +118,15 @@ export class DashboardController {
 
     const replyRate = sentLast7d > 0 ? ((repliesLast7d / sentLast7d) * 100).toFixed(1) : '0';
 
+    // Convert BigInt values from raw SQL to Number
+    const safeDailyVolume = (dailyVolume as any[]).map((row: any) => ({
+      date: row.date,
+      sent: Number(row.sent || 0),
+      delivered: Number(row.delivered || 0),
+      failed: Number(row.failed || 0),
+      blocked: Number(row.blocked || 0),
+    }));
+
     res.json({
       overview: {
         sentLast24h,
@@ -137,7 +146,7 @@ export class DashboardController {
         status: g.status,
         count: g._count,
       })),
-      dailyVolume,
+      dailyVolume: safeDailyVolume,
     });
   }
 
