@@ -479,14 +479,12 @@ export class DashboardController {
       const brands = await client.messaging.v1.brandRegistrations.list({ limit: 20 });
       diagnostics.a2pBrands = brands.map((b) => ({
         sid: b.sid,
-        // @ts-expect-error — Twilio SDK types lag behind API
         brandName: b.customerProfileBundleSid,
         status: (b as any).brandRegistrationStatus || (b as any).status,
         brandType: b.brandType,
         dateCreated: b.dateCreated,
         dateUpdated: b.dateUpdated,
-        // @ts-expect-error — Twilio SDK types incomplete for failureReason
-        failureReason: b.failureReason || null,
+        failureReason: (b as any).failureReason || null,
       }));
     } catch (err: any) {
       diagnostics.a2pBrands = { error: err.message };
