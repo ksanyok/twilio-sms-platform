@@ -20,6 +20,7 @@ import numberRoutes from './routes/numbers';
 import automationRoutes from './routes/automation';
 import settingsRoutes from './routes/settings';
 import aiRoutes from './routes/ai';
+import analyticsRoutes from './routes/analytics';
 
 // Webhooks
 import twilioWebhooks from './webhooks/twilioWebhooks';
@@ -97,6 +98,7 @@ app.use('/api/numbers', numberRoutes);
 app.use('/api/automation', automationRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Twilio Webhooks (no auth required - validated by Twilio signature)
 app.use('/api/webhooks/twilio', twilioWebhooks);

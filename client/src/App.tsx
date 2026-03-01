@@ -17,6 +17,7 @@ const PipelinePage = lazy(() => import('./pages/PipelinePage'));
 const LeadsPage = lazy(() => import('./pages/LeadsPage'));
 const NumbersPage = lazy(() => import('./pages/NumbersPage'));
 const AutomationPage = lazy(() => import('./pages/AutomationPage'));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
@@ -90,6 +91,7 @@ export default function App() {
                         <Route path="leads" element={<LeadsPage />} />
                         <Route path="numbers" element={<NumbersPage />} />
                         <Route path="automation" element={<AutomationPage />} />
+                        <Route path="analytics" element={<AnalyticsPage />} />
                         <Route path="settings" element={<SettingsPage />} />
                         <Route path="*" element={<NotFoundPage />} />
                       </Routes>

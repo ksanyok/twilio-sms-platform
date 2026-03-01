@@ -599,4 +599,65 @@ export class LeadController {
 
     res.json({ message: 'Lead deleted successfully' });
   }
+
+  /**
+   * GET /leads/export — Export leads as CSV
+   */
+  static async exportCSV(req: AuthRequest, res: Response): Promise<void> {
+    const { status, tags, assignedRepId, search } = req.query;
+
+    const where: any = {};
+
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search as string, mode: 'insensitive' } },
+        { lastName: { contains: search as string, mode: 'insensitive' } },
+        { phone: { contains: search as string } },
+        { email: { contains: search as string, mode: 'insensitive' } },
+      ];
+    }
+    if (status) where.status = { in: (status as string).split(',') };
+    if (tags) where.tags = { some: { tagId: { in: (tags as string).split(',') } } };
+    if (assignedRepId) where.assignedRepId = assignedRepId;
+    if (req.user?.role === 'REP') where.assignedRepId = req.user.id;
+
+    const leads = await prisma.lead.findMany({
+      where,
+      include: {
+        tags: { include: { tag: true } },
+        assignedRep: { select: { firstName: true, lastName: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Build CSV
+    const headers = ['First Name', 'Last Name', 'Phone', 'Email', 'Company', 'State', 'Status', 'Source', 'Tags', 'Assigned Rep', 'Created At', 'Last Contacted'];
+    const rows = leads.map(l => [
+      l.firstName,
+      l.lastName || '',
+      l.phone,
+      l.email || '',
+      l.company || '',
+      l.state || '',
+      l.status,
+      l.source || '',
+      l.tags.map(t => t.tag.name).join('; '),
+      l.assignedRep ? `${l.assignedRep.firstName} ${l.assignedRep.lastName}` : '',
+      l.createdAt.toISOString(),
+      l.lastContactedAt?.toISOString() || '',
+    ]);
+
+    const escapeCSV = (val: string) => {
+      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+        return `"${val.replace(/"/g, '""')}"`;
+      }
+      return val;
+    };
+
+    const csv = [headers.join(','), ...rows.map(r => r.map(escapeCSV).join(','))].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=leads-export-${new Date().toISOString().split('T')[0]}.csv`);
+    res.send(csv);
+  }
 }

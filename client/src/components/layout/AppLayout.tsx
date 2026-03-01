@@ -19,6 +19,7 @@ import {
   Radio,
   FlaskConical,
   Zap,
+  BarChart3,
 } from 'lucide-react';
 import { useState } from 'react';
 import { clsx } from 'clsx';
@@ -32,6 +33,7 @@ const navigation = [
   { name: 'Leads', href: '/leads', icon: Users },
   { name: 'Numbers', href: '/numbers', icon: Phone, roles: ['ADMIN', 'MANAGER'] },
   { name: 'Automation', href: '/automation', icon: Bot },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'] },
 ];
 

@@ -10,6 +10,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 router.use(authenticate);
 
 router.get('/', asyncHandler(LeadController.list));
+router.get('/export', asyncHandler(LeadController.exportCSV));
 router.post('/', asyncHandler(LeadController.create));
 router.post('/import', requireRole('ADMIN', 'MANAGER'), upload.single('file'), asyncHandler(LeadController.importCSV));
 router.post('/preview', requireRole('ADMIN', 'MANAGER'), upload.single('file'), asyncHandler(LeadController.previewCSV));
