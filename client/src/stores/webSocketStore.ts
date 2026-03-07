@@ -19,6 +19,11 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
   connected: false,
 
   connect: (token: string) => {
+    // Disable WebSocket on shared hosting — PHP proxy can't handle socket.io polling
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return;
+    }
+
     const existing = get().socket;
     if (existing?.connected) return; // Already connected
 
