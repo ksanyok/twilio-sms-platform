@@ -30,14 +30,15 @@ import ThemeToggle from '../ThemeToggle';
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Campaigns', href: '/campaigns', icon: Send },
-  { name: 'Inbox', href: '/inbox', icon: MessageSquare },
-  { name: 'Pipeline', href: '/pipeline', icon: Kanban },
-  { name: 'Leads', href: '/leads', icon: Users },
-  { name: 'Numbers', href: '/numbers', icon: Phone, roles: ['ADMIN', 'MANAGER'] },
-  { name: 'Automation', href: '/automation', icon: Bot },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'Twilio', href: '/twilio', icon: Radio, roles: ['ADMIN'] },
-  { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'] },
+  // Temporarily disabled for demo
+  // { name: 'Inbox', href: '/inbox', icon: MessageSquare },
+  // { name: 'Pipeline', href: '/pipeline', icon: Kanban },
+  // { name: 'Leads', href: '/leads', icon: Users },
+  // { name: 'Numbers', href: '/numbers', icon: Phone, roles: ['ADMIN', 'MANAGER'] },
+  // { name: 'Automation', href: '/automation', icon: Bot },
+  // { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  // { name: 'Twilio', href: '/twilio', icon: Radio, roles: ['ADMIN'] },
+  // { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'] },
 ];
 
 const SMS_MODE_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string; icon: any }> = {
@@ -134,7 +135,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
     navigate('/login');
   };
 
-  const filteredNav = navigation.filter((item) => !item.roles || (user && item.roles.includes(user.role)));
+  const filteredNav = navigation.filter((item) => !('roles' in item) || (user && (item as any).roles.includes(user.role)));
 
   // Command palette filtered items
   const commandItems = filteredNav.filter((item) => item.name.toLowerCase().includes(commandQuery.toLowerCase()));
