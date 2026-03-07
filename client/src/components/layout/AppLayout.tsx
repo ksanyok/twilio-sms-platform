@@ -37,7 +37,7 @@ const navigation = [
   { name: 'Automation', href: '/automation', icon: Bot, disabled: true },
   { name: 'Analytics', href: '/analytics', icon: BarChart3, disabled: true },
   { name: 'Twilio', href: '/twilio', icon: Radio, roles: ['ADMIN'], disabled: true },
-  { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'], disabled: true },
+  { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'] },
 ];
 
 const SMS_MODE_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string; icon: any }> = {
