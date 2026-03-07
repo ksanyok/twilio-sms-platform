@@ -103,15 +103,15 @@ export class DashboardController {
     // Daily send volume (last 7 days)
     const dailyVolume = await prisma.$queryRaw`
       SELECT 
-        DATE("createdAt") as date,
-        COUNT(*) FILTER (WHERE status IN ('SENT', 'DELIVERED')) as sent,
-        COUNT(*) FILTER (WHERE status = 'DELIVERED') as delivered,
-        COUNT(*) FILTER (WHERE status = 'FAILED') as failed,
-        COUNT(*) FILTER (WHERE status = 'BLOCKED') as blocked
+        DATE(createdAt) as date,
+        SUM(CASE WHEN status IN ('SENT', 'DELIVERED') THEN 1 ELSE 0 END) as sent,
+        SUM(CASE WHEN status = 'DELIVERED' THEN 1 ELSE 0 END) as delivered,
+        SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN status = 'BLOCKED' THEN 1 ELSE 0 END) as blocked
       FROM messages 
       WHERE direction = 'OUTBOUND' 
-        AND "createdAt" >= ${last7d}
-      GROUP BY DATE("createdAt")
+        AND createdAt >= ${last7d}
+      GROUP BY DATE(createdAt)
       ORDER BY date ASC
     `;
 

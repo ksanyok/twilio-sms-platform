@@ -101,10 +101,10 @@ export class AnalyticsController {
     // Lead creation over time (last 30 days)
     const last30d = subDays(new Date(), 30);
     const leadTimeline = await prisma.$queryRaw`
-      SELECT DATE("createdAt") as date, COUNT(*)::int as count
+      SELECT DATE(createdAt) as date, CAST(COUNT(*) AS SIGNED) as count
       FROM leads
-      WHERE "createdAt" >= ${last30d}
-      GROUP BY DATE("createdAt")
+      WHERE createdAt >= ${last30d}
+      GROUP BY DATE(createdAt)
       ORDER BY date ASC
     ` as Array<{ date: Date; count: number }>;
 
@@ -141,25 +141,25 @@ export class AnalyticsController {
     // Daily volume
     const dailyVolume = await prisma.$queryRaw`
       SELECT 
-        DATE("createdAt") as date,
-        COUNT(*) FILTER (WHERE direction = 'OUTBOUND')::int as outbound,
-        COUNT(*) FILTER (WHERE direction = 'INBOUND')::int as inbound,
-        COUNT(*) FILTER (WHERE direction = 'OUTBOUND' AND status = 'DELIVERED')::int as delivered,
-        COUNT(*) FILTER (WHERE direction = 'OUTBOUND' AND status IN ('FAILED', 'BLOCKED'))::int as failed
+        DATE(createdAt) as date,
+        CAST(SUM(CASE WHEN direction = 'OUTBOUND' THEN 1 ELSE 0 END) AS SIGNED) as outbound,
+        CAST(SUM(CASE WHEN direction = 'INBOUND' THEN 1 ELSE 0 END) AS SIGNED) as inbound,
+        CAST(SUM(CASE WHEN direction = 'OUTBOUND' AND status = 'DELIVERED' THEN 1 ELSE 0 END) AS SIGNED) as delivered,
+        CAST(SUM(CASE WHEN direction = 'OUTBOUND' AND status IN ('FAILED', 'BLOCKED') THEN 1 ELSE 0 END) AS SIGNED) as failed
       FROM messages
-      WHERE "createdAt" >= ${since}
-      GROUP BY DATE("createdAt")
+      WHERE createdAt >= ${since}
+      GROUP BY DATE(createdAt)
       ORDER BY date ASC
     ` as Array<{ date: Date; outbound: number; inbound: number; delivered: number; failed: number }>;
 
     // Hourly distribution (all time)
     const hourlyPattern = await prisma.$queryRaw`
       SELECT 
-        EXTRACT(HOUR FROM "createdAt")::int as hour,
-        COUNT(*) FILTER (WHERE direction = 'OUTBOUND')::int as outbound,
-        COUNT(*) FILTER (WHERE direction = 'INBOUND')::int as inbound
+        HOUR(createdAt) as hour,
+        CAST(SUM(CASE WHEN direction = 'OUTBOUND' THEN 1 ELSE 0 END) AS SIGNED) as outbound,
+        CAST(SUM(CASE WHEN direction = 'INBOUND' THEN 1 ELSE 0 END) AS SIGNED) as inbound
       FROM messages
-      WHERE "createdAt" >= ${since}
+      WHERE createdAt >= ${since}
       GROUP BY hour
       ORDER BY hour
     ` as Array<{ hour: number; outbound: number; inbound: number }>;
@@ -167,11 +167,11 @@ export class AnalyticsController {
     // Day of week distribution
     const weekdayPattern = await prisma.$queryRaw`
       SELECT 
-        EXTRACT(DOW FROM "createdAt")::int as dow,
-        COUNT(*) FILTER (WHERE direction = 'OUTBOUND')::int as outbound,
-        COUNT(*) FILTER (WHERE direction = 'INBOUND')::int as inbound
+        (DAYOFWEEK(createdAt) - 1) as dow,
+        CAST(SUM(CASE WHEN direction = 'OUTBOUND' THEN 1 ELSE 0 END) AS SIGNED) as outbound,
+        CAST(SUM(CASE WHEN direction = 'INBOUND' THEN 1 ELSE 0 END) AS SIGNED) as inbound
       FROM messages
-      WHERE "createdAt" >= ${since}
+      WHERE createdAt >= ${since}
       GROUP BY dow
       ORDER BY dow
     ` as Array<{ dow: number; outbound: number; inbound: number }>;
@@ -193,27 +193,25 @@ export class AnalyticsController {
 
     // Average response time (time between outbound and inbound in same conversation)
     const avgResponseTime = await prisma.$queryRaw`
-      WITH outbound_msgs AS (
-        SELECT id, "conversationId", "createdAt" as sent_at
-        FROM messages
-        WHERE direction = 'OUTBOUND' AND "createdAt" >= ${since}
-      ),
-      first_reply AS (
-        SELECT DISTINCT ON (om."conversationId")
-          om."conversationId",
-          EXTRACT(EPOCH FROM (im."createdAt" - om.sent_at)) as response_seconds
-        FROM outbound_msgs om
-        JOIN messages im ON im."conversationId" = om."conversationId"
-          AND im.direction = 'INBOUND'
-          AND im."createdAt" > om.sent_at
-        ORDER BY om."conversationId", im."createdAt"
-      )
       SELECT 
-        AVG(response_seconds)::int as avg_seconds,
-        MIN(response_seconds)::int as min_seconds,
-        MAX(response_seconds)::int as max_seconds,
-        COUNT(*)::int as total_replies
-      FROM first_reply
+        CAST(AVG(response_seconds) AS SIGNED) as avg_seconds,
+        CAST(MIN(response_seconds) AS SIGNED) as min_seconds,
+        CAST(MAX(response_seconds) AS SIGNED) as max_seconds,
+        CAST(COUNT(*) AS SIGNED) as total_replies
+      FROM (
+        SELECT 
+          om.conversationId,
+          TIMESTAMPDIFF(SECOND, om.sent_at, im.createdAt) as response_seconds
+        FROM (
+          SELECT id, conversationId, createdAt as sent_at
+          FROM messages
+          WHERE direction = 'OUTBOUND' AND createdAt >= ${since}
+        ) om
+        JOIN messages im ON im.conversationId = om.conversationId
+          AND im.direction = 'INBOUND'
+          AND im.createdAt > om.sent_at
+        GROUP BY om.conversationId
+      ) first_reply
       WHERE response_seconds > 0 AND response_seconds < 86400 * 7
     ` as Array<{ avg_seconds: number | null; min_seconds: number | null; max_seconds: number | null; total_replies: number }>;
 
@@ -383,27 +381,27 @@ export class AnalyticsController {
     // Per-rep message stats (last 30 days)
     const repMessageStats = await prisma.$queryRaw`
       SELECT 
-        m."sentByUserId" as user_id,
-        COUNT(*) FILTER (WHERE m.direction = 'OUTBOUND')::int as sent,
-        COUNT(*) FILTER (WHERE m.status = 'DELIVERED')::int as delivered,
-        COUNT(*) FILTER (WHERE m.status IN ('FAILED', 'BLOCKED'))::int as failed
+        m.sentByUserId as user_id,
+        CAST(SUM(CASE WHEN m.direction = 'OUTBOUND' THEN 1 ELSE 0 END) AS SIGNED) as sent,
+        CAST(SUM(CASE WHEN m.status = 'DELIVERED' THEN 1 ELSE 0 END) AS SIGNED) as delivered,
+        CAST(SUM(CASE WHEN m.status IN ('FAILED', 'BLOCKED') THEN 1 ELSE 0 END) AS SIGNED) as failed
       FROM messages m
-      WHERE m."sentByUserId" IS NOT NULL
-        AND m."createdAt" >= ${last30d}
-      GROUP BY m."sentByUserId"
+      WHERE m.sentByUserId IS NOT NULL
+        AND m.createdAt >= ${last30d}
+      GROUP BY m.sentByUserId
     ` as Array<{ user_id: string; sent: number; delivered: number; failed: number }>;
 
     // Per-rep reply counts
     const repReplies = await prisma.$queryRaw`
       SELECT 
-        c."assignedRepId" as user_id,
-        COUNT(*)::int as replies
+        c.assignedRepId as user_id,
+        CAST(COUNT(*) AS SIGNED) as replies
       FROM messages m
-      JOIN conversations c ON m."conversationId" = c.id
+      JOIN conversations c ON m.conversationId = c.id
       WHERE m.direction = 'INBOUND'
-        AND c."assignedRepId" IS NOT NULL
-        AND m."createdAt" >= ${last30d}
-      GROUP BY c."assignedRepId"
+        AND c.assignedRepId IS NOT NULL
+        AND m.createdAt >= ${last30d}
+      GROUP BY c.assignedRepId
     ` as Array<{ user_id: string; replies: number }>;
 
     const msgMap = new Map(repMessageStats.map(r => [r.user_id, r]));

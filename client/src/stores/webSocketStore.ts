@@ -24,10 +24,10 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
 
     const socket = io(window.location.origin, {
       auth: { token },
-      transports: ['websocket', 'polling'],
+      transports: ['polling'],
       reconnection: true,
-      reconnectionDelay: 2000,
-      reconnectionAttempts: 10,
+      reconnectionDelay: 5000,
+      reconnectionAttempts: 5,
     });
 
     socket.on('connect', () => {

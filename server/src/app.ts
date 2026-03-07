@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
 import { config } from './config';
 import logger from './config/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -130,6 +131,15 @@ app.use('/api/analytics', analyticsRoutes);
 
 // Twilio Webhooks (no auth required - validated by Twilio signature)
 app.use('/api/webhooks/twilio', twilioWebhooks);
+
+// Serve client SPA in production
+if (config.env === 'production') {
+  const clientDist = path.resolve(__dirname, '../../client/dist');
+  app.use(express.static(clientDist, { maxAge: '30d', immutable: true }));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
 
 // Error handling
 app.use(notFoundHandler);

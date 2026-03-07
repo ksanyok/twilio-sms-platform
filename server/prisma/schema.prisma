@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -204,7 +204,7 @@ model Lead {
   
   // Custom fields stored as JSON
   customFields    Json?
-  notes           String?
+  notes           String?    @db.Text
   
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
@@ -308,11 +308,11 @@ model Message {
   
   fromNumber      String
   toNumber        String
-  body            String
+  body            String  @db.Text
   
   // Twilio metadata
   errorCode       String?
-  errorMessage    String?
+  errorMessage    String?  @db.Text
   
   // Tracking
   sentAt          DateTime?
@@ -365,7 +365,7 @@ model Campaign {
   status            CampaignStatus @default(DRAFT)
   
   // Message template
-  messageTemplate   String         // Supports {{firstName}}, {{company}} etc.
+  messageTemplate   String         @db.Text // Supports {{firstName}}, {{company}} etc.
   
   // Scheduling
   scheduledAt       DateTime?
@@ -526,7 +526,7 @@ model AutomationTemplate {
   automationRuleId String
   sequenceOrder    Int            @default(1)  // Order in follow-up sequence
   delayDays        Int            @default(1)  // Days to wait before sending
-  messageTemplate  String                      // Supports variable substitution
+  messageTemplate  String  @db.Text             // Supports variable substitution
   
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -632,7 +632,7 @@ model MessageQueue {
   phoneNumberId String?
   
   toNumber      String
-  messageBody   String
+  messageBody   String  @db.Text
   
   status        QueueItemStatus @default(PENDING)
   priority      Int             @default(0)
@@ -661,6 +661,7 @@ model DailyNumberStats {
   id            String   @id @default(cuid())
   phoneNumberId String
   date          DateTime @db.Date
+
   
   sent          Int      @default(0)
   delivered     Int      @default(0)

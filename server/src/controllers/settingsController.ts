@@ -105,9 +105,9 @@ export class SettingsController {
       throw new AppError('Tag name must be 50 characters or fewer', 400);
     }
 
-    // Check for duplicate tag name
+    // Check for duplicate tag name (MySQL is case-insensitive by default)
     const existing = await prisma.tag.findFirst({
-      where: { name: { equals: name.trim(), mode: 'insensitive' } },
+      where: { name: { equals: name.trim() } },
     });
     if (existing) {
       throw new AppError('A tag with this name already exists', 409);

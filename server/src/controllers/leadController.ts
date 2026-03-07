@@ -24,11 +24,11 @@ export class LeadController {
 
     if (search) {
       where.OR = [
-        { firstName: { contains: search as string, mode: 'insensitive' } },
-        { lastName: { contains: search as string, mode: 'insensitive' } },
+        { firstName: { contains: search as string } },
+        { lastName: { contains: search as string } },
         { phone: { contains: search as string } },
-        { email: { contains: search as string, mode: 'insensitive' } },
-        { company: { contains: search as string, mode: 'insensitive' } },
+        { email: { contains: search as string } },
+        { company: { contains: search as string } },
       ];
     }
 
@@ -47,11 +47,11 @@ export class LeadController {
     }
 
     if (req.query.source) {
-      where.source = { contains: req.query.source as string, mode: 'insensitive' };
+      where.source = { contains: req.query.source as string };
     }
 
     if (req.query.state) {
-      where.state = { contains: req.query.state as string, mode: 'insensitive' };
+      where.state = { contains: req.query.state as string };
     }
 
     // Rep can only see their leads
@@ -613,10 +613,10 @@ export class LeadController {
 
     if (search) {
       where.OR = [
-        { firstName: { contains: search as string, mode: 'insensitive' } },
-        { lastName: { contains: search as string, mode: 'insensitive' } },
+        { firstName: { contains: search as string } },
+        { lastName: { contains: search as string } },
         { phone: { contains: search as string } },
-        { email: { contains: search as string, mode: 'insensitive' } },
+        { email: { contains: search as string } },
       ];
     }
     if (status) where.status = { in: (status as string).split(',') };

@@ -13,7 +13,7 @@ export class CampaignController {
     const where: any = {};
     if (status) where.status = status;
     if (search) {
-      where.name = { contains: search as string, mode: 'insensitive' };
+      where.name = { contains: search as string };
     }
 
     const [campaigns, total] = await Promise.all([
