@@ -134,7 +134,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
     navigate('/login');
   };
 
-  const filteredNav = navigation.filter((item) => !('roles' in item) || (user && (item as any).roles.includes(user.role)));
+  const filteredNav = navigation.filter((item) => !item.disabled && (!('roles' in item) || (user && (item as any).roles.includes(user.role))));
 
   // Command palette filtered items (only enabled items)
   const commandItems = filteredNav.filter((item) => !item.disabled && item.name.toLowerCase().includes(commandQuery.toLowerCase()));
