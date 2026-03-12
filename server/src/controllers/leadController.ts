@@ -5,7 +5,6 @@ import { AppError } from '../middleware/errorHandler';
 import { parse } from 'csv-parse/sync';
 
 export class LeadController {
-
   static async list(req: AuthRequest, res: Response): Promise<void> {
     const {
       page = '1',
@@ -138,9 +137,7 @@ export class LeadController {
 
     // Normalize phone number
     const normalizedPhone = phone.replace(/\D/g, '');
-    const e164Phone = normalizedPhone.startsWith('1')
-      ? `+${normalizedPhone}`
-      : `+1${normalizedPhone}`;
+    const e164Phone = normalizedPhone.startsWith('1') ? `+${normalizedPhone}` : `+1${normalizedPhone}`;
 
     // Check for duplicate
     const existing = await prisma.lead.findUnique({
@@ -291,7 +288,7 @@ export class LeadController {
       // Batch upsert leads using a transaction
       if (leadsToUpsert.length > 0) {
         const results = await prisma.$transaction(
-          leadsToUpsert.map(lead =>
+          leadsToUpsert.map((lead) =>
             prisma.lead.upsert({
               where: { phone: lead.phone },
               create: lead,
@@ -300,18 +297,18 @@ export class LeadController {
                 email: lead.email || undefined,
                 company: lead.company || undefined,
               },
-            })
-          )
+            }),
+          ),
         );
 
         // Create pipeline cards for new leads in batch
-        const newLeads = results.filter(r => r.createdAt.getTime() > Date.now() - 10000);
+        const newLeads = results.filter((r) => r.createdAt.getTime() > Date.now() - 10000);
         imported += newLeads.length;
         duplicates += results.length - newLeads.length;
 
         if (defaultStage && newLeads.length > 0) {
           await prisma.pipelineCard.createMany({
-            data: newLeads.map(lead => ({
+            data: newLeads.map((lead) => ({
               leadId: lead.id,
               stageId: defaultStage.id,
             })),
@@ -462,19 +459,19 @@ export class LeadController {
 
         leadsToUpsert.push({
           phone: e164Phone,
-          firstName: mapping.firstName ? (record[mapping.firstName] || 'Unknown') : 'Unknown',
-          lastName: mapping.lastName ? (record[mapping.lastName] || '') : '',
-          email: mapping.email ? (record[mapping.email] || null) : null,
-          company: mapping.company ? (record[mapping.company] || null) : null,
-          city: mapping.city ? (record[mapping.city] || null) : null,
-          state: mapping.state ? (record[mapping.state] || null) : null,
-          source: mapping.source ? (record[mapping.source] || 'csv_import') : 'csv_import',
+          firstName: mapping.firstName ? record[mapping.firstName] || 'Unknown' : 'Unknown',
+          lastName: mapping.lastName ? record[mapping.lastName] || '' : '',
+          email: mapping.email ? record[mapping.email] || null : null,
+          company: mapping.company ? record[mapping.company] || null : null,
+          city: mapping.city ? record[mapping.city] || null : null,
+          state: mapping.state ? record[mapping.state] || null : null,
+          source: mapping.source ? record[mapping.source] || 'csv_import' : 'csv_import',
         });
       }
 
       if (leadsToUpsert.length > 0) {
         const results = await prisma.$transaction(
-          leadsToUpsert.map(lead =>
+          leadsToUpsert.map((lead) =>
             prisma.lead.upsert({
               where: { phone: lead.phone },
               create: lead,
@@ -483,17 +480,17 @@ export class LeadController {
                 email: lead.email || undefined,
                 company: lead.company || undefined,
               },
-            })
-          )
+            }),
+          ),
         );
 
-        const newLeads = results.filter(r => r.createdAt.getTime() > Date.now() - 10000);
+        const newLeads = results.filter((r) => r.createdAt.getTime() > Date.now() - 10000);
         imported += newLeads.length;
         duplicates += results.length - newLeads.length;
 
         if (defaultStage && newLeads.length > 0) {
           await prisma.pipelineCard.createMany({
-            data: newLeads.map(lead => ({
+            data: newLeads.map((lead) => ({
               leadId: lead.id,
               stageId: defaultStage.id,
             })),
@@ -581,6 +578,13 @@ export class LeadController {
         });
         break;
 
+      case 'delete':
+        await prisma.lead.updateMany({
+          where: { id: { in: leadIds } },
+          data: { deletedAt: new Date() },
+        });
+        break;
+
       default:
         throw new AppError('Unknown action', 400);
     }
@@ -634,10 +638,26 @@ export class LeadController {
     };
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename=leads-export-${new Date().toISOString().split('T')[0]}.csv`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=leads-export-${new Date().toISOString().split('T')[0]}.csv`,
+    );
 
     // Write header
-    const headers = ['First Name', 'Last Name', 'Phone', 'Email', 'Company', 'State', 'Status', 'Source', 'Tags', 'Assigned Rep', 'Created At', 'Last Contacted'];
+    const headers = [
+      'First Name',
+      'Last Name',
+      'Phone',
+      'Email',
+      'Company',
+      'State',
+      'Status',
+      'Source',
+      'Tags',
+      'Assigned Rep',
+      'Created At',
+      'Last Contacted',
+    ];
     res.write(headers.join(',') + '\n');
 
     // Stream in batches of 500
@@ -672,7 +692,7 @@ export class LeadController {
           l.state || '',
           l.status,
           l.source || '',
-          l.tags.map(t => t.tag.name).join('; '),
+          l.tags.map((t) => t.tag.name).join('; '),
           l.assignedRep ? `${l.assignedRep.firstName} ${l.assignedRep.lastName}` : '',
           l.createdAt.toISOString(),
           l.lastContactedAt?.toISOString() || '',

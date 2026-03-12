@@ -32,7 +32,17 @@ import { format } from 'date-fns';
 import { clsx } from 'clsx';
 import LeadDetailDrawer from '../components/leads/LeadDetailDrawer';
 
-const STATUSES = ['NEW', 'CONTACTED', 'REPLIED', 'INTERESTED', 'DOCS_REQUESTED', 'SUBMITTED', 'FUNDED', 'NOT_INTERESTED', 'DNC'];
+const STATUSES = [
+  'NEW',
+  'CONTACTED',
+  'REPLIED',
+  'INTERESTED',
+  'DOCS_REQUESTED',
+  'SUBMITTED',
+  'FUNDED',
+  'NOT_INTERESTED',
+  'DNC',
+];
 
 export default function LeadsPage() {
   const [search, setSearch] = useState('');
@@ -91,7 +101,11 @@ export default function LeadsPage() {
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -124,8 +138,7 @@ export default function LeadsPage() {
   });
 
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api.put(`/leads/${id}`, { status }),
+    mutationFn: ({ id, status }: { id: string; status: string }) => api.put(`/leads/${id}`, { status }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       toast.success('Status updated');
@@ -134,8 +147,7 @@ export default function LeadsPage() {
   });
 
   const addTagMutation = useMutation({
-    mutationFn: ({ leadId, tagId }: { leadId: string; tagId: string }) =>
-      api.post(`/leads/${leadId}/tags`, { tagId }),
+    mutationFn: ({ leadId, tagId }: { leadId: string; tagId: string }) => api.post(`/leads/${leadId}/tags`, { tagId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       toast.success('Tag added');
@@ -145,8 +157,7 @@ export default function LeadsPage() {
   });
 
   const removeTagMutation = useMutation({
-    mutationFn: ({ leadId, tagId }: { leadId: string; tagId: string }) =>
-      api.delete(`/leads/${leadId}/tags/${tagId}`),
+    mutationFn: ({ leadId, tagId }: { leadId: string; tagId: string }) => api.delete(`/leads/${leadId}/tags/${tagId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leads'] });
       toast.success('Tag removed');
@@ -192,17 +203,25 @@ export default function LeadsPage() {
             placeholder="Search by name, phone, email..."
             className="input pl-10"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
         <select
           className="input w-auto"
           value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setPage(1);
+          }}
         >
           <option value="">All Statuses</option>
           {STATUSES.map((s) => (
-            <option key={s} value={s}>{s}</option>
+            <option key={s} value={s}>
+              {s}
+            </option>
           ))}
         </select>
       </div>
@@ -210,9 +229,7 @@ export default function LeadsPage() {
       {/* Bulk Actions Bar */}
       {selected.size > 0 && (
         <div className="flex items-center gap-3 bg-scl-600/10 border border-scl-600/30 rounded-lg px-4 py-2.5">
-          <span className="text-sm font-medium text-scl-300">
-            {selected.size} selected
-          </span>
+          <span className="text-sm font-medium text-scl-300">{selected.size} selected</span>
           <div className="flex items-center gap-2 ml-auto">
             <select
               className="input w-auto text-sm py-1.5"
@@ -229,7 +246,9 @@ export default function LeadsPage() {
             >
               <option value="">Change Status</option>
               {STATUSES.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>
+                  {s}
+                </option>
               ))}
             </select>
             <button
@@ -246,15 +265,25 @@ export default function LeadsPage() {
                   leadIds: Array.from(selected),
                 })
               }
-              className="btn-ghost text-sm text-red-400 hover:text-red-300"
+              className="btn-ghost text-sm text-orange-400 hover:text-orange-300"
             >
-              <Trash2 className="w-4 h-4" />
               Suppress
             </button>
             <button
-              onClick={() => setSelected(new Set())}
-              className="btn-ghost text-sm"
+              onClick={() => {
+                if (confirm(`Delete ${selected.size} leads? This action cannot be undone.`)) {
+                  bulkMutation.mutate({
+                    action: 'delete',
+                    leadIds: Array.from(selected),
+                  });
+                }
+              }}
+              className="btn-ghost text-sm text-red-400 hover:text-red-300 flex items-center gap-1"
             >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+            <button onClick={() => setSelected(new Set())} className="btn-ghost text-sm">
               <X className="w-4 h-4" />
               Clear
             </button>
@@ -308,10 +337,16 @@ export default function LeadsPage() {
                         <p className="text-xs text-dark-500 mt-1">Add your first lead to get started with campaigns</p>
                       </div>
                       <div className="flex gap-2 mt-1">
-                        <button onClick={() => setShowCreate(true)} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5">
+                        <button
+                          onClick={() => setShowCreate(true)}
+                          className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                        >
                           <Plus className="w-3.5 h-3.5" /> Add Lead
                         </button>
-                        <button onClick={() => setShowImport(true)} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5">
+                        <button
+                          onClick={() => setShowImport(true)}
+                          className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                        >
                           <Upload className="w-3.5 h-3.5" /> Import CSV
                         </button>
                       </div>
@@ -341,15 +376,14 @@ export default function LeadsPage() {
                   <td className="table-td">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-full bg-dark-700 flex items-center justify-center text-xs font-semibold text-dark-300">
-                        {lead.firstName?.[0]}{lead.lastName?.[0] || ''}
+                        {lead.firstName?.[0]}
+                        {lead.lastName?.[0] || ''}
                       </div>
                       <div>
                         <p className="text-sm font-medium text-dark-200">
                           {lead.firstName} {lead.lastName || ''}
                         </p>
-                        {lead.email && (
-                          <p className="text-xs text-dark-500">{lead.email}</p>
-                        )}
+                        {lead.email && <p className="text-xs text-dark-500">{lead.email}</p>}
                       </div>
                     </div>
                   </td>
@@ -373,14 +407,20 @@ export default function LeadsPage() {
                             color: lt.tag.color,
                           }}
                           title={`Click to remove "${lt.tag.name}"`}
-                          onClick={(e) => { e.stopPropagation(); removeTagMutation.mutate({ leadId: lead.id, tagId: lt.tag.id }); }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeTagMutation.mutate({ leadId: lead.id, tagId: lt.tag.id });
+                          }}
                         >
                           {lt.tag.name}
                           <X className="w-2.5 h-2.5 opacity-0 group-hover/tag:opacity-100 transition-opacity" />
                         </span>
                       ))}
                       <button
-                        onClick={(e) => { e.stopPropagation(); setTagPickerLead(tagPickerLead?.id === lead.id ? null : lead); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTagPickerLead(tagPickerLead?.id === lead.id ? null : lead);
+                        }}
                         className="w-5 h-5 rounded flex items-center justify-center text-dark-500 hover:text-scl-400 hover:bg-scl-600/10 transition-colors"
                         title="Add tag"
                       >
@@ -394,24 +434,30 @@ export default function LeadsPage() {
                           {allTags.length === 0 && (
                             <p className="text-xs text-dark-500 px-3 py-2">No tags found. Create tags in Settings.</p>
                           )}
-                          {allTags.filter((t: any) => !lead.tags?.some((lt: any) => lt.tag.id === t.id)).map((tag: any) => (
-                            <button
-                              key={tag.id}
-                              onClick={(e) => { e.stopPropagation(); addTagMutation.mutate({ leadId: lead.id, tagId: tag.id }); }}
-                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-dark-700/50 flex items-center gap-2"
-                            >
-                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
-                              <span className="text-dark-300">{tag.name}</span>
-                            </button>
-                          ))}
+                          {allTags
+                            .filter((t: any) => !lead.tags?.some((lt: any) => lt.tag.id === t.id))
+                            .map((tag: any) => (
+                              <button
+                                key={tag.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addTagMutation.mutate({ leadId: lead.id, tagId: tag.id });
+                                }}
+                                className="w-full text-left px-3 py-1.5 text-xs hover:bg-dark-700/50 flex items-center gap-2"
+                              >
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                                  style={{ backgroundColor: tag.color }}
+                                />
+                                <span className="text-dark-300">{tag.name}</span>
+                              </button>
+                            ))}
                         </div>
                       )}
                     </div>
                   </td>
                   <td className="table-td">
-                    <span className="text-sm text-dark-400">
-                      {format(new Date(lead.createdAt), 'MMM d')}
-                    </span>
+                    <span className="text-sm text-dark-400">{format(new Date(lead.createdAt), 'MMM d')}</span>
                   </td>
                   <td className="table-td">
                     <div className="relative">
@@ -496,38 +542,58 @@ export default function LeadsPage() {
             style={{ left: ctxMenu.x, top: ctxMenu.y }}
           >
             <button
-              onClick={() => { navigate(`/inbox?lead=${ctxMenu.lead.id}`); setCtxMenu(null); }}
+              onClick={() => {
+                navigate(`/inbox?lead=${ctxMenu.lead.id}`);
+                setCtxMenu(null);
+              }}
               className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
             >
               <MessageSquare className="w-3.5 h-3.5" /> Open Conversation
             </button>
             <button
-              onClick={() => { navigate(`/pipeline?lead=${ctxMenu.lead.id}`); setCtxMenu(null); }}
+              onClick={() => {
+                navigate(`/pipeline?lead=${ctxMenu.lead.id}`);
+                setCtxMenu(null);
+              }}
               className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
             >
               <ArrowRightLeft className="w-3.5 h-3.5" /> View in Pipeline
             </button>
             <button
-              onClick={() => { navigator.clipboard.writeText(ctxMenu.lead.phone); toast.success('Phone copied'); setCtxMenu(null); }}
+              onClick={() => {
+                navigator.clipboard.writeText(ctxMenu.lead.phone);
+                toast.success('Phone copied');
+                setCtxMenu(null);
+              }}
               className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
             >
               <Copy className="w-3.5 h-3.5" /> Copy Phone
             </button>
             <button
-              onClick={() => { setEnrollLeadId(ctxMenu.lead.id); setShowEnroll(true); setCtxMenu(null); }}
+              onClick={() => {
+                setEnrollLeadId(ctxMenu.lead.id);
+                setShowEnroll(true);
+                setCtxMenu(null);
+              }}
               className="w-full text-left px-3 py-2 text-sm text-purple-300 hover:bg-dark-700/50 flex items-center gap-2"
             >
               <Zap className="w-3.5 h-3.5" /> Start Automation
             </button>
             <div className="border-t border-dark-700 my-1" />
             <button
-              onClick={() => { statusMutation.mutate({ id: ctxMenu.lead.id, status: 'CONTACTED' }); setCtxMenu(null); }}
+              onClick={() => {
+                statusMutation.mutate({ id: ctxMenu.lead.id, status: 'CONTACTED' });
+                setCtxMenu(null);
+              }}
               className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
             >
               <Phone className="w-3.5 h-3.5" /> Mark Contacted
             </button>
             <button
-              onClick={() => { statusMutation.mutate({ id: ctxMenu.lead.id, status: 'DNC' }); setCtxMenu(null); }}
+              onClick={() => {
+                statusMutation.mutate({ id: ctxMenu.lead.id, status: 'DNC' });
+                setCtxMenu(null);
+              }}
               className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
             >
               <Ban className="w-3.5 h-3.5" /> Mark DNC
@@ -582,15 +648,19 @@ export default function LeadsPage() {
       {showEnroll && (
         <EnrollAutomationModal
           leadIds={enrollLeadId ? [enrollLeadId] : Array.from(selected)}
-          onClose={() => { setShowEnroll(false); setEnrollLeadId(null); }}
-          onSuccess={() => { setSelected(new Set()); setEnrollLeadId(null); }}
+          onClose={() => {
+            setShowEnroll(false);
+            setEnrollLeadId(null);
+          }}
+          onSuccess={() => {
+            setSelected(new Set());
+            setEnrollLeadId(null);
+          }}
         />
       )}
 
       {/* Lead Detail Drawer */}
-      {detailLeadId && (
-        <LeadDetailDrawer leadId={detailLeadId} onClose={() => setDetailLeadId(null)} />
-      )}
+      {detailLeadId && <LeadDetailDrawer leadId={detailLeadId} onClose={() => setDetailLeadId(null)} />}
     </div>
   );
 }
@@ -607,11 +677,7 @@ function StatusBadge({ status }: { status: string }) {
     NOT_INTERESTED: 'bg-dark-700 text-dark-400',
     DNC: 'bg-red-500/20 text-red-300',
   };
-  return (
-    <span className={clsx('badge', styles[status] || 'badge-info')}>
-      {status?.replace(/_/g, ' ')}
-    </span>
-  );
+  return <span className={clsx('badge', styles[status] || 'badge-info')}>{status?.replace(/_/g, ' ')}</span>;
 }
 
 function ImportModal({ onClose }: { onClose: () => void }) {
@@ -743,23 +809,23 @@ function ImportModal({ onClose }: { onClose: () => void }) {
             const isCurrent = i === Math.min(stepIdx, 2);
             return (
               <div key={label} className="flex items-center gap-2 flex-1">
-                <div className={clsx(
-                  'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors',
-                  isCurrent ? 'bg-scl-600 text-white' :
-                  isActive ? 'bg-scl-600/30 text-scl-300' :
-                  'bg-dark-700 text-dark-500'
-                )}>
+                <div
+                  className={clsx(
+                    'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors',
+                    isCurrent
+                      ? 'bg-scl-600 text-white'
+                      : isActive
+                        ? 'bg-scl-600/30 text-scl-300'
+                        : 'bg-dark-700 text-dark-500',
+                  )}
+                >
                   {i + 1}
                 </div>
-                <span className={clsx(
-                  'text-xs font-medium',
-                  isActive ? 'text-dark-200' : 'text-dark-500'
-                )}>{label}</span>
+                <span className={clsx('text-xs font-medium', isActive ? 'text-dark-200' : 'text-dark-500')}>
+                  {label}
+                </span>
                 {i < 2 && (
-                  <div className={clsx(
-                    'flex-1 h-px',
-                    isActive && i < stepIdx ? 'bg-scl-600/50' : 'bg-dark-700'
-                  )} />
+                  <div className={clsx('flex-1 h-px', isActive && i < stepIdx ? 'bg-scl-600/50' : 'bg-dark-700')} />
                 )}
               </div>
             );
@@ -768,12 +834,14 @@ function ImportModal({ onClose }: { onClose: () => void }) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
-
           {/* Step 1: Upload */}
           {step === 'upload' && (
             <div className="space-y-4">
               <div
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -783,9 +851,7 @@ function ImportModal({ onClose }: { onClose: () => void }) {
                 }}
                 className={clsx(
                   'border-2 border-dashed rounded-xl p-10 text-center transition-colors cursor-pointer',
-                  isDragging
-                    ? 'border-scl-500 bg-scl-500/10'
-                    : 'border-dark-600 hover:border-dark-500'
+                  isDragging ? 'border-scl-500 bg-scl-500/10' : 'border-dark-600 hover:border-dark-500',
                 )}
                 onClick={() => {
                   const input = document.createElement('input');
@@ -830,20 +896,22 @@ function ImportModal({ onClose }: { onClose: () => void }) {
                 <div className="grid grid-cols-2 gap-3">
                   {LEAD_FIELDS.map((field) => (
                     <div key={field.key} className="flex items-center gap-2">
-                      <label className="text-xs font-medium text-dark-300 w-24 shrink-0">
-                        {field.label}
-                      </label>
+                      <label className="text-xs font-medium text-dark-300 w-24 shrink-0">{field.label}</label>
                       <select
                         className="input text-sm py-1.5 flex-1"
                         value={mapping[field.key] || ''}
-                        onChange={(e) => setMapping(prev => ({
-                          ...prev,
-                          [field.key]: e.target.value || '',
-                        }))}
+                        onChange={(e) =>
+                          setMapping((prev) => ({
+                            ...prev,
+                            [field.key]: e.target.value || '',
+                          }))
+                        }
                       >
                         <option value="">— Skip —</option>
                         {previewData.columns.map((col) => (
-                          <option key={col} value={col}>{col}</option>
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -854,7 +922,8 @@ function ImportModal({ onClose }: { onClose: () => void }) {
               {/* Data Preview Table */}
               <div>
                 <h4 className="text-sm font-semibold text-dark-100 mb-2">
-                  Preview ({previewData.totalRows.toLocaleString()} rows total, showing first {previewData.previewRows.length})
+                  Preview ({previewData.totalRows.toLocaleString()} rows total, showing first{' '}
+                  {previewData.previewRows.length})
                 </h4>
                 <div className="overflow-x-auto rounded-lg border border-dark-700/50">
                   <table className="w-full text-xs">
@@ -881,7 +950,10 @@ function ImportModal({ onClose }: { onClose: () => void }) {
                         <tr key={i} className="border-t border-dark-800/50">
                           <td className="px-3 py-1.5 text-dark-500">{i + 1}</td>
                           {previewData.columns.map((col) => (
-                            <td key={col} className="px-3 py-1.5 text-dark-300 whitespace-nowrap max-w-[180px] truncate">
+                            <td
+                              key={col}
+                              className="px-3 py-1.5 text-dark-300 whitespace-nowrap max-w-[180px] truncate"
+                            >
                               {row[col] || '—'}
                             </td>
                           ))}
@@ -926,9 +998,7 @@ function ImportModal({ onClose }: { onClose: () => void }) {
               </div>
               <div className="text-center">
                 <h4 className="text-lg font-bold text-dark-50">Import Complete</h4>
-                <p className="text-sm text-dark-400 mt-1">
-                  {importResult.total.toLocaleString()} rows processed
-                </p>
+                <p className="text-sm text-dark-400 mt-1">{importResult.total.toLocaleString()} rows processed</p>
               </div>
               <div className="grid grid-cols-3 gap-4 w-full max-w-sm">
                 <div className="text-center p-3 bg-dark-800/50 rounded-lg">
@@ -970,20 +1040,12 @@ function ImportModal({ onClose }: { onClose: () => void }) {
               {step === 'done' ? 'Close' : 'Cancel'}
             </button>
             {step === 'upload' && (
-              <button
-                onClick={handleUpload}
-                disabled={!file || previewMutation.isPending}
-                className="btn-primary"
-              >
+              <button onClick={handleUpload} disabled={!file || previewMutation.isPending} className="btn-primary">
                 {previewMutation.isPending ? 'Parsing...' : 'Preview & Map →'}
               </button>
             )}
             {step === 'mapping' && (
-              <button
-                onClick={handleImport}
-                disabled={!mapping.phone}
-                className="btn-primary"
-              >
+              <button onClick={handleImport} disabled={!mapping.phone} className="btn-primary">
                 Import {previewData?.totalRows.toLocaleString()} Leads
               </button>
             )}
@@ -1035,20 +1097,40 @@ function CreateLeadModal({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">First Name *</label>
-              <input className="input" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} required />
+              <input
+                className="input"
+                value={form.firstName}
+                onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                required
+              />
             </div>
             <div>
               <label className="label">Last Name</label>
-              <input className="input" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
+              <input
+                className="input"
+                value={form.lastName}
+                onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+              />
             </div>
           </div>
           <div>
             <label className="label">Phone *</label>
-            <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required placeholder="+1XXXXXXXXXX" />
+            <input
+              className="input"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              required
+              placeholder="+1XXXXXXXXXX"
+            />
           </div>
           <div>
             <label className="label">Email</label>
-            <input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <input
+              className="input"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1057,15 +1139,26 @@ function CreateLeadModal({ onClose }: { onClose: () => void }) {
             </div>
             <div>
               <label className="label">State</label>
-              <input className="input" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} />
+              <input
+                className="input"
+                value={form.state}
+                onChange={(e) => setForm({ ...form, state: e.target.value })}
+              />
             </div>
           </div>
           <div>
             <label className="label">Source</label>
-            <input className="input" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} placeholder="e.g., Website, Referral" />
+            <input
+              className="input"
+              value={form.source}
+              onChange={(e) => setForm({ ...form, source: e.target.value })}
+              placeholder="e.g., Website, Referral"
+            />
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
+            <button type="button" onClick={onClose} className="btn-ghost">
+              Cancel
+            </button>
             <button type="submit" disabled={createMutation.isPending} className="btn-primary">
               {createMutation.isPending ? 'Creating...' : 'Create Lead'}
             </button>
@@ -1077,7 +1170,15 @@ function CreateLeadModal({ onClose }: { onClose: () => void }) {
 }
 
 /* ─── Enroll in Automation Modal ─── */
-function EnrollAutomationModal({ leadIds, onClose, onSuccess }: { leadIds: string[]; onClose: () => void; onSuccess: () => void }) {
+function EnrollAutomationModal({
+  leadIds,
+  onClose,
+  onSuccess,
+}: {
+  leadIds: string[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
   const [selectedRule, setSelectedRule] = useState<string>('');
   const queryClient = useQueryClient();
 
@@ -1136,11 +1237,7 @@ function EnrollAutomationModal({ leadIds, onClose, onSuccess }: { leadIds: strin
                 No active automation rules. Create one on the Automation page first.
               </p>
             ) : (
-              <select
-                className="input"
-                value={selectedRule}
-                onChange={(e) => setSelectedRule(e.target.value)}
-              >
+              <select className="input" value={selectedRule} onChange={(e) => setSelectedRule(e.target.value)}>
                 <option value="">Select a rule...</option>
                 {rules.map((rule: any) => (
                   <option key={rule.id} value={rule.id}>
@@ -1181,14 +1278,18 @@ function EnrollAutomationModal({ leadIds, onClose, onSuccess }: { leadIds: strin
           )}
 
           <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
+            <button type="button" onClick={onClose} className="btn-ghost">
+              Cancel
+            </button>
             <button
               onClick={() => startMutation.mutate()}
               disabled={!selectedRule || startMutation.isPending}
               className="btn-primary flex items-center gap-2"
             >
               <Play className="w-4 h-4" />
-              {startMutation.isPending ? 'Starting...' : `Start for ${leadIds.length} Lead${leadIds.length > 1 ? 's' : ''}`}
+              {startMutation.isPending
+                ? 'Starting...'
+                : `Start for ${leadIds.length} Lead${leadIds.length > 1 ? 's' : ''}`}
             </button>
           </div>
         </div>

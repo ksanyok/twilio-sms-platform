@@ -110,10 +110,7 @@ export default function CampaignsPage() {
           <h1 className="text-2xl font-bold text-dark-50">Campaigns</h1>
           <p className="text-sm text-dark-400 mt-1">Manage your SMS campaigns</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="btn-primary"
-        >
+        <button onClick={() => setShowCreateModal(true)} className="btn-primary">
           <Plus className="w-4 h-4" />
           New Campaign
         </button>
@@ -186,7 +183,10 @@ export default function CampaignsPage() {
                       <p className="text-sm font-medium text-dark-300">No campaigns yet</p>
                       <p className="text-xs mt-1">Create your first campaign to start reaching leads</p>
                     </div>
-                    <button onClick={() => setShowCreateModal(true)} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 mt-1">
+                    <button
+                      onClick={() => setShowCreateModal(true)}
+                      className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5 mt-1"
+                    >
                       <Plus className="w-3.5 h-3.5" /> New Campaign
                     </button>
                   </div>
@@ -194,10 +194,9 @@ export default function CampaignsPage() {
               </tr>
             )}
             {data?.campaigns?.map((campaign: Campaign) => {
-              const deliveryRate = campaign.totalSent > 0
-                ? ((campaign.totalDelivered / campaign.totalSent) * 100).toFixed(1)
-                : null;
-              
+              const deliveryRate =
+                campaign.totalSent > 0 ? ((campaign.totalDelivered / campaign.totalSent) * 100).toFixed(1) : null;
+
               return (
                 <tr
                   key={campaign.id}
@@ -217,16 +216,29 @@ export default function CampaignsPage() {
                     <CampaignStatusBadge status={campaign.status} />
                   </td>
                   <td className="table-cell text-center font-mono">{campaign.totalSent.toLocaleString()}</td>
-                  <td className="table-cell text-center font-mono text-green-400">{campaign.totalDelivered.toLocaleString()}</td>
-                  <td className="table-cell text-center font-mono text-red-400">{campaign.totalFailed.toLocaleString()}</td>
-                  <td className="table-cell text-center font-mono text-yellow-400">{campaign.totalBlocked.toLocaleString()}</td>
-                  <td className="table-cell text-center font-mono text-purple-400">{campaign.totalReplied.toLocaleString()}</td>
+                  <td className="table-cell text-center font-mono text-green-400">
+                    {campaign.totalDelivered.toLocaleString()}
+                  </td>
+                  <td className="table-cell text-center font-mono text-red-400">
+                    {campaign.totalFailed.toLocaleString()}
+                  </td>
+                  <td className="table-cell text-center font-mono text-yellow-400">
+                    {campaign.totalBlocked.toLocaleString()}
+                  </td>
+                  <td className="table-cell text-center font-mono text-purple-400">
+                    {campaign.totalReplied.toLocaleString()}
+                  </td>
                   <td className="table-cell text-center">
                     {deliveryRate !== null ? (
-                      <span className={`text-xs font-medium ${
-                        parseFloat(deliveryRate) >= 80 ? 'text-green-400' :
-                        parseFloat(deliveryRate) >= 50 ? 'text-yellow-400' : 'text-red-400'
-                      }`}>
+                      <span
+                        className={`text-xs font-medium ${
+                          parseFloat(deliveryRate) >= 80
+                            ? 'text-green-400'
+                            : parseFloat(deliveryRate) >= 50
+                              ? 'text-yellow-400'
+                              : 'text-red-400'
+                        }`}
+                      >
                         {deliveryRate}%
                       </span>
                     ) : (
@@ -292,15 +304,17 @@ export default function CampaignsPage() {
             <p className="text-xs text-dark-500">{total} campaigns total</p>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
                 className="btn-ghost py-1 px-2 text-xs disabled:opacity-30"
               >
                 Previous
               </button>
-              <span className="text-xs text-dark-400">Page {page} of {totalPages}</span>
+              <span className="text-xs text-dark-400">
+                Page {page} of {totalPages}
+              </span>
               <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 className="btn-ghost py-1 px-2 text-xs disabled:opacity-30"
               >
@@ -319,13 +333,20 @@ export default function CampaignsPage() {
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
         >
           <button
-            onClick={() => { navigate(`/campaigns/${ctxMenu.campaign.id}`); setCtxMenu(null); }}
+            onClick={() => {
+              navigate(`/campaigns/${ctxMenu.campaign.id}`);
+              setCtxMenu(null);
+            }}
             className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
           >
             <Eye className="w-3.5 h-3.5" /> View Campaign
           </button>
           <button
-            onClick={() => { navigator.clipboard.writeText(ctxMenu.campaign.name); toast.success('Name copied'); setCtxMenu(null); }}
+            onClick={() => {
+              navigator.clipboard.writeText(ctxMenu.campaign.name);
+              toast.success('Name copied');
+              setCtxMenu(null);
+            }}
             className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
           >
             <Copy className="w-3.5 h-3.5" /> Copy Name
@@ -333,7 +354,10 @@ export default function CampaignsPage() {
           <div className="border-t border-dark-700 my-1" />
           {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(ctxMenu.campaign.status) && (
             <button
-              onClick={() => { startMutation.mutate(ctxMenu.campaign.id); setCtxMenu(null); }}
+              onClick={() => {
+                startMutation.mutate(ctxMenu.campaign.id);
+                setCtxMenu(null);
+              }}
               className="w-full text-left px-3 py-2 text-sm text-green-400 hover:bg-dark-700/50 flex items-center gap-2"
             >
               <Play className="w-3.5 h-3.5" /> Start Campaign
@@ -341,7 +365,10 @@ export default function CampaignsPage() {
           )}
           {ctxMenu.campaign.status === 'SENDING' && (
             <button
-              onClick={() => { pauseMutation.mutate(ctxMenu.campaign.id); setCtxMenu(null); }}
+              onClick={() => {
+                pauseMutation.mutate(ctxMenu.campaign.id);
+                setCtxMenu(null);
+              }}
               className="w-full text-left px-3 py-2 text-sm text-yellow-400 hover:bg-dark-700/50 flex items-center gap-2"
             >
               <Pause className="w-3.5 h-3.5" /> Pause Campaign
@@ -376,9 +403,7 @@ export default function CampaignsPage() {
       )}
 
       {/* Create Campaign Modal */}
-      {showCreateModal && (
-        <CreateCampaignModal onClose={() => setShowCreateModal(false)} />
-      )}
+      {showCreateModal && <CreateCampaignModal onClose={() => setShowCreateModal(false)} />}
     </div>
   );
 }
@@ -389,6 +414,7 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
     name: '',
     messageTemplate: '',
     sendingSpeed: 60,
+    dailyLimit: 0,
     scheduledAt: '',
   });
   const [leadFilter, setLeadFilter] = useState({ status: '', search: '', source: '', state: '' });
@@ -442,9 +468,13 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
   };
 
   const toggleLead = (id: string) => {
-    setSelectedLeadIds(prev => {
+    setSelectedLeadIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
     setSelectAll(false);
@@ -512,12 +542,12 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
                   className="input py-1.5 text-sm flex-1 min-w-[140px]"
                   placeholder="Search leads..."
                   value={leadFilter.search}
-                  onChange={(e) => setLeadFilter(f => ({ ...f, search: e.target.value }))}
+                  onChange={(e) => setLeadFilter((f) => ({ ...f, search: e.target.value }))}
                 />
                 <select
                   className="input py-1.5 text-sm w-auto"
                   value={leadFilter.status}
-                  onChange={(e) => setLeadFilter(f => ({ ...f, status: e.target.value }))}
+                  onChange={(e) => setLeadFilter((f) => ({ ...f, status: e.target.value }))}
                 >
                   <option value="">All Statuses</option>
                   <option value="NEW">NEW</option>
@@ -535,14 +565,14 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
                   className="input py-1.5 text-sm w-[120px]"
                   placeholder="Source..."
                   value={leadFilter.source}
-                  onChange={(e) => setLeadFilter(f => ({ ...f, source: e.target.value }))}
+                  onChange={(e) => setLeadFilter((f) => ({ ...f, source: e.target.value }))}
                 />
                 <input
                   type="text"
                   className="input py-1.5 text-sm w-[80px]"
                   placeholder="State..."
                   value={leadFilter.state}
-                  onChange={(e) => setLeadFilter(f => ({ ...f, state: e.target.value }))}
+                  onChange={(e) => setLeadFilter((f) => ({ ...f, state: e.target.value }))}
                 />
               </div>
               {/* Select all toggle */}
@@ -594,7 +624,7 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="label">Sending Speed</label>
               <select
@@ -607,6 +637,18 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
                 <option value="120">120 / min (Fast)</option>
                 <option value="300">300 / min (Max)</option>
               </select>
+            </div>
+            <div>
+              <label className="label">Daily Limit</label>
+              <input
+                type="number"
+                className="input"
+                min="0"
+                value={formData.dailyLimit}
+                onChange={(e) => setFormData({ ...formData, dailyLimit: parseInt(e.target.value) || 0 })}
+                placeholder="0 = no limit"
+              />
+              <p className="text-xs text-dark-500 mt-1">0 = no limit</p>
             </div>
             <div>
               <label className="label">Schedule (Optional)</label>
@@ -622,11 +664,7 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
             <button type="button" onClick={onClose} className="btn-secondary">
               Cancel
             </button>
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={createMutation.isPending || (leadCount === 0)}
-            >
+            <button type="submit" className="btn-primary" disabled={createMutation.isPending || leadCount === 0}>
               {createMutation.isPending ? 'Creating...' : 'Create Campaign'}
             </button>
           </div>
