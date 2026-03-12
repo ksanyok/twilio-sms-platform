@@ -22,6 +22,7 @@ const httpServer = createServer(app);
 
 // Socket.IO for real-time inbox updates
 const io = new SocketIOServer(httpServer, {
+  path: '/api/socket.io/',
   cors: {
     origin: config.clientUrl,
     methods: ['GET', 'POST'],
@@ -167,7 +168,7 @@ import redis from './config/redis';
 
 async function gracefulShutdown(signal: string) {
   logger.info(`${signal} received, shutting down gracefully...`);
-  
+
   // Stop automation intervals
   stopAutomationWorker();
 

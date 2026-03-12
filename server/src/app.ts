@@ -5,8 +5,9 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
+import fs from 'fs';
 import { config } from './config';
-import logger from './config/logger';
+import _logger from './config/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 
@@ -38,27 +39,34 @@ if (config.env === 'production') {
 }
 
 // Security
-app.use(helmet({
-  contentSecurityPolicy: config.env === 'production' ? {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", 'data:', 'blob:'],
-      connectSrc: ["'self'", 'wss:', 'ws:'],
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      frameAncestors: ["'none'"],
-    },
-  } : false,
-  crossOriginEmbedderPolicy: config.env === 'production',
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy:
+      config.env === 'production'
+        ? {
+            directives: {
+              defaultSrc: ["'self'"],
+              scriptSrc: ["'self'", "'unsafe-inline'"],
+              styleSrc: ["'self'", "'unsafe-inline'"],
+              imgSrc: ["'self'", 'data:', 'blob:'],
+              connectSrc: ["'self'", 'wss:', 'ws:'],
+              fontSrc: ["'self'"],
+              objectSrc: ["'none'"],
+              frameAncestors: ["'none'"],
+            },
+          }
+        : false,
+    crossOriginEmbedderPolicy: config.env === 'production',
+  }),
+);
 
 // CORS
-app.use(cors({
-  origin: config.clientUrl,
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: config.clientUrl,
+    credentials: true,
+  }),
+);
 
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
@@ -94,10 +102,7 @@ app.use(requestLogger);
 // Health check (verifies DB + Redis connectivity)
 app.get('/api/health', async (req, res) => {
   try {
-    const [dbOk, redisOk] = await Promise.allSettled([
-      prisma.$queryRaw`SELECT 1`,
-      redis.ping(),
-    ]);
+    const [dbOk, redisOk] = await Promise.allSettled([prisma.$queryRaw`SELECT 1`, redis.ping()]);
 
     const status = dbOk.status === 'fulfilled' && redisOk.status === 'fulfilled' ? 'ok' : 'degraded';
     const statusCode = status === 'ok' ? 200 : 503;
@@ -111,7 +116,7 @@ app.get('/api/health', async (req, res) => {
         redis: redisOk.status === 'fulfilled' ? 'ok' : 'error',
       },
     });
-  } catch (error) {
+  } catch (_error) {
     res.status(503).json({ status: 'error', timestamp: new Date().toISOString() });
   }
 });
@@ -132,13 +137,16 @@ app.use('/api/analytics', analyticsRoutes);
 // Twilio Webhooks (no auth required - validated by Twilio signature)
 app.use('/api/webhooks/twilio', twilioWebhooks);
 
-// Serve client SPA in production
+// Serve client SPA in production (only if client build exists)
 if (config.env === 'production') {
   const clientDist = path.resolve(__dirname, '../../client/dist');
-  app.use(express.static(clientDist, { maxAge: '30d', immutable: true }));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(clientDist, 'index.html'));
-  });
+  const indexPath = path.join(clientDist, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    app.use(express.static(clientDist, { maxAge: '30d', immutable: true }));
+    app.get('*', (req, res) => {
+      res.sendFile(indexPath);
+    });
+  }
 }
 
 // Error handling

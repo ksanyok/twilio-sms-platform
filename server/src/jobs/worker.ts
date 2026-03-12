@@ -34,22 +34,16 @@ const smsWorker = new Worker(
 
     logger.debug(`Processing SMS job ${job.id}: ${messageId} → ${toNumber}`);
 
-    await SendingEngine.sendViaTwilio(
-      messageId,
-      fromNumber,
-      toNumber,
-      body,
-      phoneNumberId
-    );
+    await SendingEngine.sendViaTwilio(messageId, fromNumber, toNumber, body, phoneNumberId);
   },
   {
     connection: redis,
     concurrency: 15, // Process 15 messages concurrently (safe for 35+ numbers)
     limiter: {
-      max: 300,        // 300/min = 5 msg/sec — safe for 35 A2P 10DLC numbers
+      max: 300, // 300/min = 5 msg/sec — safe for 35 A2P 10DLC numbers
       duration: 60000,
     },
-  }
+  },
 );
 
 smsWorker.on('completed', async (job: Job) => {
@@ -73,9 +67,9 @@ smsWorker.on('completed', async (job: Job) => {
             where: { campaignId },
             _count: true,
           });
-          const delivered = stats.find(s => s.status === 'DELIVERED')?._count ?? 0;
-          const sent = stats.find(s => s.status === 'SENT')?._count ?? 0;
-          const failed = stats.find(s => s.status === 'FAILED')?._count ?? 0;
+          const delivered = stats.find((s) => s.status === 'DELIVERED')?._count ?? 0;
+          const sent = stats.find((s) => s.status === 'SENT')?._count ?? 0;
+          const failed = stats.find((s) => s.status === 'FAILED')?._count ?? 0;
 
           await prisma.campaign.update({
             where: { id: campaignId },
@@ -131,7 +125,7 @@ const campaignWorker = new Worker(
   {
     connection: redis,
     concurrency: 2,
-  }
+  },
 );
 
 async function processCampaignStart(campaignId: string, options: any): Promise<void> {
@@ -166,8 +160,23 @@ async function processCampaignStart(campaignId: string, options: any): Promise<v
       company: cl.lead.company || undefined,
     }));
 
+    // Enforce campaign dailyLimit: only send up to the limit
+    const leadsToSend = campaign.dailyLimit && campaign.dailyLimit > 0 ? leads.slice(0, campaign.dailyLimit) : leads;
+
+    if (leadsToSend.length < leads.length) {
+      logger.info(
+        `Campaign ${campaignId}: dailyLimit=${campaign.dailyLimit}, trimmed ${leads.length} → ${leadsToSend.length} leads`,
+      );
+      // Mark excess leads as SKIPPED
+      const excessLeadIds = leads.slice(campaign.dailyLimit!).map((l) => l.leadId);
+      await prisma.campaignLead.updateMany({
+        where: { campaignId, leadId: { in: excessLeadIds } },
+        data: { status: 'SKIPPED' },
+      });
+    }
+
     const result = await SendingEngine.queueBulkSend({
-      leads,
+      leads: leadsToSend,
       messageTemplate: campaign.messageTemplate,
       campaignId: campaign.id,
       poolId: campaign.numberPoolId || undefined,

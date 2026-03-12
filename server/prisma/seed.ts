@@ -10,10 +10,13 @@ async function seed() {
   console.log('🌱 Seeding database...');
 
   // Admin credentials from .env
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@securecreditlines.com';
-  const adminPass = process.env.ADMIN_PASSWORD || 'admin123';
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@twiliosms.demo';
+  const adminPass = process.env.ADMIN_PASSWORD || 'r9ghGm7zCtcCFyNj';
   const adminFirstName = process.env.ADMIN_FIRST_NAME || 'Admin';
-  const adminLastName = process.env.ADMIN_LAST_NAME || 'SCL';
+  const adminLastName = process.env.ADMIN_LAST_NAME || 'Demo';
+
+  // Derive demo domain from admin email
+  const demoDomain = adminEmail.split('@')[1] || 'twiliosms.demo';
 
   // Create admin user
   const adminPassword = await bcrypt.hash(adminPass, 12);
@@ -31,12 +34,14 @@ async function seed() {
   console.log(`  ✅ Admin user created/updated: ${admin.email}`);
 
   // Create demo rep
-  const repPassword = await bcrypt.hash('rep123', 12);
+  const repEmail = `rep@${demoDomain}`;
+  const repPass = 'DemoRep2026!';
+  const repPassword = await bcrypt.hash(repPass, 12);
   const rep = await prisma.user.upsert({
-    where: { email: 'rep@securecreditlines.com' },
-    update: {},
+    where: { email: repEmail },
+    update: { passwordHash: repPassword },
     create: {
-      email: 'rep@securecreditlines.com',
+      email: repEmail,
       passwordHash: repPassword,
       firstName: 'John',
       lastName: 'Smith',
@@ -46,12 +51,14 @@ async function seed() {
   console.log(`  ✅ Rep user created: ${rep.email}`);
 
   // Create manager
-  const managerPassword = await bcrypt.hash('manager123', 12);
+  const managerEmail = `manager@${demoDomain}`;
+  const managerPass = 'DemoManager2026!';
+  const managerPassword = await bcrypt.hash(managerPass, 12);
   const manager = await prisma.user.upsert({
-    where: { email: 'manager@securecreditlines.com' },
-    update: {},
+    where: { email: managerEmail },
+    update: { passwordHash: managerPassword },
     create: {
-      email: 'manager@securecreditlines.com',
+      email: managerEmail,
       passwordHash: managerPassword,
       firstName: 'Sarah',
       lastName: 'Johnson',
@@ -59,6 +66,20 @@ async function seed() {
     },
   });
   console.log(`  ✅ Manager user created: ${manager.email}`);
+
+  // Clean up any broken pipeline stages (single-letter names etc.)
+  const existingStages = await prisma.pipelineStage.findMany();
+  for (const stage of existingStages) {
+    if (stage.name.length <= 2) {
+      try {
+        await prisma.pipelineCard.deleteMany({ where: { stageId: stage.id } });
+        await prisma.pipelineStage.delete({ where: { id: stage.id } });
+        console.log(`  🧹 Removed broken pipeline stage: "${stage.name}"`);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 
   // Create pipeline stages
   const stages = [
@@ -107,43 +128,268 @@ async function seed() {
   // Create sample leads — spread across pipeline stages
   const sampleLeads = [
     // NEW stage
-    { firstName: 'Michael', lastName: 'Brown', phone: '+15551234001', email: 'michael@example.com', company: 'Brown LLC', state: 'NY', source: 'purchased', pipelineStage: 'new' },
-    { firstName: 'Jessica', lastName: 'Davis', phone: '+15551234002', email: 'jessica@example.com', company: 'Davis Corp', state: 'CA', source: 'purchased', pipelineStage: 'new' },
-    { firstName: 'Robert', lastName: 'Wilson', phone: '+15551234003', email: 'robert@example.com', company: 'Wilson & Co', state: 'TX', source: 'referral', pipelineStage: 'new' },
+    {
+      firstName: 'Michael',
+      lastName: 'Brown',
+      phone: '+15551234001',
+      email: 'michael@example.com',
+      company: 'Brown LLC',
+      state: 'NY',
+      source: 'purchased',
+      pipelineStage: 'new',
+    },
+    {
+      firstName: 'Jessica',
+      lastName: 'Davis',
+      phone: '+15551234002',
+      email: 'jessica@example.com',
+      company: 'Davis Corp',
+      state: 'CA',
+      source: 'purchased',
+      pipelineStage: 'new',
+    },
+    {
+      firstName: 'Robert',
+      lastName: 'Wilson',
+      phone: '+15551234003',
+      email: 'robert@example.com',
+      company: 'Wilson & Co',
+      state: 'TX',
+      source: 'referral',
+      pipelineStage: 'new',
+    },
     // CONTACTED stage
-    { firstName: 'Emily', lastName: 'Taylor', phone: '+15551234004', email: 'emily@example.com', company: 'Taylor Industries', state: 'FL', source: 'purchased', pipelineStage: 'contacted' },
-    { firstName: 'David', lastName: 'Anderson', phone: '+15551234005', email: 'david@example.com', company: 'Anderson Group', state: 'IL', source: 'previously_funded', pipelineStage: 'contacted' },
+    {
+      firstName: 'Emily',
+      lastName: 'Taylor',
+      phone: '+15551234004',
+      email: 'emily@example.com',
+      company: 'Taylor Industries',
+      state: 'FL',
+      source: 'purchased',
+      pipelineStage: 'contacted',
+    },
+    {
+      firstName: 'David',
+      lastName: 'Anderson',
+      phone: '+15551234005',
+      email: 'david@example.com',
+      company: 'Anderson Group',
+      state: 'IL',
+      source: 'previously_funded',
+      pipelineStage: 'contacted',
+    },
     // REPLIED stage
-    { firstName: 'Jennifer', lastName: 'Martinez', phone: '+15551234006', email: 'jen@example.com', company: 'JM Services', state: 'NY', source: 'purchased', pipelineStage: 'replied' },
-    { firstName: 'James', lastName: 'Thomas', phone: '+15551234007', email: 'james@example.com', company: 'Thomas LLC', state: 'PA', source: 'purchased', pipelineStage: 'replied' },
+    {
+      firstName: 'Jennifer',
+      lastName: 'Martinez',
+      phone: '+15551234006',
+      email: 'jen@example.com',
+      company: 'JM Services',
+      state: 'NY',
+      source: 'purchased',
+      pipelineStage: 'replied',
+    },
+    {
+      firstName: 'James',
+      lastName: 'Thomas',
+      phone: '+15551234007',
+      email: 'james@example.com',
+      company: 'Thomas LLC',
+      state: 'PA',
+      source: 'purchased',
+      pipelineStage: 'replied',
+    },
     // INTERESTED stage
-    { firstName: 'Amanda', lastName: 'Garcia', phone: '+15551234008', email: 'amanda@example.com', company: 'Garcia Inc', state: 'NJ', source: 'referral', pipelineStage: 'interested' },
-    { firstName: 'Daniel', lastName: 'Lee', phone: '+15551234009', email: 'daniel@example.com', company: 'Lee Capital Solutions', state: 'MA', source: 'purchased', pipelineStage: 'interested' },
-    { firstName: 'Rachel', lastName: 'Kim', phone: '+15551234010', email: 'rachel@example.com', company: 'Kimchi Kitchen', state: 'WA', source: 'referral', pipelineStage: 'interested' },
+    {
+      firstName: 'Amanda',
+      lastName: 'Garcia',
+      phone: '+15551234008',
+      email: 'amanda@example.com',
+      company: 'Garcia Inc',
+      state: 'NJ',
+      source: 'referral',
+      pipelineStage: 'interested',
+    },
+    {
+      firstName: 'Daniel',
+      lastName: 'Lee',
+      phone: '+15551234009',
+      email: 'daniel@example.com',
+      company: 'Lee Capital Solutions',
+      state: 'MA',
+      source: 'purchased',
+      pipelineStage: 'interested',
+    },
+    {
+      firstName: 'Rachel',
+      lastName: 'Kim',
+      phone: '+15551234010',
+      email: 'rachel@example.com',
+      company: 'Kimchi Kitchen',
+      state: 'WA',
+      source: 'referral',
+      pipelineStage: 'interested',
+    },
     // DOCS REQUESTED stage
-    { firstName: 'Carlos', lastName: 'Ramirez', phone: '+15551234011', email: 'carlos@example.com', company: 'CR Transport LLC', state: 'AZ', source: 'purchased', pipelineStage: 'docs-requested' },
-    { firstName: 'Lisa', lastName: 'Nguyen', phone: '+15551234012', email: 'lisa@example.com', company: 'Fresh Nails Spa', state: 'CA', source: 'purchased', pipelineStage: 'docs-requested' },
+    {
+      firstName: 'Carlos',
+      lastName: 'Ramirez',
+      phone: '+15551234011',
+      email: 'carlos@example.com',
+      company: 'CR Transport LLC',
+      state: 'AZ',
+      source: 'purchased',
+      pipelineStage: 'docs-requested',
+    },
+    {
+      firstName: 'Lisa',
+      lastName: 'Nguyen',
+      phone: '+15551234012',
+      email: 'lisa@example.com',
+      company: 'Fresh Nails Spa',
+      state: 'CA',
+      source: 'purchased',
+      pipelineStage: 'docs-requested',
+    },
     // SUBMITTED stage
-    { firstName: 'Steven', lastName: 'Clark', phone: '+15551234013', email: 'steven@example.com', company: 'Clark Plumbing', state: 'OH', source: 'purchased', pipelineStage: 'submitted' },
-    { firstName: 'Michelle', lastName: 'Lewis', phone: '+15551234014', email: 'michelle@example.com', company: 'Lewis & Daughters', state: 'GA', source: 'previously_funded', pipelineStage: 'submitted' },
+    {
+      firstName: 'Steven',
+      lastName: 'Clark',
+      phone: '+15551234013',
+      email: 'steven@example.com',
+      company: 'Clark Plumbing',
+      state: 'OH',
+      source: 'purchased',
+      pipelineStage: 'submitted',
+    },
+    {
+      firstName: 'Michelle',
+      lastName: 'Lewis',
+      phone: '+15551234014',
+      email: 'michelle@example.com',
+      company: 'Lewis & Daughters',
+      state: 'GA',
+      source: 'previously_funded',
+      pipelineStage: 'submitted',
+    },
     // FUNDED stage
-    { firstName: 'Anthony', lastName: 'Walker', phone: '+15551234015', email: 'anthony@example.com', company: 'Walker Construction', state: 'NC', source: 'previously_funded', pipelineStage: 'funded' },
-    { firstName: 'Nicole', lastName: 'Hall', phone: '+15551234016', email: 'nicole@example.com', company: 'Hall Design Studio', state: 'OR', source: 'referral', pipelineStage: 'funded' },
-    { firstName: 'Kevin', lastName: 'Allen', phone: '+15551234017', email: 'kevin@example.com', company: 'Allen Auto Repair', state: 'MI', source: 'purchased', pipelineStage: 'funded' },
+    {
+      firstName: 'Anthony',
+      lastName: 'Walker',
+      phone: '+15551234015',
+      email: 'anthony@example.com',
+      company: 'Walker Construction',
+      state: 'NC',
+      source: 'previously_funded',
+      pipelineStage: 'funded',
+    },
+    {
+      firstName: 'Nicole',
+      lastName: 'Hall',
+      phone: '+15551234016',
+      email: 'nicole@example.com',
+      company: 'Hall Design Studio',
+      state: 'OR',
+      source: 'referral',
+      pipelineStage: 'funded',
+    },
+    {
+      firstName: 'Kevin',
+      lastName: 'Allen',
+      phone: '+15551234017',
+      email: 'kevin@example.com',
+      company: 'Allen Auto Repair',
+      state: 'MI',
+      source: 'purchased',
+      pipelineStage: 'funded',
+    },
     // NOT INTERESTED stage
-    { firstName: 'Sandra', lastName: 'Young', phone: '+15551234018', email: 'sandra@example.com', company: 'Young Consulting', state: 'CO', source: 'purchased', pipelineStage: 'not-interested' },
-    { firstName: 'Brian', lastName: 'King', phone: '+15551234019', email: 'brian@example.com', company: 'King Roofing', state: 'TN', source: 'purchased', pipelineStage: 'not-interested' },
+    {
+      firstName: 'Sandra',
+      lastName: 'Young',
+      phone: '+15551234018',
+      email: 'sandra@example.com',
+      company: 'Young Consulting',
+      state: 'CO',
+      source: 'purchased',
+      pipelineStage: 'not-interested',
+    },
+    {
+      firstName: 'Brian',
+      lastName: 'King',
+      phone: '+15551234019',
+      email: 'brian@example.com',
+      company: 'King Roofing',
+      state: 'TN',
+      source: 'purchased',
+      pipelineStage: 'not-interested',
+    },
     // More in NEW (pipeline looks realistic with most in early stages)
-    { firstName: 'Patricia', lastName: 'Wright', phone: '+15551234020', email: 'patricia@example.com', company: 'Wright Legal', state: 'VA', source: 'purchased', pipelineStage: 'new' },
-    { firstName: 'Jason', lastName: 'Lopez', phone: '+15551234021', email: 'jason@example.com', company: 'Lopez Landscaping', state: 'NV', source: 'purchased', pipelineStage: 'new' },
-    { firstName: 'Stephanie', lastName: 'Hill', phone: '+15551234022', email: 'steph@example.com', company: 'Hilltop Bakery', state: 'MN', source: 'referral', pipelineStage: 'new' },
-    { firstName: 'Gregory', lastName: 'Scott', phone: '+15551234023', email: 'greg@example.com', company: 'Scott IT Services', state: 'WI', source: 'purchased', pipelineStage: 'contacted' },
-    { firstName: 'Laura', lastName: 'Adams', phone: '+15551234024', email: 'laura@example.com', company: 'Adams Florist', state: 'CT', source: 'purchased', pipelineStage: 'contacted' },
-    { firstName: 'Mark', lastName: 'Baker', phone: '+15551234025', email: 'mark@example.com', company: 'Baker Supply Co', state: 'MD', source: 'previously_funded', pipelineStage: 'replied' },
+    {
+      firstName: 'Patricia',
+      lastName: 'Wright',
+      phone: '+15551234020',
+      email: 'patricia@example.com',
+      company: 'Wright Legal',
+      state: 'VA',
+      source: 'purchased',
+      pipelineStage: 'new',
+    },
+    {
+      firstName: 'Jason',
+      lastName: 'Lopez',
+      phone: '+15551234021',
+      email: 'jason@example.com',
+      company: 'Lopez Landscaping',
+      state: 'NV',
+      source: 'purchased',
+      pipelineStage: 'new',
+    },
+    {
+      firstName: 'Stephanie',
+      lastName: 'Hill',
+      phone: '+15551234022',
+      email: 'steph@example.com',
+      company: 'Hilltop Bakery',
+      state: 'MN',
+      source: 'referral',
+      pipelineStage: 'new',
+    },
+    {
+      firstName: 'Gregory',
+      lastName: 'Scott',
+      phone: '+15551234023',
+      email: 'greg@example.com',
+      company: 'Scott IT Services',
+      state: 'WI',
+      source: 'purchased',
+      pipelineStage: 'contacted',
+    },
+    {
+      firstName: 'Laura',
+      lastName: 'Adams',
+      phone: '+15551234024',
+      email: 'laura@example.com',
+      company: 'Adams Florist',
+      state: 'CT',
+      source: 'purchased',
+      pipelineStage: 'contacted',
+    },
+    {
+      firstName: 'Mark',
+      lastName: 'Baker',
+      phone: '+15551234025',
+      email: 'mark@example.com',
+      company: 'Baker Supply Co',
+      state: 'MD',
+      source: 'previously_funded',
+      pipelineStage: 'replied',
+    },
   ];
 
   const allTags = await prisma.tag.findMany();
-  const tagMap = new Map(allTags.map(t => [t.name, t.id]));
+  const tagMap = new Map(allTags.map((t) => [t.name, t.id]));
 
   const defaultStage = await prisma.pipelineStage.findFirst({ where: { isDefault: true } });
 
@@ -168,10 +414,9 @@ async function seed() {
         create: {
           leadId: lead.id,
           stageId,
-          notes: leadIndex % 4 === 0 ? 'Warm lead — follow up soon' : leadIndex % 3 === 0 ? 'Called, left voicemail' : null,
         },
       });
-    } catch (e) {
+    } catch {
       // Stage ID may not exist yet — use default
       if (defaultStage) {
         await prisma.pipelineCard.upsert({
@@ -186,9 +431,12 @@ async function seed() {
     const tagAssignments: string[] = [];
     if (leadIndex % 2 === 0 && tagMap.has('Hot Lead')) tagAssignments.push(tagMap.get('Hot Lead')!);
     if (leadIndex % 5 === 0 && tagMap.has('VIP')) tagAssignments.push(tagMap.get('VIP')!);
-    if (leadData.source === 'previously_funded' && tagMap.has('Previously Funded')) tagAssignments.push(tagMap.get('Previously Funded')!);
-    if (leadData.source === 'purchased' && leadIndex % 3 === 0 && tagMap.has('Purchased Lead')) tagAssignments.push(tagMap.get('Purchased Lead')!);
-    if (pipelineStage === 'contacted' && tagMap.has('Follow-Up Needed')) tagAssignments.push(tagMap.get('Follow-Up Needed')!);
+    if (leadData.source === 'previously_funded' && tagMap.has('Previously Funded'))
+      tagAssignments.push(tagMap.get('Previously Funded')!);
+    if (leadData.source === 'purchased' && leadIndex % 3 === 0 && tagMap.has('Purchased Lead'))
+      tagAssignments.push(tagMap.get('Purchased Lead')!);
+    if (pipelineStage === 'contacted' && tagMap.has('Follow-Up Needed'))
+      tagAssignments.push(tagMap.get('Follow-Up Needed')!);
 
     for (const tagId of tagAssignments) {
       try {
@@ -223,17 +471,20 @@ async function seed() {
     {
       sequenceOrder: 1,
       delayDays: 3,
-      messageTemplate: 'Hi {{firstName}}, this is SCL. We have business funding options that might be perfect for your needs. Would you like to learn more? Reply STOP to opt out.',
+      messageTemplate:
+        'Hi {{firstName}}, this is SCL. We have business funding options that might be perfect for your needs. Would you like to learn more? Reply STOP to opt out.',
     },
     {
       sequenceOrder: 2,
       delayDays: 5,
-      messageTemplate: 'Hi {{firstName}}, just following up from SCL. We help businesses like {{company}} access capital quickly. Interested in a quick chat? Reply STOP to opt out.',
+      messageTemplate:
+        'Hi {{firstName}}, just following up from SCL. We help businesses like {{company}} access capital quickly. Interested in a quick chat? Reply STOP to opt out.',
     },
     {
       sequenceOrder: 3,
       delayDays: 7,
-      messageTemplate: '{{firstName}}, last follow-up from SCL. If business funding isn\'t needed right now, no worries! But if it is, we\'d love to help. Reply STOP to opt out.',
+      messageTemplate:
+        "{{firstName}}, last follow-up from SCL. If business funding isn't needed right now, no worries! But if it is, we'd love to help. Reply STOP to opt out.",
     },
   ];
 
@@ -267,15 +518,19 @@ async function seed() {
 
   // Create demo phone number
   const demoPhoneNumber = process.env.TWILIO_PHONE_NUMBER || '+17866487512';
+  const demoMessagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID || '';
   const demoNumber = await prisma.phoneNumber.upsert({
     where: { phoneNumber: demoPhoneNumber },
-    update: {},
+    update: {
+      messagingServiceSid: demoMessagingServiceSid || undefined,
+    },
     create: {
       twilioSid: `PN_DEMO_${Date.now()}`,
       phoneNumber: demoPhoneNumber,
       friendlyName: 'Primary Number',
+      messagingServiceSid: demoMessagingServiceSid || null,
       status: 'ACTIVE',
-      dailyLimit: 350,
+      dailyLimit: 200,
     },
   });
 
@@ -284,23 +539,26 @@ async function seed() {
     await prisma.numberPoolMembership.create({
       data: { phoneNumberId: demoNumber.id, poolId: 'primary-pool' },
     });
-  } catch { /* already exists */ }
+  } catch {
+    /* already exists */
+  }
   console.log(`  ✅ Demo phone number created: ${demoPhoneNumber}`);
 
   // Seed Twilio API keys from .env into system_settings
   const twilioSettings = [
     { key: 'twilioAccountSid', value: process.env.TWILIO_ACCOUNT_SID || '' },
     { key: 'twilioAuthToken', value: process.env.TWILIO_AUTH_TOKEN || '' },
+    { key: 'twilioMessagingServiceSid', value: process.env.TWILIO_MESSAGING_SERVICE_SID || '' },
     { key: 'twilioTestAccountSid', value: process.env.TWILIO_TEST_ACCOUNT_SID || '' },
     { key: 'twilioTestAuthToken', value: process.env.TWILIO_TEST_AUTH_TOKEN || '' },
-    { key: 'smsMode', value: 'simulation' },
+    { key: 'smsMode', value: process.env.NODE_ENV === 'production' ? 'live' : 'simulation' },
   ];
 
   for (const setting of twilioSettings) {
     if (setting.value) {
       await prisma.systemSetting.upsert({
         where: { key: setting.key },
-        update: {},
+        update: { value: setting.value },
         create: { key: setting.key, value: setting.value },
       });
     }
@@ -312,31 +570,63 @@ async function seed() {
     {
       phone: '+15551234004', // Emily Taylor — CONTACTED
       messages: [
-        { direction: 'OUTBOUND' as const, body: 'Hi Emily, this is SCL. We have business funding options that might be perfect for Taylor Industries. Would you like to learn more? Reply STOP to opt out.', status: 'DELIVERED' as const },
+        {
+          direction: 'OUTBOUND' as const,
+          body: 'Hi Emily, this is SCL. We have business funding options that might be perfect for Taylor Industries. Would you like to learn more? Reply STOP to opt out.',
+          status: 'DELIVERED' as const,
+        },
       ],
     },
     {
       phone: '+15551234006', // Jennifer Martinez — REPLIED
       messages: [
-        { direction: 'OUTBOUND' as const, body: 'Hi Jennifer, this is SCL. We help businesses like JM Services access capital quickly. Interested in a quick chat? Reply STOP to opt out.', status: 'DELIVERED' as const },
-        { direction: 'INBOUND' as const, body: 'Yes, I Need about $50k for equipment. What are the rates?', status: 'RECEIVED' as const },
+        {
+          direction: 'OUTBOUND' as const,
+          body: 'Hi Jennifer, this is SCL. We help businesses like JM Services access capital quickly. Interested in a quick chat? Reply STOP to opt out.',
+          status: 'DELIVERED' as const,
+        },
+        {
+          direction: 'INBOUND' as const,
+          body: 'Yes, I Need about $50k for equipment. What are the rates?',
+          status: 'RECEIVED' as const,
+        },
       ],
     },
     {
       phone: '+15551234008', // Amanda Garcia — INTERESTED
       messages: [
-        { direction: 'OUTBOUND' as const, body: 'Hi Amanda, this is SCL. We have business funding options for Garcia Inc. Want to learn more?', status: 'DELIVERED' as const },
+        {
+          direction: 'OUTBOUND' as const,
+          body: 'Hi Amanda, this is SCL. We have business funding options for Garcia Inc. Want to learn more?',
+          status: 'DELIVERED' as const,
+        },
         { direction: 'INBOUND' as const, body: 'Tell me more about your rates and terms', status: 'RECEIVED' as const },
-        { direction: 'OUTBOUND' as const, body: 'Great! We offer $10K-$500K with terms from 3-24 months. Rates start at 1.1 factor. Shall I run a quick pre-qualification?', status: 'DELIVERED' as const },
+        {
+          direction: 'OUTBOUND' as const,
+          body: 'Great! We offer $10K-$500K with terms from 3-24 months. Rates start at 1.1 factor. Shall I run a quick pre-qualification?',
+          status: 'DELIVERED' as const,
+        },
         { direction: 'INBOUND' as const, body: 'Yes please, what do you need from me?', status: 'RECEIVED' as const },
       ],
     },
     {
       phone: '+15551234011', // Carlos Ramirez — DOCS REQUESTED
       messages: [
-        { direction: 'OUTBOUND' as const, body: 'Hi Carlos, this is SCL. We specialize in funding for businesses like CR Transport LLC.', status: 'DELIVERED' as const },
-        { direction: 'INBOUND' as const, body: 'I need funding for new trucks. How fast can you move?', status: 'RECEIVED' as const },
-        { direction: 'OUTBOUND' as const, body: 'We can fund in as little as 24-48 hours! Could you send me your last 3 months bank statements to get started?', status: 'DELIVERED' as const },
+        {
+          direction: 'OUTBOUND' as const,
+          body: 'Hi Carlos, this is SCL. We specialize in funding for businesses like CR Transport LLC.',
+          status: 'DELIVERED' as const,
+        },
+        {
+          direction: 'INBOUND' as const,
+          body: 'I need funding for new trucks. How fast can you move?',
+          status: 'RECEIVED' as const,
+        },
+        {
+          direction: 'OUTBOUND' as const,
+          body: 'We can fund in as little as 24-48 hours! Could you send me your last 3 months bank statements to get started?',
+          status: 'DELIVERED' as const,
+        },
         { direction: 'INBOUND' as const, body: 'Will send them tonight', status: 'RECEIVED' as const },
       ],
     },
@@ -354,7 +644,7 @@ async function seed() {
         assignedRepId: rep.id,
         stickyNumberId: demoNumber.id,
         isActive: true,
-        unreadCount: conv.messages.filter(m => m.direction === 'INBOUND').length,
+        unreadCount: conv.messages.filter((m) => m.direction === 'INBOUND').length,
         lastMessageAt: new Date(),
       },
     });
@@ -391,7 +681,8 @@ async function seed() {
     create: {
       id: 'demo-campaign',
       name: 'February Outreach',
-      messageTemplate: 'Hi {{firstName}}, this is Secure Credit Lines. We help businesses like {{company}} access fast capital. Interested? Reply STOP to opt out.',
+      messageTemplate:
+        'Hi {{firstName}}, this is Secure Credit Lines. We help businesses like {{company}} access fast capital. Interested? Reply STOP to opt out.',
       status: 'DRAFT',
       createdById: admin.id,
       numberPoolId: 'primary-pool',
@@ -409,7 +700,9 @@ async function seed() {
           status: 'PENDING',
         },
       });
-    } catch { /* already exists */ }
+    } catch {
+      /* already exists */
+    }
   }
   console.log('  ✅ Demo campaign created with leads');
 
@@ -423,9 +716,9 @@ async function seed() {
 
   console.log('\n✅ Seed completed successfully!');
   console.log('\n📋 Login credentials:');
-  console.log('  Admin: admin@securecreditlines.com / admin123');
-  console.log('  Manager: manager@securecreditlines.com / manager123');
-  console.log('  Rep: rep@securecreditlines.com / rep123');
+  console.log(`  Admin: ${adminEmail} / ${adminPass}`);
+  console.log(`  Manager: ${managerEmail} / ${managerPass}`);
+  console.log(`  Rep: ${repEmail} / ${repPass}`);
 }
 
 seed()

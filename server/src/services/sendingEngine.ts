@@ -9,7 +9,7 @@ import redis from '../config/redis';
 
 /**
  * SendingEngine - Core message sending with throttling, queuing, and compliance
- * 
+ *
  * Architecture for 10k-20k+ messages/day:
  * 1. Messages enter the queue (BullMQ with Redis)
  * 2. Worker processes messages with rate limiting
@@ -73,7 +73,6 @@ interface BulkSendOptions {
 }
 
 export class SendingEngine {
-  
   /**
    * Check if simulation mode is enabled (no API calls at all)
    */
@@ -95,18 +94,12 @@ export class SendingEngine {
     }
 
     // Create or get conversation
-    const conversation = await this.getOrCreateConversation(
-      options.leadId,
-      options.sentByUserId
-    );
+    const conversation = await this.getOrCreateConversation(options.leadId, options.sentByUserId);
 
     // Get best number
     const fromNumber = options.preferredNumberId
       ? await prisma.phoneNumber.findUnique({ where: { id: options.preferredNumberId } })
-      : await NumberService.getStickyNumber(
-          options.toNumber,
-          options.sentByUserId
-        );
+      : await NumberService.getStickyNumber(options.toNumber, options.sentByUserId);
 
     if (!fromNumber) {
       throw new Error('No available phone numbers for sending');
@@ -141,7 +134,7 @@ export class SendingEngine {
       {
         priority: options.priority || 0,
         delay: 0,
-      }
+      },
     );
 
     return message.id;
@@ -165,7 +158,7 @@ export class SendingEngine {
     const baseDelayBetweenMs = Math.ceil(60000 / sendingSpeed);
 
     // ── BATCH PRE-FETCH: compliance data in 2 queries instead of 2 per lead ──
-    const phones = options.leads.map(l => l.phone);
+    const phones = options.leads.map((l) => l.phone);
     const [suppressedEntries, leadsStatus] = await Promise.all([
       prisma.suppressionEntry.findMany({
         where: { phone: { in: phones } },
@@ -176,10 +169,7 @@ export class SendingEngine {
         select: { phone: true },
       }),
     ]);
-    const blockedPhones = new Set([
-      ...suppressedEntries.map(s => s.phone),
-      ...leadsStatus.map(l => l.phone),
-    ]);
+    const blockedPhones = new Set([...suppressedEntries.map((s) => s.phone), ...leadsStatus.map((l) => l.phone)]);
 
     // Check quiet hours once
     if (await ComplianceService.isQuietHours()) {
@@ -187,12 +177,12 @@ export class SendingEngine {
     }
 
     // ── BATCH PRE-FETCH: existing conversations ──
-    const leadIds = options.leads.map(l => l.leadId);
+    const leadIds = options.leads.map((l) => l.leadId);
     const existingConvos = await prisma.conversation.findMany({
       where: { leadId: { in: leadIds } },
       select: { id: true, leadId: true },
     });
-    const convoMap = new Map(existingConvos.map(c => [c.leadId, c.id]));
+    const convoMap = new Map(existingConvos.map((c) => [c.leadId, c.id]));
 
     // ── PROCESS LEADS ──
     const jobsToQueue: Array<{ name: string; data: any; opts: any }> = [];
@@ -208,7 +198,7 @@ export class SendingEngine {
     // Batch-create missing conversations
     if (missingConvoLeads.length > 0) {
       await prisma.conversation.createMany({
-        data: missingConvoLeads.map(leadId => ({
+        data: missingConvoLeads.map((leadId) => ({
           leadId,
           assignedRepId: options.sentByUserId,
           isActive: true,
@@ -293,9 +283,7 @@ export class SendingEngine {
     // ── BATCH: Create all messages in a single transaction ──
     if (messageDataToCreate.length > 0) {
       const messages = await prisma.$transaction(
-        messageDataToCreate.map(({ leadId, ...data }) =>
-          prisma.message.create({ data })
-        )
+        messageDataToCreate.map(({ leadId, ...data }) => prisma.message.create({ data })),
       );
 
       // Build jobs from created messages
@@ -347,7 +335,7 @@ export class SendingEngine {
     fromNumber: string,
     toNumber: string,
     body: string,
-    phoneNumberId: string
+    phoneNumberId: string,
   ): Promise<void> {
     try {
       // Update status to SENDING
@@ -361,9 +349,9 @@ export class SendingEngine {
       const testMode = smsMode === 'simulation';
       if (testMode) {
         const fakeSid = `TEST_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        
-        // Simulate a small delay 
-        await new Promise(r => setTimeout(r, 50 + Math.random() * 100));
+
+        // Simulate a small delay
+        await new Promise((r) => setTimeout(r, 50 + Math.random() * 100));
 
         await prisma.message.update({
           where: { id: messageId },
@@ -408,9 +396,13 @@ export class SendingEngine {
       }
 
       const twilioTestActive = smsMode === 'twilio_test';
+
+      // Use Messaging Service SID for A2P 10DLC compliance
+      // All messages MUST go through the registered Messaging Service
+      const messagingServiceSid = config.twilio.messagingServiceSid;
       const twilioMessage = await client.messages.create({
         body,
-        from: fromNumber,
+        ...(messagingServiceSid ? { messagingServiceSid, from: fromNumber } : { from: fromNumber }),
         to: toNumber,
         statusCallback: `${config.webhookBaseUrl}/api/webhooks/twilio/status`,
       });
@@ -481,10 +473,7 @@ export class SendingEngine {
    * Spintax: {Hello|Hi|Hey} → randomly selects one variant
    * This prevents carrier fingerprinting of identical messages
    */
-  static interpolateTemplate(
-    template: string,
-    variables: Record<string, string>
-  ): string {
+  static interpolateTemplate(template: string, variables: Record<string, string>): string {
     // First, resolve variables
     let result = template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
       return variables[key] || match;
@@ -507,7 +496,7 @@ export class SendingEngine {
     const spintaxRegex = /\{([^{}]+)\}/g;
     let result = text;
     let iterations = 0;
-    
+
     while (spintaxRegex.test(result) && iterations < 10) {
       result = result.replace(spintaxRegex, (_, options) => {
         // Only treat as spintax if there's a pipe separator
@@ -571,9 +560,7 @@ export class SendingEngine {
 
     if (recentMessages.length < 20) return false; // Not enough data
 
-    const failedCount = recentMessages.filter(
-      m => m.status === 'FAILED' || m.status === 'BLOCKED'
-    ).length;
+    const failedCount = recentMessages.filter((m) => m.status === 'FAILED' || m.status === 'BLOCKED').length;
 
     const failRate = (failedCount / recentMessages.length) * 100;
     return failRate >= config.sms.circuitBreakerThreshold;
@@ -582,10 +569,7 @@ export class SendingEngine {
   /**
    * Get or create a conversation for a lead
    */
-  private static async getOrCreateConversation(
-    leadId: string,
-    repId?: string
-  ) {
+  private static async getOrCreateConversation(leadId: string, repId?: string) {
     let conversation = await prisma.conversation.findUnique({
       where: { leadId },
     });

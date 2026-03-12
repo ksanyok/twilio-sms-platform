@@ -5,7 +5,6 @@ import { AppError } from '../middleware/errorHandler';
 import { SendingEngine } from '../services/sendingEngine';
 
 export class InboxController {
-
   static async listConversations(req: AuthRequest, res: Response): Promise<void> {
     const { page = '1', limit = '50', search, unreadOnly } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -198,6 +197,23 @@ export class InboxController {
         lastDirection: 'outbound',
       },
     });
+
+    // Broadcast to other conversation viewers via Socket.IO
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`conversation:${id}`).emit('message-sent', {
+        conversationId: id,
+        messageId,
+        direction: 'OUTBOUND',
+        body: body.trim(),
+      });
+      // Also notify inbox channel for conversation list refresh
+      if (conversation.assignedRepId) {
+        io.to(`inbox:${conversation.assignedRepId}`).emit('new-message', {
+          conversationId: id,
+        });
+      }
+    }
 
     res.json({ messageId, status: 'queued' });
   }

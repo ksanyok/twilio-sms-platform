@@ -27,17 +27,18 @@ import { useState, useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
 import ThemeToggle from '../ThemeToggle';
 
+// Navigation v2 — all features enabled
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Campaigns', href: '/campaigns', icon: Send },
-  { name: 'Inbox', href: '/inbox', icon: MessageSquare, disabled: true },
+  { name: 'Inbox', href: '/inbox', icon: MessageSquare },
   { name: 'Pipeline', href: '/pipeline', icon: Kanban },
-  { name: 'Leads', href: '/leads', icon: Users, disabled: true },
-  { name: 'Numbers', href: '/numbers', icon: Phone, roles: ['ADMIN', 'MANAGER'], disabled: true },
-  { name: 'Automation', href: '/automation', icon: Bot, disabled: true },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3, disabled: true },
-  { name: 'Twilio', href: '/twilio', icon: Radio, roles: ['ADMIN'], disabled: true },
-  { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'], disabled: true },
+  { name: 'Leads', href: '/leads', icon: Users },
+  { name: 'Numbers', href: '/numbers', icon: Phone, roles: ['ADMIN', 'MANAGER'] },
+  { name: 'Automation', href: '/automation', icon: Bot },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Twilio', href: '/twilio', icon: Radio, roles: ['ADMIN'] },
+  { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'] },
 ];
 
 const SMS_MODE_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string; icon: any }> = {
@@ -134,10 +135,10 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
     navigate('/login');
   };
 
-  const filteredNav = navigation.filter((item) => !item.disabled && (!('roles' in item) || (user && (item as any).roles.includes(user.role))));
+  const filteredNav = navigation.filter((item) => !item.roles || (user && item.roles.includes(user.role)));
 
-  // Command palette filtered items (only enabled items)
-  const commandItems = filteredNav.filter((item) => !item.disabled && item.name.toLowerCase().includes(commandQuery.toLowerCase()));
+  // Command palette filtered items
+  const commandItems = filteredNav.filter((item) => item.name.toLowerCase().includes(commandQuery.toLowerCase()));
 
   const handleCommandSelect = (href: string) => {
     setCommandOpen(false);
@@ -210,18 +211,8 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
       )}
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {filteredNav.map((item) =>
-          item.disabled ? (
-            <div
-              key={item.name}
-              className={clsx('sidebar-link opacity-40 cursor-not-allowed', collapsed && 'justify-center px-2')}
-              title={collapsed ? item.name : 'Coming soon'}
-            >
-              <item.icon className="w-5 h-5 shrink-0" />
-              {!collapsed && <span className="text-sm font-medium">{item.name}</span>}
-            </div>
-          ) : (
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" data-nav-version="2">
+        {filteredNav.map((item) => (
           <NavLink
             key={item.name}
             to={item.href}
@@ -244,8 +235,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
               </span>
             )}
           </NavLink>
-          )
-        )}
+        ))}
       </nav>
 
       {/* SMS Mode Indicator + User section */}

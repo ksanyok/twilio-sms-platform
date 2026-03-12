@@ -19,20 +19,19 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
   connected: false,
 
   connect: (token: string) => {
-    // Disable WebSocket on shared hosting — PHP proxy can't handle socket.io polling
-    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      return;
-    }
-
     const existing = get().socket;
     if (existing?.connected) return; // Already connected
 
-    const socket = io(window.location.origin, {
+    // Connect to WebSocket via the API proxy path
+    // On shared hosting the PHP proxy forwards /socket.io/ to the Node backend
+    const wsUrl = window.location.origin;
+    const socket = io(wsUrl, {
       auth: { token },
-      transports: ['polling'],
+      path: '/api/socket.io/',
+      transports: ['polling'], // polling-only: PHP proxy can't upgrade to WS
       reconnection: true,
       reconnectionDelay: 5000,
-      reconnectionAttempts: 5,
+      reconnectionAttempts: 10,
     });
 
     socket.on('connect', () => {
@@ -71,7 +70,9 @@ export function useWebSocketEvent(event: string, handler: (...args: any[]) => vo
   useEffect(() => {
     if (!socket) return;
     socket.on(event, handler);
-    return () => { socket.off(event, handler); };
+    return () => {
+      socket.off(event, handler);
+    };
   }, [socket, event, handler]);
 }
 
@@ -91,6 +92,14 @@ export function useWebSocketQuerySync() {
         queryClient.invalidateQueries({ queryKey: ['conversations'] });
         queryClient.invalidateQueries({ queryKey: ['conversation'] });
         queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      },
+      message: () => {
+        queryClient.invalidateQueries({ queryKey: ['conversations'] });
+        queryClient.invalidateQueries({ queryKey: ['conversation'] });
+      },
+      'message-sent': () => {
+        queryClient.invalidateQueries({ queryKey: ['conversations'] });
+        queryClient.invalidateQueries({ queryKey: ['conversation'] });
       },
       'message-status': () => {
         queryClient.invalidateQueries({ queryKey: ['conversation'] });
