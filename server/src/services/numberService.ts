@@ -7,7 +7,7 @@ import { PhoneNumber, NumberStatus } from '@prisma/client';
 
 /**
  * NumberService - Manages phone number pool, rotation, reputation & ramp-up
- * 
+ *
  * Key design decisions for high-volume:
  * - Numbers are reputation-grouped into pools
  * - Smart rotation distributes load evenly
@@ -16,7 +16,6 @@ import { PhoneNumber, NumberStatus } from '@prisma/client';
  * - Daily counters reset at midnight
  */
 export class NumberService {
-
   private static readonly NUMBERS_CACHE_TTL = 30; // 30 seconds
   private static roundRobinIndex = 0; // In-memory round-robin counter
 
@@ -24,10 +23,7 @@ export class NumberService {
    * Get active numbers with Redis caching (30s TTL)
    * Avoids querying all numbers on every single message send
    */
-  private static async getActiveNumbersCached(
-    excludeNumbers: string[] = [],
-    poolId?: string
-  ): Promise<PhoneNumber[]> {
+  private static async getActiveNumbersCached(excludeNumbers: string[] = [], poolId?: string): Promise<PhoneNumber[]> {
     const cacheKey = `active-numbers:${poolId || 'all'}`;
     const cached = await redis.get(cacheKey);
 
@@ -39,28 +35,21 @@ export class NumberService {
       numbers = await prisma.phoneNumber.findMany({
         where: {
           status: 'ACTIVE',
-          OR: [
-            { coolingUntil: null },
-            { coolingUntil: { lt: now } },
-          ],
+          OR: [{ coolingUntil: null }, { coolingUntil: { lt: now } }],
           ...(poolId && {
             poolMemberships: {
               some: { poolId },
             },
           }),
         },
-        orderBy: [
-          { dailySentCount: 'asc' },
-          { deliveryRate: 'desc' },
-          { errorStreak: 'asc' },
-        ],
+        orderBy: [{ dailySentCount: 'asc' }, { deliveryRate: 'desc' }, { errorStreak: 'asc' }],
       });
       await redis.setex(cacheKey, this.NUMBERS_CACHE_TTL, JSON.stringify(numbers));
     }
 
     // Filter in JS (excludes + daily limit)
     if (excludeNumbers.length > 0) {
-      numbers = numbers.filter(n => !excludeNumbers.includes(n.phoneNumber));
+      numbers = numbers.filter((n) => !excludeNumbers.includes(n.phoneNumber));
     }
 
     return numbers;
@@ -73,20 +62,21 @@ export class NumberService {
     const keys = await redis.keys('active-numbers:*');
     if (keys.length > 0) await redis.del(...keys);
   }
-  
+
   /**
    * Get the best available number for sending
    * Uses round-robin across eligible numbers to prevent stale-cache uneven distribution
    * Also applies delivery-rate based proactive throttling
    */
-  static async getBestAvailableNumber(
-    excludeNumbers: string[] = [],
-    poolId?: string
-  ): Promise<PhoneNumber | null> {
+  static async getBestAvailableNumber(excludeNumbers: string[] = [], poolId?: string): Promise<PhoneNumber | null> {
     const numbers = await this.getActiveNumbersCached(excludeNumbers, poolId);
 
+    // Only use A2P/10DLC-approved numbers (those with a messagingServiceSid)
+    const a2pNumbers = numbers.filter((n) => n.messagingServiceSid);
+    const pool = a2pNumbers.length > 0 ? a2pNumbers : numbers;
+
     // Filter by daily limit (considering ramp-up) and delivery rate
-    const eligible = numbers.filter(number => {
+    const eligible = pool.filter((number) => {
       const limit = this.getDailyLimit(number);
       if (number.dailySentCount >= limit) return false;
 
@@ -123,10 +113,7 @@ export class NumberService {
   /**
    * Get the sticky sender for a conversation, or assign a new one
    */
-  static async getStickyNumber(
-    leadPhone: string,
-    repId?: string
-  ): Promise<PhoneNumber | null> {
+  static async getStickyNumber(leadPhone: string, repId?: string): Promise<PhoneNumber | null> {
     // First, check if there's an existing conversation with a sticky number
     const conversation = await prisma.conversation.findFirst({
       where: {
@@ -176,11 +163,7 @@ export class NumberService {
    * Record a send and update number statistics
    * NOTE: totalDelivered is updated by the Twilio status webhook, not here
    */
-  static async recordSend(
-    phoneNumberId: string,
-    success: boolean,
-    blocked: boolean = false
-  ): Promise<void> {
+  static async recordSend(phoneNumberId: string, success: boolean, blocked: boolean = false): Promise<void> {
     const updates: any = {
       dailySentCount: { increment: 1 },
       totalSent: { increment: 1 },
@@ -249,11 +232,7 @@ export class NumberService {
   /**
    * Cool down a number temporarily
    */
-  static async coolNumber(
-    phoneNumberId: string,
-    reason: string,
-    hours: number = 24
-  ): Promise<void> {
+  static async coolNumber(phoneNumberId: string, reason: string, hours: number = 24): Promise<void> {
     const coolingUntil = new Date();
     coolingUntil.setHours(coolingUntil.getHours() + hours);
 
@@ -320,10 +299,7 @@ export class NumberService {
   /**
    * Assign numbers to a rep for the day
    */
-  static async assignNumbersToRep(
-    repId: string,
-    phoneNumberIds: string[]
-  ): Promise<void> {
+  static async assignNumbersToRep(repId: string, phoneNumberIds: string[]): Promise<void> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -360,6 +336,7 @@ export class NumberService {
         phoneNumber: true,
         friendlyName: true,
         twilioSid: true,
+        messagingServiceSid: true,
         status: true,
         dailySentCount: true,
         dailyLimit: true,
@@ -393,10 +370,7 @@ export class NumberService {
       suspended: numbers.filter((n) => n.status === 'SUSPENDED').length,
       totalCapacity: numbers.reduce((sum, n) => sum + n.dailyLimit, 0),
       totalUsed: numbers.reduce((sum, n) => sum + n.dailySentCount, 0),
-      avgDeliveryRate:
-        numbers.length > 0
-          ? numbers.reduce((sum, n) => sum + n.deliveryRate, 0) / numbers.length
-          : 0,
+      avgDeliveryRate: numbers.length > 0 ? numbers.reduce((sum, n) => sum + n.deliveryRate, 0) / numbers.length : 0,
     };
 
     return { numbers, summary };

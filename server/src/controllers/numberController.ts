@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { NumberService } from '../services/numberService';
 import getTwilioClient from '../config/twilio';
+import { config } from '../config';
 import logger from '../config/logger';
 
 export class NumberController {
@@ -192,16 +193,31 @@ export class NumberController {
     let created = 0;
     let updated = 0;
 
+    // Build a set of phone number SIDs that belong to the configured Messaging Service
+    const msgSvcSid = config.twilio.messagingServiceSid;
+    const a2pPhoneNumberSids = new Set<string>();
+    if (msgSvcSid) {
+      try {
+        const svcNumbers = await client.messaging.v1.services(msgSvcSid).phoneNumbers.list({ limit: 500 });
+        for (const sn of svcNumbers) {
+          a2pPhoneNumberSids.add(sn.sid);
+        }
+      } catch (err) {
+        logger.warn('Could not list messaging service numbers', { msgSvcSid, err });
+      }
+    }
+
     const twilioSids = new Set<string>();
 
     for (const tn of twilioNumbers) {
       twilioSids.add(tn.sid);
 
-      const updatePayload = {
+      const updatePayload: Record<string, any> = {
         friendlyName: tn.friendlyName || tn.phoneNumber,
         smsCapable: tn.capabilities?.sms ?? true,
         mmsCapable: tn.capabilities?.mms ?? false,
         voiceCapable: tn.capabilities?.voice ?? false,
+        messagingServiceSid: a2pPhoneNumberSids.has(tn.sid) ? msgSvcSid : null,
       };
 
       // Check by SID first

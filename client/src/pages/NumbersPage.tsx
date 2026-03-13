@@ -34,6 +34,7 @@ interface PhoneNumberItem {
   phoneNumber: string;
   friendlyName: string | null;
   twilioSid: string;
+  messagingServiceSid: string | null;
   status: 'ACTIVE' | 'COOLING' | 'WARMING' | 'SUSPENDED' | 'RETIRED';
   dailySentCount: number;
   dailyLimit: number;
@@ -566,7 +567,14 @@ function NumbersTable({
                     >
                       <Phone className="w-4 h-4 text-dark-500 group-hover:text-scl-400 transition-colors shrink-0" />
                       <div>
-                        <span className="text-sm font-mono text-dark-200">{number.phoneNumber}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-mono text-dark-200">{number.phoneNumber}</span>
+                          {number.messagingServiceSid && (
+                            <span className="text-[9px] font-semibold bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full">
+                              A2P
+                            </span>
+                          )}
+                        </div>
                         {number.friendlyName && number.friendlyName !== number.phoneNumber && (
                           <p className="text-[10px] text-dark-500 leading-tight">{number.friendlyName}</p>
                         )}
@@ -606,6 +614,19 @@ function NumbersTable({
                             {number.errorStreak || 0}
                           </span>
                         </div>
+                        {number.messagingServiceSid && (
+                          <div className="col-span-2">
+                            <span className="text-dark-500">Messaging Service:</span>{' '}
+                            <span className="text-emerald-300 font-mono">
+                              {number.messagingServiceSid.length > 20
+                                ? number.messagingServiceSid.slice(0, 20) + '…'
+                                : number.messagingServiceSid}
+                            </span>
+                            <span className="ml-2 text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full">
+                              10DLC Approved
+                            </span>
+                          </div>
+                        )}
                         {number.coolingUntil && (
                           <div className="col-span-2">
                             <span className="text-dark-500">Cooling Until:</span>{' '}
