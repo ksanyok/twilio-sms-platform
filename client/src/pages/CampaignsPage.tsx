@@ -451,17 +451,22 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const payload = {
+      ...formData,
+      dailyLimit: formData.dailyLimit || null,
+      scheduledAt: formData.scheduledAt || null,
+    };
     if (selectAll) {
       // Server-side filtering — no 200-lead cap
       createMutation.mutate({
-        ...formData,
+        ...payload,
         filterStatus: leadFilter.status ? [leadFilter.status] : undefined,
         filterSource: leadFilter.source || undefined,
         filterState: leadFilter.state || undefined,
       });
     } else {
       createMutation.mutate({
-        ...formData,
+        ...payload,
         leadIds: Array.from(selectedLeadIds),
       });
     }

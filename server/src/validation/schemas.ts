@@ -10,12 +10,18 @@ const paginationQuery = {
 
 // ─── Auth ───
 export const loginSchema = z.object({
-  email: z.string().email().transform(s => s.toLowerCase().trim()),
+  email: z
+    .string()
+    .email()
+    .transform((s) => s.toLowerCase().trim()),
   password: z.string().min(1),
 });
 
 export const registerSchema = z.object({
-  email: z.string().email().transform(s => s.toLowerCase().trim()),
+  email: z
+    .string()
+    .email()
+    .transform((s) => s.toLowerCase().trim()),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   firstName: z.string().min(1).max(50).trim(),
   lastName: z.string().min(1).max(50).trim(),
@@ -27,7 +33,11 @@ export const updateUserSchema = z.object({
   lastName: z.string().min(1).max(50).trim().optional(),
   role: z.enum(['ADMIN', 'MANAGER', 'REP']).optional(),
   isActive: z.boolean().optional(),
-  email: z.string().email().transform(s => s.toLowerCase().trim()).optional(),
+  email: z
+    .string()
+    .email()
+    .transform((s) => s.toLowerCase().trim())
+    .optional(),
 });
 
 // ─── Leads ───
@@ -39,7 +49,19 @@ export const createLeadSchema = z.object({
   company: z.string().max(200).optional().default(''),
   state: z.string().max(50).optional().default(''),
   source: z.string().max(100).optional().default(''),
-  status: z.enum(['NEW', 'CONTACTED', 'REPLIED', 'INTERESTED', 'DOCS_REQUESTED', 'SUBMITTED', 'FUNDED', 'NOT_INTERESTED', 'DNC']).optional(),
+  status: z
+    .enum([
+      'NEW',
+      'CONTACTED',
+      'REPLIED',
+      'INTERESTED',
+      'DOCS_REQUESTED',
+      'SUBMITTED',
+      'FUNDED',
+      'NOT_INTERESTED',
+      'DNC',
+    ])
+    .optional(),
   notes: z.string().max(5000).optional(),
   customFields: z.record(z.string()).optional(),
 });
@@ -57,7 +79,16 @@ export const leadListQuery = z.object({
 });
 
 export const bulkActionSchema = z.object({
-  action: z.enum(['delete', 'assignRep', 'changeStatus', 'addTag', 'removeTag', 'suppress', 'unsuppress', 'startAutomation']),
+  action: z.enum([
+    'delete',
+    'assignRep',
+    'changeStatus',
+    'addTag',
+    'removeTag',
+    'suppress',
+    'unsuppress',
+    'startAutomation',
+  ]),
   leadIds: z.array(cuid).min(1).max(10000),
   data: z.record(z.unknown()).optional(),
 });
@@ -69,8 +100,8 @@ export const createCampaignSchema = z.object({
   messageTemplate: z.string().min(1).max(1600),
   numberPoolId: z.string().optional().nullable(),
   sendingSpeed: z.number().int().min(1).max(600).default(60),
-  dailyLimit: z.number().int().min(1).max(100000).optional().nullable(),
-  scheduledAt: z.string().datetime().optional().nullable(),
+  dailyLimit: z.number().int().min(0).max(100000).optional().nullable(),
+  scheduledAt: z.string().datetime().optional().nullable().or(z.literal('')),
   leadIds: z.array(cuid).optional(),
   // Targeting filters
   targetStatuses: z.array(z.string()).optional(),
@@ -119,7 +150,10 @@ export const createPoolSchema = z.object({
 // ─── Pipeline ───
 export const createStageSchema = z.object({
   name: z.string().min(1).max(100).trim(),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#6366f1'),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default('#6366f1'),
   order: z.number().int().min(0).optional(),
   mappedStatus: z.string().optional().nullable(),
 });
@@ -132,18 +166,30 @@ export const moveCardSchema = z.object({
 // ─── Automation ───
 export const createRuleSchema = z.object({
   name: z.string().min(1).max(200).trim(),
-  type: z.enum(['LEAD_CREATED', 'STATUS_CHANGED', 'KEYWORD_RECEIVED', 'NO_REPLY', 'MANUAL', 'TAG_RULE', 'FOLLOW_UP_SEQUENCE']),
+  type: z.enum([
+    'LEAD_CREATED',
+    'STATUS_CHANGED',
+    'KEYWORD_RECEIVED',
+    'NO_REPLY',
+    'MANUAL',
+    'TAG_RULE',
+    'FOLLOW_UP_SEQUENCE',
+  ]),
   isActive: z.boolean().default(true),
   triggerConfig: z.record(z.unknown()),
   actionConfig: z.record(z.unknown()),
   sendAfterHour: z.number().int().min(0).max(23).default(9),
   sendBeforeHour: z.number().int().min(0).max(23).default(20),
   sendOnWeekends: z.boolean().default(false),
-  templates: z.array(z.object({
-    sequenceOrder: z.number().int().min(1),
-    delayDays: z.number().int().min(0).max(365),
-    messageTemplate: z.string().min(1).max(1600),
-  })).optional(),
+  templates: z
+    .array(
+      z.object({
+        sequenceOrder: z.number().int().min(1),
+        delayDays: z.number().int().min(0).max(365),
+        messageTemplate: z.string().min(1).max(1600),
+      }),
+    )
+    .optional(),
 });
 
 export const updateRuleSchema = createRuleSchema.partial();
@@ -155,7 +201,10 @@ export const updateSettingSchema = z.object({
 
 export const createTagSchema = z.object({
   name: z.string().min(1).max(50).trim(),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#6366f1'),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default('#6366f1'),
 });
 
 export const addSuppressionSchema = z.object({

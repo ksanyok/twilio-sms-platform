@@ -30,8 +30,9 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
       path: '/api/socket.io/',
       transports: ['polling'], // polling-only: PHP proxy can't upgrade to WS
       reconnection: true,
-      reconnectionDelay: 5000,
-      reconnectionAttempts: 10,
+      reconnectionDelay: 10000,
+      reconnectionDelayMax: 60000,
+      reconnectionAttempts: 5,
     });
 
     socket.on('connect', () => {

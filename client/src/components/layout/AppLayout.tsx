@@ -149,7 +149,10 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
   const sidebarContent = (
     <>
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 h-16 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+      <div
+        className={clsx('flex items-center h-16 border-b', collapsed ? 'justify-center px-2' : 'gap-3 px-4')}
+        style={{ borderColor: 'var(--border-subtle)' }}
+      >
         <div
           className="flex items-center justify-center w-9 h-9 rounded-lg shrink-0"
           style={{
@@ -169,15 +172,17 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
             </span>
           </div>
         )}
-        <button
-          onClick={() => {
-            setCollapsed(!collapsed);
-            setMobileOpen(false);
-          }}
-          className="ml-auto p-1 text-dark-500 hover:text-dark-300 transition-colors hidden lg:block"
-        >
-          {collapsed ? <Menu className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </button>
+        {!collapsed && (
+          <button
+            onClick={() => {
+              setCollapsed(!collapsed);
+              setMobileOpen(false);
+            }}
+            className="ml-auto p-1 text-dark-500 hover:text-dark-300 transition-colors hidden lg:block"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        )}
         <button
           onClick={() => setMobileOpen(false)}
           className="ml-auto p-1 text-dark-500 hover:text-dark-300 transition-colors lg:hidden"
@@ -206,6 +211,19 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
             >
               <Command className="w-2.5 h-2.5" />K
             </kbd>
+          </button>
+        </div>
+      )}
+
+      {/* Expand button when collapsed */}
+      {collapsed && (
+        <div className="flex justify-center pt-2 px-2 hidden lg:flex">
+          <button
+            onClick={() => setCollapsed(false)}
+            className="p-2 rounded-lg text-dark-500 hover:text-dark-300 hover:bg-dark-800/50 transition-colors"
+            title="Expand sidebar"
+          >
+            <Menu className="w-4 h-4" />
           </button>
         </div>
       )}

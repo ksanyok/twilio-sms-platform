@@ -34,7 +34,7 @@ interface PhoneNumberItem {
   phoneNumber: string;
   friendlyName: string | null;
   twilioSid: string;
-  status: 'ACTIVE' | 'COOLING' | 'WARMING' | 'FLAGGED' | 'DISABLED' | 'SUSPENDED';
+  status: 'ACTIVE' | 'COOLING' | 'WARMING' | 'SUSPENDED' | 'RETIRED';
   dailySentCount: number;
   dailyLimit: number;
   deliveryRate: number;
@@ -159,18 +159,17 @@ export default function NumbersPage() {
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to unassign'),
   });
 
-  const numbers: PhoneNumberItem[] = data?.numbers || [];
+  const numbers: PhoneNumberItem[] = useMemo(() => data?.numbers || [], [data]);
   const pools = poolsData?.pools || [];
-  const assignments: Assignment[] = assignmentsData?.assignments || [];
+  const assignments: Assignment[] = useMemo(() => assignmentsData?.assignments || [], [assignmentsData]);
 
   /* ── Stats ── */
   const activeCount = numbers.filter((n) => n.status === 'ACTIVE').length;
   const coolingCount = numbers.filter((n) => n.status === 'COOLING').length;
-  const flaggedCount = numbers.filter((n) => n.status === 'FLAGGED').length;
+  const flaggedCount = numbers.filter((n) => n.status === 'SUSPENDED').length;
   const warmingCount = numbers.filter((n) => n.status === 'WARMING').length;
-  const avgHealth = numbers.length > 0
-    ? Math.round(numbers.reduce((sum, n) => sum + (n.deliveryRate || 0), 0) / numbers.length)
-    : 0;
+  const avgHealth =
+    numbers.length > 0 ? Math.round(numbers.reduce((sum, n) => sum + (n.deliveryRate || 0), 0) / numbers.length) : 0;
   const totalCapacity = numbers.reduce((sum, n) => sum + n.dailyLimit, 0);
   const totalUsed = numbers.reduce((sum, n) => sum + n.dailySentCount, 0);
 
@@ -200,19 +199,27 @@ export default function NumbersPage() {
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
-        (n) =>
-          n.phoneNumber.includes(q) ||
-          (n.friendlyName && n.friendlyName.toLowerCase().includes(q))
+        (n) => n.phoneNumber.includes(q) || (n.friendlyName && n.friendlyName.toLowerCase().includes(q)),
       );
     }
     list.sort((a, b) => {
       let cmp = 0;
       switch (sortField) {
-        case 'phoneNumber': cmp = a.phoneNumber.localeCompare(b.phoneNumber); break;
-        case 'status': cmp = a.status.localeCompare(b.status); break;
-        case 'dailySentCount': cmp = a.dailySentCount - b.dailySentCount; break;
-        case 'deliveryRate': cmp = a.deliveryRate - b.deliveryRate; break;
-        case 'rampDay': cmp = (a.rampDay || 0) - (b.rampDay || 0); break;
+        case 'phoneNumber':
+          cmp = a.phoneNumber.localeCompare(b.phoneNumber);
+          break;
+        case 'status':
+          cmp = a.status.localeCompare(b.status);
+          break;
+        case 'dailySentCount':
+          cmp = a.dailySentCount - b.dailySentCount;
+          break;
+        case 'deliveryRate':
+          cmp = a.deliveryRate - b.deliveryRate;
+          break;
+        case 'rampDay':
+          cmp = (a.rampDay || 0) - (b.rampDay || 0);
+          break;
       }
       return sortDir === 'desc' ? -cmp : cmp;
     });
@@ -221,14 +228,19 @@ export default function NumbersPage() {
 
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
-    else { setSortField(field); setSortDir('asc'); }
+    else {
+      setSortField(field);
+      setSortDir('asc');
+    }
   }
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return <ArrowUpDown className="w-3 h-3 text-dark-600" />;
-    return sortDir === 'asc'
-      ? <ChevronUp className="w-3 h-3 text-scl-400" />
-      : <ChevronDown className="w-3 h-3 text-scl-400" />;
+    return sortDir === 'asc' ? (
+      <ChevronUp className="w-3 h-3 text-scl-400" />
+    ) : (
+      <ChevronDown className="w-3 h-3 text-scl-400" />
+    );
   };
 
   return (
@@ -238,7 +250,8 @@ export default function NumbersPage() {
         <div>
           <h1 className="text-2xl font-bold text-dark-50">Phone Numbers</h1>
           <p className="text-sm text-dark-400 mt-1">
-            {numbers.length} number{numbers.length !== 1 ? 's' : ''} · Capacity: {totalUsed.toLocaleString()}/{totalCapacity.toLocaleString()} today
+            {numbers.length} number{numbers.length !== 1 ? 's' : ''} · Capacity: {totalUsed.toLocaleString()}/
+            {totalCapacity.toLocaleString()} today
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -275,7 +288,7 @@ export default function NumbersPage() {
           onClick={() => setActiveTab('numbers')}
           className={clsx(
             'flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors font-medium',
-            activeTab === 'numbers' ? 'bg-dark-700 text-dark-100 shadow-sm' : 'text-dark-400 hover:text-dark-200'
+            activeTab === 'numbers' ? 'bg-dark-700 text-dark-100 shadow-sm' : 'text-dark-400 hover:text-dark-200',
           )}
         >
           <Phone className="w-4 h-4" /> Numbers
@@ -284,13 +297,15 @@ export default function NumbersPage() {
           onClick={() => setActiveTab('assignments')}
           className={clsx(
             'flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors font-medium',
-            activeTab === 'assignments' ? 'bg-dark-700 text-dark-100 shadow-sm' : 'text-dark-400 hover:text-dark-200'
+            activeTab === 'assignments' ? 'bg-dark-700 text-dark-100 shadow-sm' : 'text-dark-400 hover:text-dark-200',
           )}
         >
           <Users className="w-4 h-4" />
           Daily Assignments
           {assignments.length > 0 && (
-            <span className="text-[10px] bg-scl-600/30 text-scl-300 px-1.5 py-0.5 rounded-full">{assignments.length}</span>
+            <span className="text-[10px] bg-scl-600/30 text-scl-300 px-1.5 py-0.5 rounded-full">
+              {assignments.length}
+            </span>
           )}
         </button>
       </div>
@@ -303,9 +318,14 @@ export default function NumbersPage() {
             <StatCard label="Active" value={activeCount} icon={<CheckCircle2 className="w-5 h-5" />} color="emerald" />
             <StatCard label="Warming" value={warmingCount} icon={<Signal className="w-5 h-5" />} color="yellow" />
             <StatCard label="Cooling" value={coolingCount} icon={<Snowflake className="w-5 h-5" />} color="blue" />
-            <StatCard label="Flagged" value={flaggedCount} icon={<AlertTriangle className="w-5 h-5" />} color="red" />
+            <StatCard label="Suspended" value={flaggedCount} icon={<AlertTriangle className="w-5 h-5" />} color="red" />
             <StatCard label="Avg Health" value={`${avgHealth}%`} icon={<Activity className="w-5 h-5" />} color="scl" />
-            <StatCard label="Sent Today" value={totalUsed.toLocaleString()} icon={<Hash className="w-5 h-5" />} color="purple" />
+            <StatCard
+              label="Sent Today"
+              value={totalUsed.toLocaleString()}
+              icon={<Hash className="w-5 h-5" />}
+              color="purple"
+            />
           </div>
 
           {/* Pools Section */}
@@ -319,10 +339,12 @@ export default function NumbersPage() {
                     className="bg-dark-800/50 rounded-lg px-4 py-2.5 border border-dark-700/50 flex items-center gap-3"
                   >
                     <p className="text-sm font-medium text-dark-200">{pool.name}</p>
-                    <span className={clsx(
-                      'text-[10px] px-1.5 py-0.5 rounded-full font-medium',
-                      pool.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-dark-700 text-dark-400'
-                    )}>
+                    <span
+                      className={clsx(
+                        'text-[10px] px-1.5 py-0.5 rounded-full font-medium',
+                        pool.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-dark-700 text-dark-400',
+                      )}
+                    >
                       {pool.isActive ? 'Active' : 'Off'}
                     </span>
                     <span className="text-xs text-dark-500">{pool._count?.members || 0} nums</span>
@@ -345,7 +367,7 @@ export default function NumbersPage() {
               />
             </div>
             <div className="flex items-center gap-1.5">
-              {['ALL', 'ACTIVE', 'WARMING', 'COOLING', 'FLAGGED', 'DISABLED'].map((s) => (
+              {['ALL', 'ACTIVE', 'WARMING', 'COOLING', 'SUSPENDED', 'RETIRED'].map((s) => (
                 <button
                   key={s}
                   onClick={() => setStatusFilter(s)}
@@ -353,7 +375,7 @@ export default function NumbersPage() {
                     'px-3 py-1.5 text-xs rounded-lg font-medium transition-colors',
                     statusFilter === s
                       ? 'bg-scl-600/20 text-scl-300 border border-scl-600/40'
-                      : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-dark-200'
+                      : 'bg-dark-800/50 text-dark-400 border border-dark-700/50 hover:text-dark-200',
                   )}
                 >
                   {s === 'ALL' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase()}
@@ -403,7 +425,10 @@ export default function NumbersPage() {
       {deleteConfirm && (
         <ConfirmDeleteModal
           number={deleteConfirm}
-          onConfirm={() => { deleteMutation.mutate(deleteConfirm.id); setDeleteConfirm(null); }}
+          onConfirm={() => {
+            deleteMutation.mutate(deleteConfirm.id);
+            setDeleteConfirm(null);
+          }}
           onClose={() => setDeleteConfirm(null)}
         />
       )}
@@ -416,9 +441,20 @@ export default function NumbersPage() {
    ═══════════════════════════════════════════════ */
 
 function NumbersTable({
-  numbers, isLoading, totalCount, expandedRow, setExpandedRow,
-  toggleSort, SortIcon, setShowAssign, setEditNumber, setDeleteConfirm,
-  setShowAddModal, coolMutation, activateMutation, syncMutation,
+  numbers,
+  isLoading,
+  totalCount,
+  expandedRow,
+  setExpandedRow,
+  toggleSort,
+  SortIcon,
+  setShowAssign,
+  setEditNumber,
+  setDeleteConfirm,
+  setShowAddModal,
+  coolMutation,
+  activateMutation,
+  syncMutation,
 }: {
   numbers: PhoneNumberItem[];
   isLoading: boolean;
@@ -442,21 +478,31 @@ function NumbersTable({
           <thead>
             <tr className="border-b border-dark-700/50">
               <th className="table-th cursor-pointer select-none" onClick={() => toggleSort('phoneNumber')}>
-                <div className="flex items-center gap-1">Number <SortIcon field="phoneNumber" /></div>
+                <div className="flex items-center gap-1">
+                  Number <SortIcon field="phoneNumber" />
+                </div>
               </th>
               <th className="table-th cursor-pointer select-none" onClick={() => toggleSort('status')}>
-                <div className="flex items-center gap-1">Status <SortIcon field="status" /></div>
+                <div className="flex items-center gap-1">
+                  Status <SortIcon field="status" />
+                </div>
               </th>
               <th className="table-th">Health</th>
               <th className="table-th cursor-pointer select-none" onClick={() => toggleSort('dailySentCount')}>
-                <div className="flex items-center gap-1">Sent Today <SortIcon field="dailySentCount" /></div>
+                <div className="flex items-center gap-1">
+                  Sent Today <SortIcon field="dailySentCount" />
+                </div>
               </th>
               <th className="table-th">Daily Limit</th>
               <th className="table-th cursor-pointer select-none" onClick={() => toggleSort('deliveryRate')}>
-                <div className="flex items-center gap-1">Delivery <SortIcon field="deliveryRate" /></div>
+                <div className="flex items-center gap-1">
+                  Delivery <SortIcon field="deliveryRate" />
+                </div>
               </th>
               <th className="table-th cursor-pointer select-none" onClick={() => toggleSort('rampDay')}>
-                <div className="flex items-center gap-1">Ramp <SortIcon field="rampDay" /></div>
+                <div className="flex items-center gap-1">
+                  Ramp <SortIcon field="rampDay" />
+                </div>
               </th>
               <th className="table-th">Assigned To</th>
               <th className="table-th w-28 text-right">Actions</th>
@@ -483,10 +529,16 @@ function NumbersTable({
                   </p>
                   {totalCount === 0 && (
                     <div className="flex items-center justify-center gap-3 mt-4">
-                      <button onClick={() => setShowAddModal(true)} className="btn-primary text-sm flex items-center gap-2">
+                      <button
+                        onClick={() => setShowAddModal(true)}
+                        className="btn-primary text-sm flex items-center gap-2"
+                      >
                         <Plus className="w-4 h-4" /> Add Number
                       </button>
-                      <button onClick={() => syncMutation.mutate()} className="btn-ghost text-sm flex items-center gap-2">
+                      <button
+                        onClick={() => syncMutation.mutate()}
+                        className="btn-ghost text-sm flex items-center gap-2"
+                      >
                         <CloudDownload className="w-4 h-4" /> Sync from Twilio
                       </button>
                     </div>
@@ -504,7 +556,7 @@ function NumbersTable({
                   key={number.id}
                   className={clsx(
                     'border-b border-dark-800/50 transition-colors',
-                    isExpanded ? 'bg-dark-800/40' : 'hover:bg-dark-800/20'
+                    isExpanded ? 'bg-dark-800/40' : 'hover:bg-dark-800/20',
                   )}
                 >
                   <td className="table-td">
@@ -522,23 +574,60 @@ function NumbersTable({
                     </button>
                     {isExpanded && (
                       <div className="mt-2 pl-6 pb-1 grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
-                        <div><span className="text-dark-500">SID:</span> <span className="text-dark-300 font-mono">{number.twilioSid?.startsWith('manual_') ? 'Manual' : (number.twilioSid?.length > 20 ? number.twilioSid.slice(0, 20) + '…' : number.twilioSid)}</span></div>
-                        <div><span className="text-dark-500">Created:</span> <span className="text-dark-300">{new Date(number.createdAt).toLocaleDateString()}</span></div>
-                        <div><span className="text-dark-500">Total Sent:</span> <span className="text-dark-300">{(number.totalSent ?? 0).toLocaleString()}</span></div>
-                        <div><span className="text-dark-500">Delivered:</span> <span className="text-dark-300">{(number.totalDelivered ?? 0).toLocaleString()}</span></div>
-                        <div><span className="text-dark-500">Failed:</span> <span className="text-dark-300">{(number.totalFailed ?? 0).toLocaleString()}</span></div>
-                        <div><span className="text-dark-500">Error Streak:</span> <span className={clsx('text-dark-300', (number.errorStreak || 0) > 3 && 'text-red-400')}>{number.errorStreak || 0}</span></div>
+                        <div>
+                          <span className="text-dark-500">SID:</span>{' '}
+                          <span className="text-dark-300 font-mono">
+                            {number.twilioSid?.startsWith('manual_')
+                              ? 'Manual'
+                              : number.twilioSid?.length > 20
+                                ? number.twilioSid.slice(0, 20) + '…'
+                                : number.twilioSid}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-dark-500">Created:</span>{' '}
+                          <span className="text-dark-300">{new Date(number.createdAt).toLocaleDateString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-dark-500">Total Sent:</span>{' '}
+                          <span className="text-dark-300">{(number.totalSent ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-dark-500">Delivered:</span>{' '}
+                          <span className="text-dark-300">{(number.totalDelivered ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-dark-500">Failed:</span>{' '}
+                          <span className="text-dark-300">{(number.totalFailed ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span className="text-dark-500">Error Streak:</span>{' '}
+                          <span className={clsx('text-dark-300', (number.errorStreak || 0) > 3 && 'text-red-400')}>
+                            {number.errorStreak || 0}
+                          </span>
+                        </div>
                         {number.coolingUntil && (
-                          <div className="col-span-2"><span className="text-dark-500">Cooling Until:</span> <span className="text-blue-300">{new Date(number.coolingUntil).toLocaleString()}</span> — {number.cooldownReason}</div>
+                          <div className="col-span-2">
+                            <span className="text-dark-500">Cooling Until:</span>{' '}
+                            <span className="text-blue-300">{new Date(number.coolingUntil).toLocaleString()}</span> —{' '}
+                            {number.cooldownReason}
+                          </div>
                         )}
                         {number.lastSentAt && (
-                          <div><span className="text-dark-500">Last Sent:</span> <span className="text-dark-300">{new Date(number.lastSentAt).toLocaleString()}</span></div>
+                          <div>
+                            <span className="text-dark-500">Last Sent:</span>{' '}
+                            <span className="text-dark-300">{new Date(number.lastSentAt).toLocaleString()}</span>
+                          </div>
                         )}
                       </div>
                     )}
                   </td>
-                  <td className="table-td"><NumberStatusBadge status={number.status} /></td>
-                  <td className="table-td"><HealthBar score={Math.round(number.deliveryRate || 0)} /></td>
+                  <td className="table-td">
+                    <NumberStatusBadge status={number.status} />
+                  </td>
+                  <td className="table-td">
+                    <HealthBar score={Math.round(number.deliveryRate || 0)} />
+                  </td>
                   <td className="table-td">
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-dark-300">{number.dailySentCount}</span>
@@ -549,11 +638,16 @@ function NumbersTable({
                     <span className="text-sm text-dark-400">{number.dailyLimit}</span>
                   </td>
                   <td className="table-td">
-                    <span className={clsx(
-                      'text-sm font-medium',
-                      (number.deliveryRate || 0) >= 95 ? 'text-emerald-400' :
-                      (number.deliveryRate || 0) >= 85 ? 'text-yellow-400' : 'text-red-400'
-                    )}>
+                    <span
+                      className={clsx(
+                        'text-sm font-medium',
+                        (number.deliveryRate || 0) >= 95
+                          ? 'text-emerald-400'
+                          : (number.deliveryRate || 0) >= 85
+                            ? 'text-yellow-400'
+                            : 'text-red-400',
+                      )}
+                    >
                       {(number.deliveryRate || 0).toFixed(1)}%
                     </span>
                   </td>
@@ -586,7 +680,7 @@ function NumbersTable({
                         >
                           <Snowflake className="w-3.5 h-3.5" />
                         </button>
-                      ) : number.status !== 'DISABLED' ? (
+                      ) : number.status !== 'RETIRED' ? (
                         <button
                           onClick={() => activateMutation.mutate(number.id)}
                           className="btn-ghost p-1.5 text-emerald-400 hover:text-emerald-300"
@@ -626,10 +720,18 @@ function NumbersTable({
    ═══════════════════════════════════════════════ */
 
 function DailyAssignmentsView({
-  repAssignments, unassignedNumbers, isLoading, totalAssignments,
-  onBulkAssign, onUnassign, unassignPending,
+  repAssignments,
+  unassignedNumbers,
+  isLoading,
+  totalAssignments,
+  onBulkAssign,
+  onUnassign,
+  unassignPending,
 }: {
-  repAssignments: { rep: { id: string; firstName: string; lastName: string }; numbers: { id: string; phoneNumber: string; status: string; dailySentCount: number; dailyLimit: number }[] }[];
+  repAssignments: {
+    rep: { id: string; firstName: string; lastName: string };
+    numbers: { id: string; phoneNumber: string; status: string; dailySentCount: number; dailyLimit: number }[];
+  }[];
   unassignedNumbers: PhoneNumberItem[];
   isLoading: boolean;
   totalAssignments: number;
@@ -691,7 +793,8 @@ function DailyAssignmentsView({
           <Users className="w-12 h-12 text-dark-600 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-dark-200 mb-2">No Daily Assignments</h3>
           <p className="text-sm text-dark-400 mb-5 max-w-sm mx-auto">
-            Assign phone numbers to reps for today's campaigns. Each rep needs at least one number to send messages.
+            Assign phone numbers to reps for today&apos;s campaigns. Each rep needs at least one number to send
+            messages.
           </p>
           <button onClick={onBulkAssign} className="btn-primary inline-flex items-center gap-2">
             <UserCheck className="w-4 h-4" /> Assign Numbers to Reps
@@ -713,10 +816,13 @@ function DailyAssignmentsView({
                   className="w-full flex items-center gap-4 p-4 hover:bg-dark-800/30 transition-colors text-left"
                 >
                   <div className="w-10 h-10 rounded-full bg-scl-600/20 flex items-center justify-center text-scl-400 font-semibold shrink-0">
-                    {rep.firstName[0]}{rep.lastName?.[0] || ''}
+                    {rep.firstName[0]}
+                    {rep.lastName?.[0] || ''}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-dark-100">{rep.firstName} {rep.lastName}</p>
+                    <p className="text-sm font-semibold text-dark-100">
+                      {rep.firstName} {rep.lastName}
+                    </p>
                     <p className="text-xs text-dark-500">
                       {numbers.length} number{numbers.length !== 1 ? 's' : ''} · {repTotalUsed}/{repTotalCapacity} sent
                     </p>
@@ -725,16 +831,20 @@ function DailyAssignmentsView({
                   <div className="w-28 hidden md:block">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[10px] text-dark-500">Usage</span>
-                      <span className={clsx(
-                        'text-[10px] font-medium',
-                        usagePct >= 90 ? 'text-red-400' : usagePct >= 70 ? 'text-yellow-400' : 'text-emerald-400'
-                      )}>{usagePct}%</span>
+                      <span
+                        className={clsx(
+                          'text-[10px] font-medium',
+                          usagePct >= 90 ? 'text-red-400' : usagePct >= 70 ? 'text-yellow-400' : 'text-emerald-400',
+                        )}
+                      >
+                        {usagePct}%
+                      </span>
                     </div>
                     <div className="w-full h-1.5 bg-dark-700 rounded-full overflow-hidden">
                       <div
                         className={clsx(
                           'h-full rounded-full transition-all',
-                          usagePct >= 90 ? 'bg-red-500' : usagePct >= 70 ? 'bg-yellow-500' : 'bg-emerald-500'
+                          usagePct >= 90 ? 'bg-red-500' : usagePct >= 70 ? 'bg-yellow-500' : 'bg-emerald-500',
                         )}
                         style={{ width: `${Math.min(usagePct, 100)}%` }}
                       />
@@ -744,7 +854,11 @@ function DailyAssignmentsView({
                   <span className="px-2.5 py-1 bg-dark-800 rounded-lg text-xs text-dark-300 font-medium">
                     {numbers.length}
                   </span>
-                  {isExpanded ? <ChevronUp className="w-4 h-4 text-dark-500" /> : <ChevronDown className="w-4 h-4 text-dark-500" />}
+                  {isExpanded ? (
+                    <ChevronUp className="w-4 h-4 text-dark-500" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-dark-500" />
+                  )}
                 </button>
 
                 {/* Expanded: Numbers list */}
@@ -754,15 +868,23 @@ function DailyAssignmentsView({
                       {numbers.map((num) => {
                         const usePct = num.dailyLimit > 0 ? Math.round((num.dailySentCount / num.dailyLimit) * 100) : 0;
                         return (
-                          <div key={num.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-dark-800/40 transition-colors">
+                          <div
+                            key={num.id}
+                            className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-dark-800/40 transition-colors"
+                          >
                             <Phone className="w-3.5 h-3.5 text-dark-500 shrink-0" />
                             <span className="text-sm font-mono text-dark-200 flex-1">{num.phoneNumber}</span>
                             <NumberStatusBadge status={num.status} />
                             <div className="flex items-center gap-2 text-xs text-dark-400 w-24 justify-end">
-                              <span>{num.dailySentCount}/{num.dailyLimit}</span>
+                              <span>
+                                {num.dailySentCount}/{num.dailyLimit}
+                              </span>
                               <div className="w-10 h-1 bg-dark-700 rounded-full overflow-hidden">
                                 <div
-                                  className={clsx('h-full rounded-full', usePct >= 90 ? 'bg-red-500' : usePct >= 70 ? 'bg-yellow-500' : 'bg-scl-500')}
+                                  className={clsx(
+                                    'h-full rounded-full',
+                                    usePct >= 90 ? 'bg-red-500' : usePct >= 70 ? 'bg-yellow-500' : 'bg-scl-500',
+                                  )}
                                   style={{ width: `${Math.min(usePct, 100)}%` }}
                                 />
                               </div>
@@ -773,7 +895,10 @@ function DailyAssignmentsView({
                     </div>
                     <div className="border-t border-dark-700/50 p-3 flex items-center justify-end gap-2">
                       <button
-                        onClick={(e) => { e.stopPropagation(); onUnassign(rep.id); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUnassign(rep.id);
+                        }}
                         disabled={unassignPending}
                         className="btn-ghost text-xs flex items-center gap-1.5 text-red-400/70 hover:text-red-400"
                       >
@@ -799,7 +924,7 @@ function DailyAssignmentsView({
                 {unassignedNumbers.length} active number{unassignedNumbers.length !== 1 ? 's' : ''} not assigned today
               </p>
               <p className="text-xs text-dark-400 mt-0.5">
-                These numbers won't be used for campaigns until assigned to a rep.
+                These numbers won&apos;t be used for campaigns until assigned to a rep.
               </p>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {unassignedNumbers.slice(0, 8).map((n) => (
@@ -808,9 +933,7 @@ function DailyAssignmentsView({
                   </span>
                 ))}
                 {unassignedNumbers.length > 8 && (
-                  <span className="text-[11px] text-dark-500 px-2 py-0.5">
-                    +{unassignedNumbers.length - 8} more
-                  </span>
+                  <span className="text-[11px] text-dark-500 px-2 py-0.5">+{unassignedNumbers.length - 8} more</span>
                 )}
               </div>
             </div>
@@ -859,9 +982,7 @@ function BulkAssignModal({ numbers, onClose }: { numbers: PhoneNumberItem[]; onC
     if (numberSearch.trim()) {
       const q = numberSearch.toLowerCase();
       list = list.filter(
-        (n) =>
-          n.phoneNumber.includes(q) ||
-          (n.friendlyName && n.friendlyName.toLowerCase().includes(q))
+        (n) => n.phoneNumber.includes(q) || (n.friendlyName && n.friendlyName.toLowerCase().includes(q)),
       );
     }
     return list;
@@ -900,19 +1021,17 @@ function BulkAssignModal({ numbers, onClose }: { numbers: PhoneNumberItem[]; onC
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-lg font-bold text-dark-50">Assign Numbers to Rep</h3>
-            <p className="text-xs text-dark-500 mt-0.5">Select a rep and pick numbers for today's campaigns</p>
+            <p className="text-xs text-dark-500 mt-0.5">Select a rep and pick numbers for today&apos;s campaigns</p>
           </div>
-          <button onClick={onClose} className="btn-ghost p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="btn-ghost p-1">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Step 1: Select Rep */}
         <div className="mb-5">
           <label className="block text-xs text-dark-400 mb-1.5">Sales Rep</label>
-          <select
-            value={selectedRep}
-            onChange={(e) => setSelectedRep(e.target.value)}
-            className="input w-full"
-          >
+          <select value={selectedRep} onChange={(e) => setSelectedRep(e.target.value)} className="input w-full">
             <option value="">Choose a rep…</option>
             {reps.map((u) => (
               <option key={u.id} value={u.id}>
@@ -963,15 +1082,15 @@ function BulkAssignModal({ numbers, onClose }: { numbers: PhoneNumberItem[]; onC
                         'w-full flex items-center gap-3 p-2 rounded-lg transition-colors text-left',
                         isSelected
                           ? 'bg-scl-600/15 border border-scl-600/30'
-                          : 'hover:bg-dark-800/50 border border-transparent'
+                          : 'hover:bg-dark-800/50 border border-transparent',
                       )}
                     >
-                      <div className={clsx(
-                        'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
-                        isSelected
-                          ? 'bg-scl-500 border-scl-500'
-                          : 'border-dark-600 bg-dark-800'
-                      )}>
+                      <div
+                        className={clsx(
+                          'w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
+                          isSelected ? 'bg-scl-500 border-scl-500' : 'border-dark-600 bg-dark-800',
+                        )}
+                      >
                         {isSelected && <Check className="w-3 h-3 text-white" />}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -993,10 +1112,15 @@ function BulkAssignModal({ numbers, onClose }: { numbers: PhoneNumberItem[]; onC
                         )}
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-xs text-dark-400">{num.dailySentCount}/{num.dailyLimit}</p>
+                        <p className="text-xs text-dark-400">
+                          {num.dailySentCount}/{num.dailyLimit}
+                        </p>
                         <div className="w-12 h-1 bg-dark-700 rounded-full overflow-hidden mt-0.5">
                           <div
-                            className={clsx('h-full rounded-full', usePct >= 90 ? 'bg-red-500' : usePct >= 70 ? 'bg-yellow-500' : 'bg-scl-500')}
+                            className={clsx(
+                              'h-full rounded-full',
+                              usePct >= 90 ? 'bg-red-500' : usePct >= 70 ? 'bg-yellow-500' : 'bg-scl-500',
+                            )}
                             style={{ width: `${Math.min(usePct, 100)}%` }}
                           />
                         </div>
@@ -1014,14 +1138,17 @@ function BulkAssignModal({ numbers, onClose }: { numbers: PhoneNumberItem[]; onC
           <div className="text-xs text-dark-400">
             {selectedRep && selectedNumbers.size > 0 && selectedRepUser && (
               <span>
-                Assign <span className="text-dark-200 font-medium">{selectedNumbers.size}</span> number{selectedNumbers.size !== 1 ? 's' : ''} to{' '}
-                <span className="text-dark-200 font-medium">{selectedRepUser.firstName}</span>
-                {' '}({selectedCapacity.toLocaleString()} msgs/day)
+                Assign <span className="text-dark-200 font-medium">{selectedNumbers.size}</span> number
+                {selectedNumbers.size !== 1 ? 's' : ''} to{' '}
+                <span className="text-dark-200 font-medium">{selectedRepUser.firstName}</span> (
+                {selectedCapacity.toLocaleString()} msgs/day)
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="btn-ghost text-sm">Cancel</button>
+            <button onClick={onClose} className="btn-ghost text-sm">
+              Cancel
+            </button>
             <button
               onClick={handleAssign}
               disabled={!selectedRep || selectedNumbers.size === 0 || assignMutation.isPending}
@@ -1048,14 +1175,22 @@ function BulkAssignModal({ numbers, onClose }: { numbers: PhoneNumberItem[]; onC
 function ModalOverlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()}>
-        {children}
-      </div>
+      <div onClick={(e) => e.stopPropagation()}>{children}</div>
     </div>
   );
 }
 
-function StatCard({ label, value, icon, color }: { label: string; value: string | number; icon: React.ReactNode; color: string }) {
+function StatCard({
+  label,
+  value,
+  icon,
+  color,
+}: {
+  label: string;
+  value: string | number;
+  icon: React.ReactNode;
+  color: string;
+}) {
   const colorMap: Record<string, string> = {
     emerald: 'bg-emerald-500/20 text-emerald-400',
     yellow: 'bg-yellow-500/20 text-yellow-400',
@@ -1082,22 +1217,22 @@ function NumberStatusBadge({ status }: { status: string }) {
     ACTIVE: 'bg-emerald-500/20 text-emerald-300',
     COOLING: 'bg-blue-500/20 text-blue-300',
     WARMING: 'bg-yellow-500/20 text-yellow-300',
-    FLAGGED: 'bg-red-500/20 text-red-300',
-    DISABLED: 'bg-dark-700 text-dark-400',
-    SUSPENDED: 'bg-orange-500/20 text-orange-300',
+    SUSPENDED: 'bg-red-500/20 text-red-300',
+    RETIRED: 'bg-dark-700 text-dark-400',
   };
   return <span className={clsx('badge', styles[status] || '')}>{status}</span>;
 }
 
 function HealthBar({ score }: { score: number }) {
   const color =
-    score >= 90 ? 'bg-emerald-500' :
-    score >= 70 ? 'bg-yellow-500' :
-    score >= 50 ? 'bg-orange-500' : 'bg-red-500';
+    score >= 90 ? 'bg-emerald-500' : score >= 70 ? 'bg-yellow-500' : score >= 50 ? 'bg-orange-500' : 'bg-red-500';
   return (
     <div className="flex items-center gap-2">
       <div className="w-14 h-1.5 bg-dark-700 rounded-full overflow-hidden">
-        <div className={clsx('h-full rounded-full transition-all', color)} style={{ width: `${Math.min(score, 100)}%` }} />
+        <div
+          className={clsx('h-full rounded-full transition-all', color)}
+          style={{ width: `${Math.min(score, 100)}%` }}
+        />
       </div>
       <span className="text-xs text-dark-400 tabular-nums w-6 text-right">{score}</span>
     </div>
@@ -1130,8 +1265,7 @@ function AssignModal({ numberId, onClose }: { numberId: string; onClose: () => v
   });
 
   const assignMutation = useMutation({
-    mutationFn: (userId: string) =>
-      api.post('/numbers/assign', { repId: userId, phoneNumberIds: [numberId] }),
+    mutationFn: (userId: string) => api.post('/numbers/assign', { repId: userId, phoneNumberIds: [numberId] }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['numbers'] });
       queryClient.invalidateQueries({ queryKey: ['numberAssignments'] });
@@ -1147,7 +1281,9 @@ function AssignModal({ numberId, onClose }: { numberId: string; onClose: () => v
       <div className="card w-full max-w-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-dark-50">Assign Number</h3>
-          <button onClick={onClose} className="btn-ghost p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="btn-ghost p-1">
+            <X className="w-5 h-5" />
+          </button>
         </div>
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {users.map((user: any) => (
@@ -1161,7 +1297,9 @@ function AssignModal({ numberId, onClose }: { numberId: string; onClose: () => v
                 {user.firstName?.[0]}
               </div>
               <div>
-                <p className="text-sm font-medium text-dark-200">{user.firstName} {user.lastName}</p>
+                <p className="text-sm font-medium text-dark-200">
+                  {user.firstName} {user.lastName}
+                </p>
                 <p className="text-xs text-dark-500">{user.role}</p>
               </div>
             </button>
@@ -1197,11 +1335,19 @@ function AddNumberModal({ onClose }: { onClose: () => void }) {
 
   const handleSingleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    createMutation.mutate({ phoneNumber: phone.trim(), friendlyName: friendlyName.trim() || undefined, dailyLimit, isRamping });
+    createMutation.mutate({
+      phoneNumber: phone.trim(),
+      friendlyName: friendlyName.trim() || undefined,
+      dailyLimit,
+      isRamping,
+    });
   };
 
   const handleBulkSubmit = () => {
-    const lines = bulkText.split('\n').map(l => l.trim()).filter(Boolean);
+    const lines = bulkText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean);
     if (lines.length === 0) return;
     let created = 0;
     const total = lines.length;
@@ -1213,8 +1359,11 @@ function AddNumberModal({ onClose }: { onClose: () => void }) {
         return;
       }
       const num = lines[idx].startsWith('+') ? lines[idx] : `+1${lines[idx].replace(/\D/g, '')}`;
-      api.post('/numbers', { phoneNumber: num, dailyLimit, isRamping })
-        .then(() => { created++; })
+      api
+        .post('/numbers', { phoneNumber: num, dailyLimit, isRamping })
+        .then(() => {
+          created++;
+        })
         .catch(() => {})
         .finally(() => createNext(idx + 1));
     };
@@ -1226,14 +1375,28 @@ function AddNumberModal({ onClose }: { onClose: () => void }) {
       <div className="card w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-lg font-bold text-dark-50">Add Phone Number</h3>
-          <button onClick={onClose} className="btn-ghost p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="btn-ghost p-1">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         <div className="flex gap-1 mb-5 p-0.5 bg-dark-800 rounded-lg">
-          <button onClick={() => setTab('single')} className={clsx('flex-1 py-1.5 text-xs rounded-md transition-colors', tab === 'single' ? 'bg-dark-700 text-dark-100' : 'text-dark-400 hover:text-dark-200')}>
+          <button
+            onClick={() => setTab('single')}
+            className={clsx(
+              'flex-1 py-1.5 text-xs rounded-md transition-colors',
+              tab === 'single' ? 'bg-dark-700 text-dark-100' : 'text-dark-400 hover:text-dark-200',
+            )}
+          >
             Single
           </button>
-          <button onClick={() => setTab('bulk')} className={clsx('flex-1 py-1.5 text-xs rounded-md transition-colors', tab === 'bulk' ? 'bg-dark-700 text-dark-100' : 'text-dark-400 hover:text-dark-200')}>
+          <button
+            onClick={() => setTab('bulk')}
+            className={clsx(
+              'flex-1 py-1.5 text-xs rounded-md transition-colors',
+              tab === 'bulk' ? 'bg-dark-700 text-dark-100' : 'text-dark-400 hover:text-dark-200',
+            )}
+          >
             Bulk Import
           </button>
         </div>
@@ -1242,25 +1405,55 @@ function AddNumberModal({ onClose }: { onClose: () => void }) {
           <form onSubmit={handleSingleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs text-dark-400 mb-1">Phone Number</label>
-              <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+12125551234" className="input w-full font-mono" autoFocus required />
+              <input
+                type="text"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+12125551234"
+                className="input w-full font-mono"
+                autoFocus
+                required
+              />
             </div>
             <div>
               <label className="block text-xs text-dark-400 mb-1">Friendly Name (optional)</label>
-              <input type="text" value={friendlyName} onChange={(e) => setFriendlyName(e.target.value)} placeholder="NYC Office Line" className="input w-full" />
+              <input
+                type="text"
+                value={friendlyName}
+                onChange={(e) => setFriendlyName(e.target.value)}
+                placeholder="NYC Office Line"
+                className="input w-full"
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs text-dark-400 mb-1">Daily Limit</label>
-                <input type="number" value={dailyLimit} onChange={(e) => setDailyLimit(Number(e.target.value))} min={1} max={10000} className="input w-full" />
+                <input
+                  type="number"
+                  value={dailyLimit}
+                  onChange={(e) => setDailyLimit(Number(e.target.value))}
+                  min={1}
+                  max={10000}
+                  className="input w-full"
+                />
               </div>
               <div className="flex items-end pb-1">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={isRamping} onChange={(e) => setIsRamping(e.target.checked)} className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-scl-500 focus:ring-scl-500" />
+                  <input
+                    type="checkbox"
+                    checked={isRamping}
+                    onChange={(e) => setIsRamping(e.target.checked)}
+                    className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-scl-500 focus:ring-scl-500"
+                  />
                   <span className="text-sm text-dark-300">Enable ramping</span>
                 </label>
               </div>
             </div>
-            <button type="submit" disabled={createMutation.isPending} className="btn-primary w-full flex items-center justify-center gap-2">
+            <button
+              type="submit"
+              disabled={createMutation.isPending}
+              className="btn-primary w-full flex items-center justify-center gap-2"
+            >
               {createMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Add Number
             </button>
@@ -1269,22 +1462,44 @@ function AddNumberModal({ onClose }: { onClose: () => void }) {
           <div className="space-y-4">
             <div>
               <label className="block text-xs text-dark-400 mb-1">Phone Numbers (one per line)</label>
-              <textarea value={bulkText} onChange={(e) => setBulkText(e.target.value)} rows={6} className="input w-full font-mono text-sm resize-none" placeholder={"+12125551234\n+12125551235\n+12125551236"} />
+              <textarea
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                rows={6}
+                className="input w-full font-mono text-sm resize-none"
+                placeholder={'+12125551234\n+12125551235\n+12125551236'}
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs text-dark-400 mb-1">Daily Limit (all)</label>
-                <input type="number" value={dailyLimit} onChange={(e) => setDailyLimit(Number(e.target.value))} min={1} max={10000} className="input w-full" />
+                <input
+                  type="number"
+                  value={dailyLimit}
+                  onChange={(e) => setDailyLimit(Number(e.target.value))}
+                  min={1}
+                  max={10000}
+                  className="input w-full"
+                />
               </div>
               <div className="flex items-end pb-1">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={isRamping} onChange={(e) => setIsRamping(e.target.checked)} className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-scl-500 focus:ring-scl-500" />
+                  <input
+                    type="checkbox"
+                    checked={isRamping}
+                    onChange={(e) => setIsRamping(e.target.checked)}
+                    className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-scl-500 focus:ring-scl-500"
+                  />
                   <span className="text-sm text-dark-300">Enable ramping</span>
                 </label>
               </div>
             </div>
-            <button onClick={handleBulkSubmit} disabled={!bulkText.trim()} className="btn-primary w-full flex items-center justify-center gap-2">
-              <Plus className="w-4 h-4" /> Import {bulkText.split('\n').filter(l => l.trim()).length} Numbers
+            <button
+              onClick={handleBulkSubmit}
+              disabled={!bulkText.trim()}
+              className="btn-primary w-full flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" /> Import {bulkText.split('\n').filter((l) => l.trim()).length} Numbers
             </button>
           </div>
         )}
@@ -1320,37 +1535,64 @@ function EditNumberModal({ number, onClose }: { number: PhoneNumberItem; onClose
       <div className="card w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-lg font-bold text-dark-50">Edit Number</h3>
-          <button onClick={onClose} className="btn-ghost p-1"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="btn-ghost p-1">
+            <X className="w-5 h-5" />
+          </button>
         </div>
         <p className="text-sm text-dark-400 font-mono mb-4">{number.phoneNumber}</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs text-dark-400 mb-1">Friendly Name</label>
-            <input type="text" value={friendlyName} onChange={(e) => setFriendlyName(e.target.value)} className="input w-full" />
+            <input
+              type="text"
+              value={friendlyName}
+              onChange={(e) => setFriendlyName(e.target.value)}
+              className="input w-full"
+            />
           </div>
           <div>
             <label className="block text-xs text-dark-400 mb-1">Status</label>
-            <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} className="input w-full">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as typeof status)}
+              className="input w-full"
+            >
               <option value="ACTIVE">Active</option>
               <option value="WARMING">Warming</option>
               <option value="COOLING">Cooling</option>
-              <option value="FLAGGED">Flagged</option>
-              <option value="DISABLED">Disabled</option>
+              <option value="SUSPENDED">Suspended</option>
+              <option value="RETIRED">Retired</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs text-dark-400 mb-1">Daily Limit</label>
-              <input type="number" value={dailyLimit} onChange={(e) => setDailyLimit(Number(e.target.value))} min={1} max={10000} className="input w-full" />
+              <input
+                type="number"
+                value={dailyLimit}
+                onChange={(e) => setDailyLimit(Number(e.target.value))}
+                min={1}
+                max={10000}
+                className="input w-full"
+              />
             </div>
             <div className="flex items-end pb-1">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={isRamping} onChange={(e) => setIsRamping(e.target.checked)} className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-scl-500 focus:ring-scl-500" />
+                <input
+                  type="checkbox"
+                  checked={isRamping}
+                  onChange={(e) => setIsRamping(e.target.checked)}
+                  className="w-4 h-4 rounded border-dark-600 bg-dark-800 text-scl-500 focus:ring-scl-500"
+                />
                 <span className="text-sm text-dark-300">Ramping</span>
               </label>
             </div>
           </div>
-          <button type="submit" disabled={updateMutation.isPending} className="btn-primary w-full flex items-center justify-center gap-2">
+          <button
+            type="submit"
+            disabled={updateMutation.isPending}
+            className="btn-primary w-full flex items-center justify-center gap-2"
+          >
             {updateMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Edit3 className="w-4 h-4" />}
             Save Changes
           </button>
@@ -1360,7 +1602,15 @@ function EditNumberModal({ number, onClose }: { number: PhoneNumberItem; onClose
   );
 }
 
-function ConfirmDeleteModal({ number, onConfirm, onClose }: { number: PhoneNumberItem; onConfirm: () => void; onClose: () => void }) {
+function ConfirmDeleteModal({
+  number,
+  onConfirm,
+  onClose,
+}: {
+  number: PhoneNumberItem;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
   return (
     <ModalOverlay onClose={onClose}>
       <div className="card w-full max-w-sm p-6 text-center">
@@ -1372,8 +1622,13 @@ function ConfirmDeleteModal({ number, onConfirm, onClose }: { number: PhoneNumbe
         <p className="text-base font-mono text-dark-200 mb-5">{number.phoneNumber}</p>
         <p className="text-xs text-dark-500 mb-5">All assignments and pool memberships will also be removed.</p>
         <div className="flex gap-3">
-          <button onClick={onClose} className="btn-ghost flex-1">Cancel</button>
-          <button onClick={onConfirm} className="flex-1 py-2 px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium transition-colors">
+          <button onClick={onClose} className="btn-ghost flex-1">
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-2 px-4 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm font-medium transition-colors"
+          >
             Delete
           </button>
         </div>
