@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { io, Socket } from 'socket.io-client';
-import { useQueryClient, QueryClient } from '@tanstack/react-query';
+import { Socket } from 'socket.io-client';
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 interface WebSocketState {
@@ -11,55 +11,15 @@ interface WebSocketState {
 }
 
 /**
- * Global WebSocket store — single connection shared across all pages.
- * Emits events that any page can listen to via useWebSocketEvent().
+ * Global WebSocket store — disabled on shared hosting.
+ * The PHP proxy cannot reliably handle Socket.IO polling, causing 502 errors.
+ * All data refreshing uses React Query polling instead.
  */
-export const useWebSocketStore = create<WebSocketState>((set, get) => ({
+export const useWebSocketStore = create<WebSocketState>(() => ({
   socket: null,
   connected: false,
-
-  connect: (token: string) => {
-    const existing = get().socket;
-    if (existing?.connected) return; // Already connected
-
-    // Connect to WebSocket via the API proxy path
-    // On shared hosting the PHP proxy forwards /socket.io/ to the Node backend
-    const wsUrl = window.location.origin;
-    const socket = io(wsUrl, {
-      auth: { token },
-      path: '/api/socket.io/',
-      transports: ['polling'], // polling-only: PHP proxy can't upgrade to WS
-      reconnection: true,
-      reconnectionDelay: 10000,
-      reconnectionDelayMax: 60000,
-      reconnectionAttempts: 5,
-    });
-
-    socket.on('connect', () => {
-      set({ connected: true });
-      // Auto-join inbox channel
-      socket.emit('join:inbox');
-    });
-
-    socket.on('disconnect', () => {
-      set({ connected: false });
-    });
-
-    socket.on('connect_error', () => {
-      set({ connected: false });
-    });
-
-    set({ socket, connected: false });
-  },
-
-  disconnect: () => {
-    const { socket } = get();
-    if (socket) {
-      socket.removeAllListeners();
-      socket.disconnect();
-      set({ socket: null, connected: false });
-    }
-  },
+  connect: () => {},
+  disconnect: () => {},
 }));
 
 /**

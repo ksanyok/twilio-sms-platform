@@ -3,8 +3,18 @@ import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { subDays, subHours, startOfDay, format } from 'date-fns';
 
-export class AnalyticsController {
+/** Convert BigInt values from MySQL $queryRaw results to plain numbers */
+function toBigIntSafe<T>(rows: T[]): T[] {
+  return rows.map((row) => {
+    const obj: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+      obj[k] = typeof v === 'bigint' ? Number(v) : v;
+    }
+    return obj as T;
+  });
+}
 
+export class AnalyticsController {
   /**
    * GET /analytics/overview — High-level KPIs with trends
    */
@@ -39,7 +49,9 @@ export class AnalyticsController {
       prisma.message.count({ where: { direction: 'OUTBOUND', createdAt: { gte: last7d } } }),
       prisma.message.count({ where: { direction: 'OUTBOUND', createdAt: { gte: prev7d, lt: last7d } } }),
       prisma.message.count({ where: { direction: 'OUTBOUND', status: 'DELIVERED', createdAt: { gte: last7d } } }),
-      prisma.message.count({ where: { direction: 'OUTBOUND', status: { in: ['FAILED', 'BLOCKED'] }, createdAt: { gte: last7d } } }),
+      prisma.message.count({
+        where: { direction: 'OUTBOUND', status: { in: ['FAILED', 'BLOCKED'] }, createdAt: { gte: last7d } },
+      }),
       prisma.message.count({ where: { direction: 'INBOUND', createdAt: { gte: last7d } } }),
       prisma.message.count({ where: { direction: 'INBOUND', createdAt: { gte: prev7d, lt: last7d } } }),
       prisma.lead.count({ where: { optedOut: true, optedOutAt: { gte: last7d } } }),
@@ -100,31 +112,33 @@ export class AnalyticsController {
 
     // Lead creation over time (last 30 days)
     const last30d = subDays(new Date(), 30);
-    const leadTimeline = await prisma.$queryRaw`
+    const leadTimeline = toBigIntSafe(
+      (await prisma.$queryRaw`
       SELECT DATE(createdAt) as date, CAST(COUNT(*) AS SIGNED) as count
       FROM leads
       WHERE createdAt >= ${last30d}
       GROUP BY DATE(createdAt)
       ORDER BY date ASC
-    ` as Array<{ date: Date; count: number }>;
+    `) as Array<{ date: Date; count: number }>,
+    );
 
     res.json({
-      statusDistribution: statusCounts.map(s => ({
+      statusDistribution: statusCounts.map((s) => ({
         status: s.status,
         count: s._count,
       })),
-      pipelineFunnel: stages.map(s => ({
+      pipelineFunnel: stages.map((s) => ({
         id: s.id,
         name: s.name,
         color: s.color,
         order: s.order,
         count: s._count.cards,
       })),
-      sourceDistribution: sourceCounts.map(s => ({
+      sourceDistribution: sourceCounts.map((s) => ({
         source: s.source || 'Unknown',
         count: s._count,
       })),
-      leadTimeline: leadTimeline.map(r => ({
+      leadTimeline: leadTimeline.map((r) => ({
         date: format(new Date(r.date), 'yyyy-MM-dd'),
         count: r.count,
       })),
@@ -139,7 +153,8 @@ export class AnalyticsController {
     const since = subDays(new Date(), days);
 
     // Daily volume
-    const dailyVolume = await prisma.$queryRaw`
+    const dailyVolume = toBigIntSafe(
+      (await prisma.$queryRaw`
       SELECT 
         DATE(createdAt) as date,
         CAST(SUM(CASE WHEN direction = 'OUTBOUND' THEN 1 ELSE 0 END) AS SIGNED) as outbound,
@@ -150,10 +165,12 @@ export class AnalyticsController {
       WHERE createdAt >= ${since}
       GROUP BY DATE(createdAt)
       ORDER BY date ASC
-    ` as Array<{ date: Date; outbound: number; inbound: number; delivered: number; failed: number }>;
+    `) as Array<{ date: Date; outbound: number; inbound: number; delivered: number; failed: number }>,
+    );
 
     // Hourly distribution (all time)
-    const hourlyPattern = await prisma.$queryRaw`
+    const hourlyPattern = toBigIntSafe(
+      (await prisma.$queryRaw`
       SELECT 
         HOUR(createdAt) as hour,
         CAST(SUM(CASE WHEN direction = 'OUTBOUND' THEN 1 ELSE 0 END) AS SIGNED) as outbound,
@@ -162,10 +179,12 @@ export class AnalyticsController {
       WHERE createdAt >= ${since}
       GROUP BY hour
       ORDER BY hour
-    ` as Array<{ hour: number; outbound: number; inbound: number }>;
+    `) as Array<{ hour: number; outbound: number; inbound: number }>,
+    );
 
     // Day of week distribution
-    const weekdayPattern = await prisma.$queryRaw`
+    const weekdayPattern = toBigIntSafe(
+      (await prisma.$queryRaw`
       SELECT 
         (DAYOFWEEK(createdAt) - 1) as dow,
         CAST(SUM(CASE WHEN direction = 'OUTBOUND' THEN 1 ELSE 0 END) AS SIGNED) as outbound,
@@ -174,7 +193,8 @@ export class AnalyticsController {
       WHERE createdAt >= ${since}
       GROUP BY dow
       ORDER BY dow
-    ` as Array<{ dow: number; outbound: number; inbound: number }>;
+    `) as Array<{ dow: number; outbound: number; inbound: number }>,
+    );
 
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -192,7 +212,8 @@ export class AnalyticsController {
     });
 
     // Average response time (time between outbound and inbound in same conversation)
-    const avgResponseTime = await prisma.$queryRaw`
+    const avgResponseTime = toBigIntSafe(
+      (await prisma.$queryRaw`
       SELECT 
         CAST(AVG(response_seconds) AS SIGNED) as avg_seconds,
         CAST(MIN(response_seconds) AS SIGNED) as min_seconds,
@@ -213,29 +234,35 @@ export class AnalyticsController {
         GROUP BY om.conversationId
       ) first_reply
       WHERE response_seconds > 0 AND response_seconds < 86400 * 7
-    ` as Array<{ avg_seconds: number | null; min_seconds: number | null; max_seconds: number | null; total_replies: number }>;
+    `) as Array<{
+        avg_seconds: number | null;
+        min_seconds: number | null;
+        max_seconds: number | null;
+        total_replies: number;
+      }>,
+    );
 
     res.json({
-      dailyVolume: dailyVolume.map(r => ({
+      dailyVolume: dailyVolume.map((r) => ({
         date: format(new Date(r.date), 'yyyy-MM-dd'),
         outbound: r.outbound,
         inbound: r.inbound,
         delivered: r.delivered,
         failed: r.failed,
       })),
-      hourlyPattern: hourlyPattern.map(r => ({
+      hourlyPattern: hourlyPattern.map((r) => ({
         hour: r.hour,
         label: `${r.hour.toString().padStart(2, '0')}:00`,
         outbound: r.outbound,
         inbound: r.inbound,
       })),
-      weekdayPattern: weekdayPattern.map(r => ({
+      weekdayPattern: weekdayPattern.map((r) => ({
         dow: r.dow,
         day: dayNames[r.dow],
         outbound: r.outbound,
         inbound: r.inbound,
       })),
-      errorCodes: errorCodes.map(e => ({
+      errorCodes: errorCodes.map((e) => ({
         code: e.errorCode,
         count: e._count,
       })),
@@ -271,15 +298,14 @@ export class AnalyticsController {
       },
     });
 
-    const campaignAnalytics = campaigns.map(c => ({
+    const campaignAnalytics = campaigns.map((c) => ({
       ...c,
       deliveryRate: c.totalSent > 0 ? +((c.totalDelivered / c.totalSent) * 100).toFixed(1) : 0,
       replyRate: c.totalSent > 0 ? +((c.totalReplied / c.totalSent) * 100).toFixed(1) : 0,
       optOutRate: c.totalSent > 0 ? +((c.totalOptedOut / c.totalSent) * 100).toFixed(1) : 0,
       failRate: c.totalSent > 0 ? +(((c.totalFailed + c.totalBlocked) / c.totalSent) * 100).toFixed(1) : 0,
-      durationMinutes: c.startedAt && c.completedAt
-        ? Math.round((c.completedAt.getTime() - c.startedAt.getTime()) / 60000)
-        : null,
+      durationMinutes:
+        c.startedAt && c.completedAt ? Math.round((c.completedAt.getTime() - c.startedAt.getTime()) / 60000) : null,
     }));
 
     res.json({ campaigns: campaignAnalytics });
@@ -331,7 +357,7 @@ export class AnalyticsController {
       });
     }
 
-    const numberAnalytics = numbers.map(n => ({
+    const numberAnalytics = numbers.map((n) => ({
       ...n,
       utilizationPct: n.dailyLimit > 0 ? +((n.dailySentCount / n.dailyLimit) * 100).toFixed(1) : 0,
       failRate: n.totalSent > 0 ? +(((n.totalFailed + n.totalBlocked) / n.totalSent) * 100).toFixed(1) : 0,
@@ -347,7 +373,7 @@ export class AnalyticsController {
 
     res.json({
       numbers: numberAnalytics,
-      statusSummary: statusSummary.map(s => ({
+      statusSummary: statusSummary.map((s) => ({
         status: s.status,
         count: s._count,
         avgDeliveryRate: +(s._avg.deliveryRate || 0).toFixed(1),
@@ -379,7 +405,8 @@ export class AnalyticsController {
     });
 
     // Per-rep message stats (last 30 days)
-    const repMessageStats = await prisma.$queryRaw`
+    const repMessageStats = toBigIntSafe(
+      (await prisma.$queryRaw`
       SELECT 
         m.sentByUserId as user_id,
         CAST(SUM(CASE WHEN m.direction = 'OUTBOUND' THEN 1 ELSE 0 END) AS SIGNED) as sent,
@@ -389,10 +416,12 @@ export class AnalyticsController {
       WHERE m.sentByUserId IS NOT NULL
         AND m.createdAt >= ${last30d}
       GROUP BY m.sentByUserId
-    ` as Array<{ user_id: string; sent: number; delivered: number; failed: number }>;
+    `) as Array<{ user_id: string; sent: number; delivered: number; failed: number }>,
+    );
 
     // Per-rep reply counts
-    const repReplies = await prisma.$queryRaw`
+    const repReplies = toBigIntSafe(
+      (await prisma.$queryRaw`
       SELECT 
         c.assignedRepId as user_id,
         CAST(COUNT(*) AS SIGNED) as replies
@@ -402,12 +431,13 @@ export class AnalyticsController {
         AND c.assignedRepId IS NOT NULL
         AND m.createdAt >= ${last30d}
       GROUP BY c.assignedRepId
-    ` as Array<{ user_id: string; replies: number }>;
+    `) as Array<{ user_id: string; replies: number }>,
+    );
 
-    const msgMap = new Map(repMessageStats.map(r => [r.user_id, r]));
-    const replyMap = new Map(repReplies.map(r => [r.user_id, r.replies]));
+    const msgMap = new Map(repMessageStats.map((r) => [r.user_id, r]));
+    const replyMap = new Map(repReplies.map((r) => [r.user_id, r.replies]));
 
-    const repPerformance = reps.map(rep => {
+    const repPerformance = reps.map((rep) => {
       const msgs = msgMap.get(rep.id);
       const replies = replyMap.get(rep.id) || 0;
       return {
@@ -451,11 +481,11 @@ export class AnalyticsController {
       },
     });
 
-    const automationAnalytics = rules.map(rule => {
+    const automationAnalytics = rules.map((rule) => {
       const totalRuns = rule.runs.length;
-      const activeRuns = rule.runs.filter(r => r.isActive && !r.isPaused).length;
-      const pausedRuns = rule.runs.filter(r => r.isPaused).length;
-      const completedRuns = rule.runs.filter(r => r.completedAt).length;
+      const activeRuns = rule.runs.filter((r) => r.isActive && !r.isPaused).length;
+      const pausedRuns = rule.runs.filter((r) => r.isPaused).length;
+      const completedRuns = rule.runs.filter((r) => r.completedAt).length;
 
       return {
         id: rule.id,
@@ -474,7 +504,7 @@ export class AnalyticsController {
     });
 
     // Summary
-    const totalActive = automationAnalytics.filter(a => a.isActive).length;
+    const totalActive = automationAnalytics.filter((a) => a.isActive).length;
     const totalRuns = automationAnalytics.reduce((sum, a) => sum + a.totalRuns, 0);
     const activeRuns = automationAnalytics.reduce((sum, a) => sum + a.activeRuns, 0);
 
