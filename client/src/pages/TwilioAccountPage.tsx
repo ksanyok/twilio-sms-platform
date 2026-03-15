@@ -169,6 +169,9 @@ export default function TwilioAccountPage() {
   const todayVolume = data.todayVolume || {};
   const twilioMsgStats = data.twilioMessageStats24h || {};
 
+  // Detect Twilio authentication failure (all sections return 'Authenticate' error)
+  const hasAuthError = account?.error === 'Authenticate' || balance?.error === 'Authenticate';
+
   return (
     <div className="p-6 space-y-6 max-w-7xl">
       {/* ── Header ── */}
@@ -194,6 +197,28 @@ export default function TwilioAccountPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Auth Error Banner ── */}
+      {hasAuthError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-red-400 font-medium">Twilio Authentication Failed</p>
+            <p className="text-sm text-dark-400 mt-1">
+              Your Twilio Auth Token appears to be invalid or has been rotated. Go to{' '}
+              <a
+                href="https://console.twilio.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary-400 underline"
+              >
+                Twilio Console
+              </a>{' '}
+              → copy your current Auth Token → then update it in <strong>Settings → Integrations</strong>.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Top Cards: Balance, Account, Volume ── */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

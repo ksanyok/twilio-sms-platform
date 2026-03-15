@@ -189,7 +189,18 @@ export class NumberController {
       throw new AppError('Twilio not configured. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.', 400);
     }
 
-    const twilioNumbers = await client.incomingPhoneNumbers.list({ limit: 500 });
+    let twilioNumbers;
+    try {
+      twilioNumbers = await client.incomingPhoneNumbers.list({ limit: 500 });
+    } catch (err: any) {
+      if (err.message === 'Authenticate' || err.status === 401 || err.code === 20003) {
+        throw new AppError(
+          'Twilio authentication failed. Please update your Auth Token in Settings → Integrations.',
+          401,
+        );
+      }
+      throw err;
+    }
     let created = 0;
     let updated = 0;
 
