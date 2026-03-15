@@ -5,6 +5,14 @@ import 'dotenv/config';
   return Number(this);
 };
 
+// Prevent EPIPE crashes when piped stdout/stderr breaks (hosting runs: node ... | tee)
+process.stdout?.on?.('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED') return;
+});
+process.stderr?.on?.('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED') return;
+});
+
 import app from './app';
 import { config } from './config';
 import logger from './config/logger';
@@ -129,6 +137,14 @@ async function start() {
       logger.info(`🌐 Client URL: ${config.clientUrl}`);
       logger.info(`🔗 Webhook URL: ${config.webhookBaseUrl}`);
     });
+
+    httpServer.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        logger.error(`Port ${config.port} already in use, exiting`);
+        process.exit(1);
+      }
+      throw err;
+    });
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);
@@ -158,7 +174,9 @@ process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Promise Rejection:', { reason });
 });
 
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', (error: NodeJS.ErrnoException) => {
+  // Don't crash on EPIPE — just means the pipe (tee) died
+  if (error.code === 'EPIPE' || error.code === 'ERR_STREAM_DESTROYED') return;
   logger.error('Uncaught Exception:', { error: error.message, stack: error.stack });
   process.exit(1);
 });

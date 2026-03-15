@@ -5,7 +5,7 @@ import { ComplianceService } from '../services/complianceService';
 import { AutomationService } from '../services/automationService';
 import { AutoTagService } from '../services/autoTagService';
 import { WebhookService } from '../services/webhookService';
-import getTwilioClient from '../config/twilio';
+import '../config/twilio';
 import { config } from '../config';
 import { validateRequest } from 'twilio';
 import { Queue, Worker } from 'bullmq';
@@ -17,7 +17,7 @@ const router = Router();
  * Twilio webhook signature validation middleware
  * Validates that incoming requests are genuinely from Twilio
  */
-function validateTwilioSignature(req: Request, res: Response, next: Function): void {
+function validateTwilioSignature(req: Request, res: Response, next: () => void): void {
   // Skip validation in development if no auth token configured
   if (config.env === 'development' && !config.twilio.authToken) {
     return next();
@@ -31,12 +31,7 @@ function validateTwilioSignature(req: Request, res: Response, next: Function): v
   }
 
   const url = `${config.webhookBaseUrl}${req.originalUrl}`;
-  const isValid = validateRequest(
-    config.twilio.authToken,
-    twilioSignature,
-    url,
-    req.body
-  );
+  const isValid = validateRequest(config.twilio.authToken, twilioSignature, url, req.body);
 
   if (!isValid) {
     logger.warn('Invalid Twilio signature', { url, signature: twilioSignature });
@@ -56,13 +51,7 @@ router.use(validateTwilioSignature);
  */
 router.post('/inbound', async (req: Request, res: Response) => {
   try {
-    const {
-      MessageSid,
-      From,
-      To,
-      Body,
-      NumMedia,
-    } = req.body;
+    const { MessageSid, From, To, Body, NumMedia: _NumMedia } = req.body;
 
     logger.info(`Inbound SMS: ${From} → ${To}: ${Body}`);
 
@@ -182,6 +171,15 @@ router.post('/inbound', async (req: Request, res: Response) => {
         },
       });
 
+      // Create pipeline card for the new lead
+      const repliedStage =
+        (await prisma.pipelineStage.findFirst({ where: { mappedStatus: 'REPLIED' } })) ||
+        (await prisma.pipelineStage.findFirst({ where: { isDefault: true } })) ||
+        (await prisma.pipelineStage.findFirst({ orderBy: { order: 'asc' } }));
+      if (repliedStage) {
+        await prisma.pipelineCard.create({ data: { leadId: newLead.id, stageId: repliedStage.id } });
+      }
+
       const conversation = await prisma.conversation.create({
         data: {
           leadId: newLead.id,
@@ -237,12 +235,14 @@ router.post('/status', async (req: Request, res: Response) => {
   res.sendStatus(200);
 
   // Queue for async processing
-  await statusQueue.add('process-status', {
-    messageSid: MessageSid,
-    messageStatus: MessageStatus,
-    errorCode: ErrorCode,
-    errorMessage: ErrorMessage,
-  }).catch(err => logger.error('Failed to queue status webhook:', { error: err.message }));
+  await statusQueue
+    .add('process-status', {
+      messageSid: MessageSid,
+      messageStatus: MessageStatus,
+      errorCode: ErrorCode,
+      errorMessage: ErrorMessage,
+    })
+    .catch((err) => logger.error('Failed to queue status webhook:', { error: err.message }));
 });
 
 /**
@@ -268,11 +268,26 @@ const statusWorker = new Worker(
     const isBlocked = errorCode === '30007' || errorCode === '30034';
     const finalStatus = isBlocked ? 'BLOCKED' : mappedStatus;
 
+    // Status priority: only advance forward, never regress
+    const statusPriority: Record<string, number> = {
+      QUEUED: 1,
+      SENDING: 2,
+      SENT: 3,
+      DELIVERED: 4,
+      FAILED: 5,
+      UNDELIVERED: 5,
+      BLOCKED: 5,
+    };
+
     const message = await prisma.message.findFirst({
       where: { twilioMessageSid: messageSid },
     });
 
     if (!message) return;
+
+    const currentPriority = statusPriority[message.status] ?? 0;
+    const newPriority = statusPriority[finalStatus] ?? 0;
+    if (newPriority < currentPriority) return;
 
     await prisma.message.update({
       where: { id: message.id },
@@ -291,10 +306,10 @@ const statusWorker = new Worker(
         finalStatus === 'DELIVERED'
           ? 'totalDelivered'
           : finalStatus === 'FAILED' || finalStatus === 'UNDELIVERED'
-          ? 'totalFailed'
-          : finalStatus === 'BLOCKED'
-          ? 'totalBlocked'
-          : null;
+            ? 'totalFailed'
+            : finalStatus === 'BLOCKED'
+              ? 'totalBlocked'
+              : null;
 
       if (updateField) {
         await prisma.campaign.update({
@@ -345,7 +360,7 @@ const statusWorker = new Worker(
   {
     connection: redis,
     concurrency: 10, // Process 10 status updates in parallel
-  }
+  },
 );
 
 statusWorker.on('failed', (job, err) => {

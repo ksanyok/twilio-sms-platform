@@ -1,236 +1,114 @@
-# 🚀 Production Deployment Guide — SCL SMS Platform
+# Production Deployment Guide — SCL SMS Platform
 
-## Prerequisites
+## Current Hosting: vibeadd.ftp.tools (CloudLinux Shared)
 
-- **Server**: Ubuntu 22.04+ (or similar) with 2+ CPU, 4+ GB RAM
-- **Domain**: DNS A record pointing to your server IP
-- **Docker & Docker Compose** installed
-- **Git** installed
+**URL**: https://twiliosmstest.vibeadd.com  
+**Server directory**: `~/sms-platform/` (isolated from main site)  
+**Admin**: `admin@twiliosms.demo`
+
+### Architecture
+
+```
+Internet → Apache/PHP Proxy (api.php) → Node.js :3003 (~/sms-platform/)
+                                          ↓
+                                    MySQL + Redis (unix socket)
+```
+
+- The SMS platform runs from `~/sms-platform/` — fully isolated from the main VibeADD site
+- `lve_suwrapper` auto-restarts the Node.js process; `~/.bashrc` redirects `cd` to the isolated dir
+- Frontend static files served from `~/vibeadd.com/twiliosmstest/`
+- API proxied through `~/vibeadd.com/twiliosmstest/api.php` to `http://127.0.0.1:3003`
 
 ---
 
-## 1. Server Initial Setup
+## Quick Deploy
 
 ```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
-
-# Install Docker
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-
-# Install Docker Compose (v2)
-sudo apt install docker-compose-plugin -y
-
-# Verify
-docker --version
-docker compose version
+# From project root
+./scripts/deploy.sh
 ```
+
+This will:
+
+1. Build TypeScript locally (`npx tsc`)
+2. Create and upload `dist/` archive to server
+3. Upload `package.json` and `prisma/schema.prisma`
+4. Run `npm install --production` and `npx prisma generate` on server
+5. Restart the Node.js process (auto-restarted by `lve_suwrapper`)
 
 ---
 
-## 2. Clone & Configure
+## Manual Deploy
 
 ```bash
-# Clone repository
-git clone https://github.com/ksanyok/twilio-sms-platform.git
-cd twilio-sms-platform
+# 1. Build locally
+cd server && npx tsc
 
-# Create production .env from template
-cp .env.production.example .env
+# 2. Package
+tar czf /tmp/sms-dist.tar.gz dist/
 
-# Generate strong secrets
-echo "JWT_SECRET=$(openssl rand -base64 48)" 
-echo "JWT_REFRESH_SECRET=$(openssl rand -base64 48)"
-echo "POSTGRES_PASSWORD=$(openssl rand -base64 32)"
-echo "REDIS_PASSWORD=$(openssl rand -base64 32)"
-echo "ADMIN_PASSWORD=$(openssl rand -base64 16)"
-```
+# 3. Upload (use sshpass or enter password)
+SSH="ssh -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no"
+SCP="scp -o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no"
 
-Edit `.env` and set ALL values:
-- Replace `yourdomain.com` with your actual domain
-- Paste generated secrets from above
-- Set Twilio live credentials
-- Set admin email and password
+$SCP /tmp/sms-dist.tar.gz vibeadd@vibeadd.ftp.tools:~/sms-platform/
+$SCP server/package.json vibeadd@vibeadd.ftp.tools:~/sms-platform/
+$SCP server/prisma/schema.prisma vibeadd@vibeadd.ftp.tools:~/sms-platform/prisma/
 
----
+# 4. Install on server
+$SSH vibeadd@vibeadd.ftp.tools "cd ~/sms-platform && rm -rf dist && tar xzf sms-dist.tar.gz && rm sms-dist.tar.gz && npm install --production && npx prisma generate --schema=prisma/schema.prisma"
 
-## 3. SSL Certificates (Let's Encrypt)
-
-### Option A: Certbot standalone (before Docker)
-
-```bash
-# Install certbot
-sudo apt install certbot -y
-
-# Get certificate
-sudo certbot certonly --standalone -d yourdomain.com -d www.yourdomain.com
-
-# Copy certs to project
-mkdir -p ssl
-sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem ssl/
-sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem ssl/
-sudo chmod 644 ssl/*.pem
-```
-
-### Option B: Self-signed (for testing only)
-
-```bash
-mkdir -p ssl
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout ssl/privkey.pem \
-  -out ssl/fullchain.pem \
-  -subj "/CN=yourdomain.com"
-```
-
-### Auto-renewal (add to crontab)
-
-```bash
-# Add to crontab: sudo crontab -e
-0 3 * * * certbot renew --quiet && cp /etc/letsencrypt/live/yourdomain.com/*.pem /path/to/project/ssl/ && docker compose restart nginx
+# 5. Restart
+$SSH vibeadd@vibeadd.ftp.tools "pkill -f 'node.*max-old.*dist/index' || true"
+# lve_suwrapper auto-restarts in ~10s
 ```
 
 ---
 
-## 4. Build & Deploy
+## Frontend Deploy
 
 ```bash
-# Build and start all services
-docker compose up -d --build
-
-# Check all services are running
-docker compose ps
-
-# View logs
-docker compose logs -f app
-docker compose logs -f nginx
-
-# Run database migrations
-docker compose exec app npx prisma migrate deploy
-
-# Seed initial admin user
-docker compose exec app npx prisma db seed
+cd client && npm run build
+# Upload built files
+$SCP -r dist/* vibeadd@vibeadd.ftp.tools:~/vibeadd.com/twiliosmstest/
 ```
 
 ---
 
-## 5. Verify Deployment
+## Server Isolation
 
-```bash
-# Health check
-curl -k https://yourdomain.com/api/health
+The SMS platform is isolated in `~/sms-platform/` to prevent the main VibeADD site from interfering. The `.bashrc` contains a `cd` override that redirects the `lve_suwrapper` process from `~/vibeadd.com/server/` to `~/sms-platform/`.
 
-# Expected response:
-# {"status":"ok","timestamp":"...","uptime":...}
-
-# Check HTTPS headers
-curl -I https://yourdomain.com
-
-# Should include:
-# Strict-Transport-Security: max-age=63072000
-# X-Frame-Options: SAMEORIGIN
-# X-Content-Type-Options: nosniff
-```
+**Never** put SMS platform files in `~/vibeadd.com/server/` — that directory is shared with the main site.
 
 ---
 
-## 6. Set Twilio Webhooks
+## Troubleshooting
 
-In Twilio Console, for each phone number:
-
-- **Incoming Message Webhook**: `https://yourdomain.com/api/webhooks/twilio/incoming`
-- **Status Callback**: `https://yourdomain.com/api/webhooks/twilio/status`
-- **Method**: `POST`
-
----
-
-## 7. Firewall Setup
-
-```bash
-# Allow only HTTP, HTTPS and SSH
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw enable
-
-# PostgreSQL (5432) and Redis (6379) are NOT exposed — Docker internal only
-```
+| Problem             | Solution                                                             |
+| ------------------- | -------------------------------------------------------------------- |
+| 502 Bad Gateway     | Check if node process is running: `ps aux \| grep node`              |
+| Server not starting | Check logs: `tail -f ~/sms-platform/logs/combined.log`               |
+| Wrong code running  | Verify: `head -3 ~/sms-platform/dist/index.js`                       |
+| SSH rate limited    | Wait 2-3 min between connections                                     |
+| Files overwritten   | SMS code should be in `~/sms-platform/`, not `~/vibeadd.com/server/` |
 
 ---
 
-## 8. Monitoring & Maintenance
+## Database
 
-### View logs
-```bash
-docker compose logs -f           # all services
-docker compose logs -f app       # backend only
-docker compose logs -f nginx     # nginx only
-```
-
-### Restart services
-```bash
-docker compose restart app       # restart backend
-docker compose restart           # restart all
-```
-
-### Update deployment
-```bash
-git pull origin main
-docker compose up -d --build
-docker compose exec app npx prisma migrate deploy
-```
-
-### Database backup
-```bash
-# Create backup
-docker compose exec postgres pg_dump -U scl scl_sms > backup_$(date +%Y%m%d_%H%M%S).sql
-
-# Restore backup
-cat backup_file.sql | docker compose exec -T postgres psql -U scl scl_sms
-```
-
-### Redis backup
-```bash
-docker compose exec redis redis-cli -a $REDIS_PASSWORD BGSAVE
-```
+- **MySQL**: `vibeadd.mysql.tools:3306`
+- **Redis**: unix socket at `~/.system/redis.sock`
 
 ---
 
-## 9. Troubleshooting
+## Twilio Webhooks
 
-| Problem | Solution |
-|---------|----------|
-| App won't start | Check `docker compose logs app` — likely missing env vars |
-| "JWT_SECRET is not set" | Set JWT_SECRET and JWT_REFRESH_SECRET in `.env` |
-| 502 Bad Gateway | App hasn't started yet — wait or check logs |
-| SSL errors | Verify ssl/ directory has `fullchain.pem` and `privkey.pem` |
-| Redis connection refused | Check REDIS_PASSWORD matches in `.env` |
-| Database connection error | Verify POSTGRES_PASSWORD matches and postgres container is healthy |
+- **Incoming**: `https://twiliosmstest.vibeadd.com/api/webhooks/twilio/incoming` (POST)
+- **Status**: `https://twiliosmstest.vibeadd.com/api/webhooks/twilio/status` (POST)
 
 ---
 
-## 10. Security Checklist
+## Docker Deployment (Alternative)
 
-- [ ] `.env` file has strong, unique passwords and secrets
-- [ ] SSL certificates installed and auto-renewal configured
-- [ ] Firewall only allows ports 22, 80, 443
-- [ ] Admin password changed from default
-- [ ] Twilio webhooks point to HTTPS URL
-- [ ] SMS_MODE set to `live` (not `simulation`)
-- [ ] Database backups scheduled
-- [ ] Server SSH key-only auth (disable password login)
-
----
-
-## Architecture
-
-```
-Internet → Nginx (80/443) → Express App (3001) → PostgreSQL / Redis
-                ↓
-         Static Files (React SPA)
-```
-
-- **Nginx**: SSL termination, reverse proxy, static files, rate limiting
-- **App**: Node.js/Express API + Socket.IO
-- **PostgreSQL**: Primary database (Prisma ORM)
-- **Redis**: BullMQ job queues, caching
+For Docker-based deployment on a VPS, see the `docker-compose.yml` and `Dockerfile` in the project root.

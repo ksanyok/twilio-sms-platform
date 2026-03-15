@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import getTwilioClient, { getActiveTwilioClient, getSmsMode } from '../config/twilio';
+import { getActiveTwilioClient, getSmsMode } from '../config/twilio';
 import { config } from '../config';
 import logger from '../config/logger';
 import { NumberService } from './numberService';
@@ -73,6 +73,34 @@ interface BulkSendOptions {
 }
 
 export class SendingEngine {
+  /**
+   * Move a lead's pipeline card to the stage matching the given status
+   */
+  private static async movePipelineCard(leadId: string, status: string): Promise<void> {
+    try {
+      const targetStage = await prisma.pipelineStage.findFirst({
+        where: { mappedStatus: status as any },
+      });
+      if (!targetStage) return;
+
+      const card = await prisma.pipelineCard.findFirst({
+        where: { leadId },
+      });
+      if (card) {
+        await prisma.pipelineCard.update({
+          where: { id: card.id },
+          data: { stageId: targetStage.id },
+        });
+      } else {
+        await prisma.pipelineCard.create({
+          data: { leadId, stageId: targetStage.id },
+        });
+      }
+    } catch (err) {
+      logger.warn(`Failed to move pipeline card for lead ${leadId}: ${err}`);
+    }
+  }
+
   /**
    * Check if simulation mode is enabled (no API calls at all)
    */
@@ -380,6 +408,11 @@ export class SendingEngine {
               ...(isFirstContact && { status: 'CONTACTED' }),
             },
           });
+
+          // Auto-move pipeline card to Contacted stage
+          if (isFirstContact) {
+            await this.movePipelineCard(msg.conversation.leadId, 'CONTACTED');
+          }
         }
 
         logger.info(`[SIMULATION] Message simulated: ${messageId} → ${toNumber}`, {
@@ -436,6 +469,11 @@ export class SendingEngine {
             ...(isFirstContact && { status: 'CONTACTED' }),
           },
         });
+
+        // Auto-move pipeline card to Contacted stage
+        if (isFirstContact) {
+          await this.movePipelineCard(msg.conversation.leadId, 'CONTACTED');
+        }
       }
 
       logger.info(`${twilioTestActive ? '[TWILIO TEST] ' : ''}Message sent: ${messageId} → ${toNumber}`, {

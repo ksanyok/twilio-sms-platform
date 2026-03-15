@@ -5,15 +5,35 @@ import { AppError } from '../middleware/errorHandler';
 import { WebhookService } from '../services/webhookService';
 
 export class PipelineController {
-
   static async getStages(req: AuthRequest, res: Response): Promise<void> {
     const cardsPerStage = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
     const cardPage = Math.max(0, parseInt(req.query.offset as string) || 0);
+
+    // Auto-sync: create pipeline cards for leads that don't have one
+    const defaultStage =
+      (await prisma.pipelineStage.findFirst({ where: { isDefault: true } })) ||
+      (await prisma.pipelineStage.findFirst({ orderBy: { order: 'asc' } }));
+
+    if (defaultStage) {
+      const orphanLeads = await prisma.lead.findMany({
+        where: { deletedAt: null, pipelineCards: { none: {} } },
+        select: { id: true },
+      });
+      if (orphanLeads.length > 0) {
+        await prisma.pipelineCard.createMany({
+          data: orphanLeads.map((l) => ({ leadId: l.id, stageId: defaultStage.id })),
+          skipDuplicates: true,
+        });
+      }
+    }
 
     const stages = await prisma.pipelineStage.findMany({
       orderBy: { order: 'asc' },
       include: {
         cards: {
+          where: {
+            lead: { deletedAt: null },
+          },
           include: {
             lead: {
               select: {
@@ -39,7 +59,11 @@ export class PipelineController {
           take: cardsPerStage,
           skip: cardPage,
         },
-        _count: { select: { cards: true } },
+        _count: {
+          select: {
+            cards: { where: { lead: { deletedAt: null } } },
+          },
+        },
       },
     });
 
@@ -158,8 +182,8 @@ export class PipelineController {
         prisma.pipelineStage.update({
           where: { id: item.id },
           data: { order: item.order },
-        })
-      )
+        }),
+      ),
     );
 
     res.json({ message: 'Stages reordered' });

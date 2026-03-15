@@ -6,13 +6,13 @@ import redis from '../config/redis';
 
 /**
  * AutomationService - Rule-based follow-ups, keyword triggers, state changes
- * 
- * Phase 1 (MVP): 
+ *
+ * Phase 1 (MVP):
  * - Send follow-up after X days if no reply
  * - Stop automation if reply detected
  * - Basic tagging rules
  * - Time-delay logic
- * 
+ *
  * Phase 2 (Future):
  * - AI-assisted draft replies
  * - Smart template selection
@@ -29,7 +29,6 @@ export const automationQueue = new Queue('automation-process', {
 });
 
 export class AutomationService {
-
   /**
    * Check and process all active automation runs
    * Called periodically by the automation worker
@@ -106,9 +105,7 @@ export class AutomationService {
     }
 
     // Get the current template in sequence
-    const currentTemplate = templates.find(
-      (t: any) => t.sequenceOrder === run.currentStep + 1
-    );
+    const currentTemplate = templates.find((t: any) => t.sequenceOrder === run.currentStep + 1);
 
     if (!currentTemplate) {
       // Sequence complete
@@ -138,13 +135,9 @@ export class AutomationService {
     });
 
     // Calculate next run time
-    const nextTemplate = templates.find(
-      (t: any) => t.sequenceOrder === run.currentStep + 2
-    );
+    const nextTemplate = templates.find((t: any) => t.sequenceOrder === run.currentStep + 2);
 
-    const nextRunAt = nextTemplate
-      ? new Date(Date.now() + nextTemplate.delayDays * 24 * 60 * 60 * 1000)
-      : null;
+    const nextRunAt = nextTemplate ? new Date(Date.now() + nextTemplate.delayDays * 24 * 60 * 60 * 1000) : null;
 
     await prisma.automationRun.update({
       where: { id: run.id },
@@ -163,10 +156,7 @@ export class AutomationService {
   /**
    * Start an automation sequence for a lead
    */
-  static async startAutomation(
-    automationRuleId: string,
-    leadId: string
-  ): Promise<string> {
+  static async startAutomation(automationRuleId: string, leadId: string): Promise<string> {
     // Check if already running
     const existing = await prisma.automationRun.findFirst({
       where: {
@@ -190,9 +180,7 @@ export class AutomationService {
     if (!rule) throw new Error('Automation rule not found');
 
     const firstTemplate = rule.templates[0];
-    const nextRunAt = firstTemplate
-      ? new Date(Date.now() + firstTemplate.delayDays * 24 * 60 * 60 * 1000)
-      : null;
+    const nextRunAt = firstTemplate ? new Date(Date.now() + firstTemplate.delayDays * 24 * 60 * 60 * 1000) : null;
 
     const run = await prisma.automationRun.create({
       data: {
@@ -240,6 +228,16 @@ export class AutomationService {
           lastRepliedAt: new Date(),
         },
       });
+      // Move pipeline card to REPLIED stage
+      const repliedStage = await prisma.pipelineStage.findFirst({ where: { mappedStatus: 'REPLIED' } });
+      if (repliedStage) {
+        const card = await prisma.pipelineCard.findFirst({ where: { leadId } });
+        if (card) {
+          await prisma.pipelineCard.update({ where: { id: card.id }, data: { stageId: repliedStage.id } });
+        } else {
+          await prisma.pipelineCard.create({ data: { leadId, stageId: repliedStage.id } });
+        }
+      }
     } else if (lead) {
       await prisma.lead.update({
         where: { id: leadId },

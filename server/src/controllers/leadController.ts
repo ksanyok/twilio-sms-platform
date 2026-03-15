@@ -180,9 +180,13 @@ export class LeadController {
     }
 
     // Create pipeline card
-    const defaultStage = await prisma.pipelineStage.findFirst({
-      where: { isDefault: true },
-    });
+    const defaultStage =
+      (await prisma.pipelineStage.findFirst({
+        where: { isDefault: true },
+      })) ||
+      (await prisma.pipelineStage.findFirst({
+        orderBy: { order: 'asc' },
+      }));
 
     if (defaultStage) {
       await prisma.pipelineCard.create({
@@ -222,6 +226,26 @@ export class LeadController {
       },
     });
 
+    // Auto-move pipeline card when lead status changes
+    if (status && status !== existing.status) {
+      const targetStage = await prisma.pipelineStage.findFirst({
+        where: { mappedStatus: status },
+      });
+      if (targetStage) {
+        const card = await prisma.pipelineCard.findFirst({ where: { leadId: id } });
+        if (card) {
+          await prisma.pipelineCard.update({
+            where: { id: card.id },
+            data: { stageId: targetStage.id },
+          });
+        } else {
+          await prisma.pipelineCard.create({
+            data: { leadId: id, stageId: targetStage.id },
+          });
+        }
+      }
+    }
+
     res.json({ lead });
   }
 
@@ -242,10 +266,11 @@ export class LeadController {
     let errors = 0;
     const errorDetails: string[] = [];
 
-    // Query default stage ONCE before the loop
-    const defaultStage = await prisma.pipelineStage.findFirst({
-      where: { isDefault: true },
-    });
+    // Query default stage ONCE before the loop (with fallback to first stage)
+    const defaultStage =
+      (await prisma.pipelineStage.findFirst({
+        where: { isDefault: true },
+      })) || (await prisma.pipelineStage.findFirst({ orderBy: { order: 'asc' } }));
 
     // Process in chunks of 500 for better DB performance
     const CHUNK_SIZE = 500;
@@ -429,9 +454,10 @@ export class LeadController {
     let errors = 0;
     const errorDetails: string[] = [];
 
-    const defaultStage = await prisma.pipelineStage.findFirst({
-      where: { isDefault: true },
-    });
+    const defaultStage =
+      (await prisma.pipelineStage.findFirst({
+        where: { isDefault: true },
+      })) || (await prisma.pipelineStage.findFirst({ orderBy: { order: 'asc' } }));
 
     const CHUNK_SIZE = 500;
     for (let chunk = 0; chunk < records.length; chunk += CHUNK_SIZE) {
@@ -443,7 +469,6 @@ export class LeadController {
         email: string | null;
         company: string | null;
         state: string | null;
-        city: string | null;
         source: string;
       }> = [];
 
@@ -457,14 +482,18 @@ export class LeadController {
 
         const e164Phone = rawPhone.startsWith('1') ? `+${rawPhone}` : `+1${rawPhone}`;
 
+        // Combine city+state into state field (Lead model has no city column)
+        const city = mapping.city ? record[mapping.city] || '' : '';
+        const state = mapping.state ? record[mapping.state] || '' : '';
+        const combinedState = [city, state].filter(Boolean).join(', ') || null;
+
         leadsToUpsert.push({
           phone: e164Phone,
           firstName: mapping.firstName ? record[mapping.firstName] || 'Unknown' : 'Unknown',
           lastName: mapping.lastName ? record[mapping.lastName] || '' : '',
           email: mapping.email ? record[mapping.email] || null : null,
           company: mapping.company ? record[mapping.company] || null : null,
-          city: mapping.city ? record[mapping.city] || null : null,
-          state: mapping.state ? record[mapping.state] || null : null,
+          state: combinedState,
           source: mapping.source ? record[mapping.source] || 'csv_import' : 'csv_import',
         });
       }
@@ -476,21 +505,39 @@ export class LeadController {
               where: { phone: lead.phone },
               create: lead,
               update: {
-                lastName: { set: lead.lastName || undefined },
-                email: lead.email || undefined,
-                company: lead.company || undefined,
+                firstName: lead.firstName,
+                lastName: lead.lastName,
+                email: lead.email,
+                company: lead.company,
+                state: lead.state,
+                source: lead.source,
+                deletedAt: null,
+                status: 'NEW',
               },
             }),
           ),
         );
 
-        const newLeads = results.filter((r) => r.createdAt.getTime() > Date.now() - 10000);
-        imported += newLeads.length;
-        duplicates += results.length - newLeads.length;
+        const newOrRestored = results.filter(
+          (r) => r.createdAt.getTime() > Date.now() - 10000 || r.updatedAt.getTime() > Date.now() - 10000,
+        );
+        // Count truly new (just created) vs restored/updated
+        const justCreated = results.filter((r) => r.createdAt.getTime() > Date.now() - 10000);
+        imported += justCreated.length;
+        // Leads that existed but were soft-deleted get restored — count as imported too
+        const restored = results.filter(
+          (r) =>
+            r.createdAt.getTime() <= Date.now() - 10000 &&
+            r.deletedAt === null &&
+            r.updatedAt.getTime() > Date.now() - 10000,
+        );
+        imported += restored.length;
+        duplicates += results.length - justCreated.length - restored.length;
 
-        if (defaultStage && newLeads.length > 0) {
+        // Create pipeline cards for ALL imported/restored leads (skipDuplicates handles existing)
+        if (defaultStage) {
           await prisma.pipelineCard.createMany({
-            data: newLeads.map((lead) => ({
+            data: results.map((lead) => ({
               leadId: lead.id,
               stageId: defaultStage.id,
             })),
@@ -550,12 +597,37 @@ export class LeadController {
         });
         break;
 
-      case 'change_status':
+      case 'change_status': {
         await prisma.lead.updateMany({
           where: { id: { in: leadIds } },
           data: { status: data.status },
         });
+        // Move pipeline cards to the stage mapped to the new status
+        const targetStage = await prisma.pipelineStage.findFirst({
+          where: { mappedStatus: data.status },
+        });
+        if (targetStage) {
+          // Update existing cards
+          await prisma.pipelineCard.updateMany({
+            where: { leadId: { in: leadIds } },
+            data: { stageId: targetStage.id },
+          });
+          // Create cards for leads that don't have one
+          const existingCards = await prisma.pipelineCard.findMany({
+            where: { leadId: { in: leadIds } },
+            select: { leadId: true },
+          });
+          const existingLeadIds = new Set(existingCards.map((c) => c.leadId));
+          const missingLeadIds = leadIds.filter((lid: string) => !existingLeadIds.has(lid));
+          if (missingLeadIds.length > 0) {
+            await prisma.pipelineCard.createMany({
+              data: missingLeadIds.map((lid: string) => ({ leadId: lid, stageId: targetStage.id })),
+              skipDuplicates: true,
+            });
+          }
+        }
         break;
+      }
 
       case 'add_tag':
         await prisma.leadTag.createMany({
@@ -578,11 +650,34 @@ export class LeadController {
         });
         break;
 
-      case 'delete':
+      case 'unsuppress':
         await prisma.lead.updateMany({
           where: { id: { in: leadIds } },
-          data: { deletedAt: new Date() },
+          data: {
+            isSuppressed: false,
+            suppressedAt: null,
+            suppressReason: null,
+          },
         });
+        break;
+
+      case 'remove_tag':
+        await prisma.leadTag.deleteMany({
+          where: {
+            leadId: { in: leadIds },
+            tagId: data.tagId,
+          },
+        });
+        break;
+
+      case 'delete':
+        await prisma.$transaction([
+          prisma.pipelineCard.deleteMany({ where: { leadId: { in: leadIds } } }),
+          prisma.lead.updateMany({
+            where: { id: { in: leadIds } },
+            data: { deletedAt: new Date() },
+          }),
+        ]);
         break;
 
       default:
@@ -599,10 +694,13 @@ export class LeadController {
     if (!lead) throw new AppError('Lead not found', 404);
 
     // Soft-delete: mark as deleted instead of destroying data
-    await prisma.lead.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
+    await prisma.$transaction([
+      prisma.pipelineCard.deleteMany({ where: { leadId: id } }),
+      prisma.lead.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      }),
+    ]);
 
     res.json({ message: 'Lead deleted successfully' });
   }

@@ -2,121 +2,95 @@
 set -euo pipefail
 
 # ============================================
-# SCL SMS Platform — Production Deploy Script
+# SCL SMS Platform — Shared Hosting Deploy
 # ============================================
+# Deploys to ~/sms-platform/ on the shared hosting server.
+# The SMS platform is isolated from the main VibeADD site.
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# ─── Configuration ───
+SSH_HOST="${SSH_HOST:-vibeadd@vibeadd.ftp.tools}"
+SSH_OPTS="-o PreferredAuthentications=password -o PubkeyAuthentication=no -o StrictHostKeyChecking=no"
+REMOTE_DIR="sms-platform"
+HEALTH_URL="https://twiliosmstest.vibeadd.com/api/health"
+
+# Resolve project root (script is in scripts/)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SERVER_DIR="$PROJECT_ROOT/server"
+
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN} SCL SMS Platform — Deploy${NC}"
 echo -e "${GREEN}========================================${NC}"
 
-# Check prerequisites
-command -v docker >/dev/null 2>&1 || { echo -e "${RED}Error: docker is not installed${NC}"; exit 1; }
-command -v docker compose version >/dev/null 2>&1 || command -v docker-compose >/dev/null 2>&1 || { echo -e "${RED}Error: docker compose is not installed${NC}"; exit 1; }
+# ─── Step 1: Build TypeScript ───
+echo -e "\n${YELLOW}[1/5] Building server...${NC}"
+cd "$SERVER_DIR"
+npx tsc
+echo -e "${GREEN}✓ TypeScript compiled${NC}"
 
-# Check .env file
-if [ ! -f .env ]; then
-    echo -e "${RED}Error: .env file not found!${NC}"
-    echo -e "${YELLOW}Copy .env.production.example to .env and configure it:${NC}"
-    echo "  cp .env.production.example .env"
-    echo "  nano .env"
-    exit 1
-fi
+# ─── Step 2: Create tar archive ───
+echo -e "\n${YELLOW}[2/5] Packaging dist/...${NC}"
+ARCHIVE="/tmp/sms-dist.tar.gz"
+tar czf "$ARCHIVE" dist/
+echo -e "${GREEN}✓ Archive created: $ARCHIVE ($(du -h "$ARCHIVE" | cut -f1))${NC}"
 
-# Validate critical env vars
-source .env
+# ─── Step 3: Upload to server ───
+echo -e "\n${YELLOW}[3/5] Uploading to server...${NC}"
+scp $SSH_OPTS "$ARCHIVE" "${SSH_HOST}:~/${REMOTE_DIR}/sms-dist.tar.gz"
+echo -e "${GREEN}✓ Archive uploaded${NC}"
 
-check_var() {
-    local var_name=$1
-    local var_value=${!var_name:-}
-    if [ -z "$var_value" ] || [[ "$var_value" == *"GENERATE"* ]] || [[ "$var_value" == *"CHANGE"* ]] || [[ "$var_value" == *"change"* ]] || [[ "$var_value" == *"yourdomain"* ]]; then
-        echo -e "${RED}Error: $var_name is not set or still has placeholder value${NC}"
-        return 1
-    fi
-}
+# Also upload package.json and prisma schema if changed
+scp $SSH_OPTS "$SERVER_DIR/package.json" "${SSH_HOST}:~/${REMOTE_DIR}/package.json"
+scp $SSH_OPTS "$SERVER_DIR/prisma/schema.prisma" "${SSH_HOST}:~/${REMOTE_DIR}/prisma/schema.prisma"
+echo -e "${GREEN}✓ Config files uploaded${NC}"
 
-echo -e "\n${YELLOW}Validating environment...${NC}"
-ERRORS=0
-for var in JWT_SECRET JWT_REFRESH_SECRET POSTGRES_PASSWORD REDIS_PASSWORD ADMIN_EMAIL ADMIN_PASSWORD CLIENT_URL WEBHOOK_BASE_URL; do
-    if ! check_var "$var"; then
-        ERRORS=$((ERRORS + 1))
-    fi
-done
+# ─── Step 4: Extract & install on server ───
+echo -e "\n${YELLOW}[4/5] Installing on server...${NC}"
+sleep 5
+ssh $SSH_OPTS "$SSH_HOST" bash -s << 'REMOTE'
+set -e
+cd ~/sms-platform
 
-if [ $ERRORS -gt 0 ]; then
-    echo -e "\n${RED}Found $ERRORS configuration errors. Fix .env file and retry.${NC}"
-    exit 1
-fi
-echo -e "${GREEN}✓ Environment validated${NC}"
+# Extract new dist
+rm -rf dist
+tar xzf sms-dist.tar.gz
+rm sms-dist.tar.gz
 
-# Check SSL
-echo -e "\n${YELLOW}Checking SSL certificates...${NC}"
-if [ ! -f ssl/fullchain.pem ] || [ ! -f ssl/privkey.pem ]; then
-    echo -e "${RED}SSL certificates not found in ssl/ directory${NC}"
-    echo -e "${YELLOW}Options:${NC}"
-    echo "  1. Use Let's Encrypt: certbot certonly --standalone -d yourdomain.com"
-    echo "  2. Generate self-signed (testing only):"
-    echo "     mkdir -p ssl && openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ssl/privkey.pem -out ssl/fullchain.pem"
-    echo ""
-    read -p "Continue without SSL? (nginx will fail) [y/N]: " -r
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-else
-    echo -e "${GREEN}✓ SSL certificates found${NC}"
-fi
+# Install dependencies
+npm install --production --silent 2>&1 | tail -3
 
-# Build and deploy
-echo -e "\n${YELLOW}Building and deploying...${NC}"
-docker compose build --no-cache
-docker compose up -d
+# Generate Prisma client
+npx prisma generate --schema=prisma/schema.prisma 2>&1 | tail -3
 
-echo -e "\n${YELLOW}Waiting for services to start...${NC}"
-sleep 10
+echo "Server files updated"
+REMOTE
+echo -e "${GREEN}✓ Server updated${NC}"
 
-# Check service health
-echo -e "\n${YELLOW}Checking service health...${NC}"
-SERVICES=("scl-postgres" "scl-redis" "scl-app" "scl-nginx")
-for service in "${SERVICES[@]}"; do
-    STATUS=$(docker inspect --format='{{.State.Status}}' "$service" 2>/dev/null || echo "not found")
-    if [ "$STATUS" = "running" ]; then
-        echo -e "  ${GREEN}✓ $service: running${NC}"
-    else
-        echo -e "  ${RED}✗ $service: $STATUS${NC}"
-    fi
-done
+# ─── Step 5: Restart & verify ───
+echo -e "\n${YELLOW}[5/5] Restarting server...${NC}"
+sleep 5
+ssh $SSH_OPTS "$SSH_HOST" "pkill -f 'node.*max-old.*dist/index' 2>/dev/null || true"
+echo "Waiting for auto-restart..."
+sleep 15
 
-# Run migrations
-echo -e "\n${YELLOW}Running database migrations...${NC}"
-docker compose exec -T app npx prisma migrate deploy
-echo -e "${GREEN}✓ Migrations applied${NC}"
-
-# Seed database
-echo -e "\n${YELLOW}Seeding database...${NC}"
-docker compose exec -T app npx prisma db seed || echo -e "${YELLOW}⚠ Seed skipped (may already exist)${NC}"
-
-# Health check
-echo -e "\n${YELLOW}Running health check...${NC}"
-sleep 3
-HEALTH=$(curl -sk https://localhost/api/health 2>/dev/null || curl -sk http://localhost/api/health 2>/dev/null || echo "failed")
+HEALTH=$(curl -s "$HEALTH_URL" 2>/dev/null || echo "failed")
 if echo "$HEALTH" | grep -q '"status":"ok"'; then
     echo -e "${GREEN}✓ Health check passed${NC}"
 else
-    echo -e "${YELLOW}⚠ Health check returned: $HEALTH${NC}"
-    echo "  (This may be normal if SSL is not configured yet)"
+    echo -e "${YELLOW}⚠ Health check: $HEALTH${NC}"
+    echo "  Server may need more time to start. Check manually."
 fi
 
 echo -e "\n${GREEN}========================================${NC}"
 echo -e "${GREEN}  Deployment complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo "Next steps:"
-echo "  1. Verify: curl -k https://yourdomain.com/api/health"
-echo "  2. Set Twilio webhooks to https://yourdomain.com/api/webhooks/twilio/incoming"
-echo "  3. Login at https://yourdomain.com"
+echo "  URL: https://twiliosmstest.vibeadd.com"
+echo "  Logs: ssh $SSH_HOST \"tail -f ~/sms-platform/logs/combined.log\""
 echo ""
 echo "Logs: docker compose logs -f"

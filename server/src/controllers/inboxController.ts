@@ -149,6 +149,49 @@ export class InboxController {
     });
   }
 
+  static async getOrCreateByLead(req: AuthRequest, res: Response): Promise<void> {
+    const { leadId } = req.params;
+
+    const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead) throw new AppError('Lead not found', 404);
+
+    let conversation = await prisma.conversation.findFirst({
+      where: { leadId },
+      include: {
+        lead: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            status: true,
+            tags: { include: { tag: true } },
+          },
+        },
+      },
+    });
+
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: { leadId, isActive: true },
+        include: {
+          lead: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+              status: true,
+              tags: { include: { tag: true } },
+            },
+          },
+        },
+      });
+    }
+
+    res.json({ conversation });
+  }
+
   static async markRead(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
 
@@ -197,6 +240,23 @@ export class InboxController {
         lastDirection: 'outbound',
       },
     });
+
+    // Update lead status to CONTACTED if currently NEW, and sync pipeline card
+    if (conversation.lead.status === 'NEW') {
+      await prisma.lead.update({
+        where: { id: conversation.lead.id },
+        data: { status: 'CONTACTED', lastContactedAt: new Date() },
+      });
+      const contactedStage = await prisma.pipelineStage.findFirst({ where: { mappedStatus: 'CONTACTED' } });
+      if (contactedStage) {
+        const card = await prisma.pipelineCard.findFirst({ where: { leadId: conversation.lead.id } });
+        if (card) {
+          await prisma.pipelineCard.update({ where: { id: card.id }, data: { stageId: contactedStage.id } });
+        } else {
+          await prisma.pipelineCard.create({ data: { leadId: conversation.lead.id, stageId: contactedStage.id } });
+        }
+      }
+    }
 
     // Broadcast to other conversation viewers via Socket.IO
     const io = req.app.get('io');

@@ -1,0 +1,11 @@
+firstName,lastName,phone,email,company,source
+John,Smith,+12125551001,john.smith@acmecorp.com,Acme Corp,Website
+Maria,Garcia,+13055552002,maria.garcia@sunrisellc.com,Sunrise LLC,Referral
+James,Johnson,+17865553003,james.j@techstartup.io,Tech Startup Inc,LinkedIn
+Emily,Williams,+14155554004,emily.w@greenleaf.com,GreenLeaf Solutions,Facebook Ad
+Robert,Brown,+12815555005,robert.brown@coastalgroup.com,Coastal Group,Cold List
+Sarah,Davis,+13215556006,sarah.d@nextstep.co,NextStep Financial,Google Ad
+Michael,Wilson,+14695557007,m.wilson@blueocean.com,Blue Ocean Ventures,Website
+Jennifer,Martinez,+17025558008,jen.martinez@primeservices.com,Prime Services,Referral
+David,Anderson,+14045559009,d.anderson@eagleinv.com,Eagle Investments,Trade Show
+Lisa,Taylor,+16175550010,lisa.t@horizonllc.com,Horizon LLC,LinkedIn

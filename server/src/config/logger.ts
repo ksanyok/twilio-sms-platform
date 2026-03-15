@@ -14,24 +14,26 @@ const logger = winston.createLogger({
   format: winston.format.combine(
     winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
     winston.format.errors({ stack: true }),
-    winston.format.json()
+    winston.format.json(),
   ),
   defaultMeta: { service: 'scl-sms-platform' },
   transports: [
-    // Console — always active with colors
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.printf(({ level, message, timestamp, ...meta }) => {
-          // Filter out 'service' from meta display
-          const { service, ...rest } = meta;
-          const metaStr = Object.keys(rest).length > 0
-            ? ` ${JSON.stringify(rest)}`
-            : '';
-          return `${timestamp} [${level}]: ${message}${metaStr}`;
-        })
-      ),
-    }),
+    // Console — disabled in production to prevent EPIPE crashes on piped stdout
+    ...(config.env === 'production'
+      ? []
+      : [
+          new winston.transports.Console({
+            format: winston.format.combine(
+              winston.format.colorize(),
+              winston.format.printf(({ level, message, timestamp, ...meta }) => {
+                // Filter out 'service' from meta display
+                const { service: _service, ...rest } = meta;
+                const metaStr = Object.keys(rest).length > 0 ? ` ${JSON.stringify(rest)}` : '';
+                return `${timestamp} [${level}]: ${message}${metaStr}`;
+              }),
+            ),
+          }),
+        ]),
     // File transports — always active during development for debugging
     new winston.transports.File({
       filename: path.join(logDir, 'error.log'),
@@ -40,7 +42,7 @@ const logger = winston.createLogger({
       maxFiles: 10,
       format: winston.format.combine(
         winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
-        winston.format.json()
+        winston.format.json(),
       ),
     }),
     new winston.transports.File({
@@ -49,7 +51,7 @@ const logger = winston.createLogger({
       maxFiles: 10,
       format: winston.format.combine(
         winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
-        winston.format.json()
+        winston.format.json(),
       ),
     }),
     // Separate auth log for security auditing
@@ -60,7 +62,7 @@ const logger = winston.createLogger({
       maxFiles: 5,
       format: winston.format.combine(
         winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
-        winston.format.json()
+        winston.format.json(),
       ),
     }),
   ],

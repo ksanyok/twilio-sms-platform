@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { Conversation, Message } from '../types';
 import { useDebounce } from '../hooks/useDebounce';
 import { SmsCounter } from '../components/SmsCounter';
-import { useWebSocketStore, useWebSocketEvent } from '../stores/webSocketStore';
+import { useWebSocketStore } from '../stores/webSocketStore';
 import {
   Search,
   Send,
@@ -13,18 +14,13 @@ import {
   CheckCheck,
   AlertTriangle,
   MessageSquare,
-  ChevronDown,
   Phone,
-  Tag,
   MoreVertical,
   UserX,
-  Archive,
   Bell,
-  BellOff,
   X,
   Copy,
   ExternalLink,
-  Ban,
   UserPlus,
   Sparkles,
 } from 'lucide-react';
@@ -43,6 +39,24 @@ export default function InboxPage() {
   const queryClient = useQueryClient();
   const wsConnected = useWebSocketStore((s) => s.connected);
   const socket = useWebSocketStore((s) => s.socket);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Handle ?lead= query param: open/create conversation for that lead
+  useEffect(() => {
+    const leadId = searchParams.get('lead');
+    if (leadId) {
+      api
+        .get(`/inbox/by-lead/${leadId}`)
+        .then(({ data }) => {
+          if (data.conversation) {
+            setSelectedId(data.conversation.id);
+            queryClient.invalidateQueries({ queryKey: ['conversations'] });
+          }
+        })
+        .catch(() => {});
+      setSearchParams({}, { replace: true });
+    }
+  }, []);
 
   // Close inbox context menu on outside click
   useEffect(() => {
@@ -82,7 +96,10 @@ export default function InboxPage() {
   return (
     <div className="flex h-full min-h-0">
       {/* Conversation List */}
-      <div className="w-[380px] flex flex-col border-r border-dark-700/50" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+      <div
+        className="w-[380px] flex flex-col border-r border-dark-700/50"
+        style={{ backgroundColor: 'var(--bg-secondary)' }}
+      >
         {/* Search Header */}
         <div className="p-4 border-b border-dark-700/50 space-y-3">
           <div className="flex items-center justify-between">
@@ -92,7 +109,7 @@ export default function InboxPage() {
                 onClick={() => setShowUnreadOnly(!showUnreadOnly)}
                 className={clsx(
                   'badge cursor-pointer',
-                  showUnreadOnly ? 'bg-scl-600/30 text-scl-300' : 'bg-dark-700 text-dark-400'
+                  showUnreadOnly ? 'bg-scl-600/30 text-scl-300' : 'bg-dark-700 text-dark-400',
                 )}
               >
                 Unread
@@ -132,7 +149,9 @@ export default function InboxPage() {
                 <MessageSquare className="w-7 h-7 text-dark-500" />
               </div>
               <p className="text-sm font-medium text-dark-300">No conversations yet</p>
-              <p className="text-xs text-dark-500 mt-1.5">Conversations appear here when leads are contacted via campaigns or direct messages</p>
+              <p className="text-xs text-dark-500 mt-1.5">
+                Conversations appear here when leads are contacted via campaigns or direct messages
+              </p>
             </div>
           )}
           {conversations.map((conv) => (
@@ -153,15 +172,17 @@ export default function InboxPage() {
         {inboxTotalPages > 1 && (
           <div className="flex items-center justify-between px-3 py-2 border-t border-dark-700/50">
             <button
-              onClick={() => setInboxPage(p => Math.max(1, p - 1))}
+              onClick={() => setInboxPage((p) => Math.max(1, p - 1))}
               disabled={inboxPage <= 1}
               className="text-xs text-dark-400 hover:text-dark-200 disabled:opacity-30"
             >
               Prev
             </button>
-            <span className="text-[10px] text-dark-500">{inboxPage}/{inboxTotalPages}</span>
+            <span className="text-[10px] text-dark-500">
+              {inboxPage}/{inboxTotalPages}
+            </span>
             <button
-              onClick={() => setInboxPage(p => Math.min(inboxTotalPages, p + 1))}
+              onClick={() => setInboxPage((p) => Math.min(inboxTotalPages, p + 1))}
               disabled={inboxPage >= inboxTotalPages}
               className="text-xs text-dark-400 hover:text-dark-200 disabled:opacity-30"
             >
@@ -178,13 +199,32 @@ export default function InboxPage() {
           className="fixed z-[100] w-52 bg-dark-800 border border-dark-600 rounded-lg shadow-2xl py-1 animate-in fade-in zoom-in-95 duration-100"
           style={{ left: ctxMenu.x, top: ctxMenu.y }}
         >
-          <button onClick={() => { setSelectedId(ctxMenu.conv.id); setCtxMenu(null); }} className="ctx-menu-item">
+          <button
+            onClick={() => {
+              setSelectedId(ctxMenu.conv.id);
+              setCtxMenu(null);
+            }}
+            className="ctx-menu-item"
+          >
             <MessageSquare className="w-3.5 h-3.5" /> Open Thread
           </button>
-          <button onClick={() => { navigator.clipboard.writeText(ctxMenu.conv.lead?.phone || ''); toast.success('Phone copied'); setCtxMenu(null); }} className="ctx-menu-item">
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(ctxMenu.conv.lead?.phone || '');
+              toast.success('Phone copied');
+              setCtxMenu(null);
+            }}
+            className="ctx-menu-item"
+          >
             <Copy className="w-3.5 h-3.5" /> Copy Phone
           </button>
-          <button onClick={() => { window.open(`/leads?id=${ctxMenu.conv.leadId}`, '_self'); setCtxMenu(null); }} className="ctx-menu-item">
+          <button
+            onClick={() => {
+              window.open(`/leads?id=${ctxMenu.conv.leadId}`, '_self');
+              setCtxMenu(null);
+            }}
+            className="ctx-menu-item"
+          >
             <ExternalLink className="w-3.5 h-3.5" /> View Lead
           </button>
         </div>
@@ -228,13 +268,14 @@ function ConversationItem({
       onContextMenu={onContextMenu}
       className={clsx(
         'w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-dark-800/50 transition-colors border-b border-dark-800/30',
-        isSelected && 'bg-dark-800/70 border-l-2 border-l-scl-500'
+        isSelected && 'bg-dark-800/70 border-l-2 border-l-scl-500',
       )}
     >
       {/* Avatar */}
       <div className="relative shrink-0">
         <div className="w-10 h-10 rounded-full bg-scl-600/20 flex items-center justify-center text-scl-400 text-sm font-semibold">
-          {lead?.firstName?.[0]}{lead?.lastName?.[0] || ''}
+          {lead?.firstName?.[0]}
+          {lead?.lastName?.[0] || ''}
         </div>
         {conversation.unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-scl-500 text-white text-[10px] font-bold flex items-center justify-center">
@@ -246,10 +287,12 @@ function ConversationItem({
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
-          <p className={clsx(
-            'text-sm truncate',
-            conversation.unreadCount > 0 ? 'font-semibold text-dark-100' : 'font-medium text-dark-300'
-          )}>
+          <p
+            className={clsx(
+              'text-sm truncate',
+              conversation.unreadCount > 0 ? 'font-semibold text-dark-100' : 'font-medium text-dark-300',
+            )}
+          >
             {lead?.firstName} {lead?.lastName || ''}
           </p>
           <span className="text-[10px] text-dark-500 shrink-0 ml-2">
@@ -259,9 +302,7 @@ function ConversationItem({
           </span>
         </div>
         <p className="text-xs text-dark-500 truncate mt-0.5">
-          {lastMessage
-            ? `${lastMessage.direction === 'OUTBOUND' ? 'You: ' : ''}${lastMessage.body}`
-            : lead?.phone}
+          {lastMessage ? `${lastMessage.direction === 'OUTBOUND' ? 'You: ' : ''}${lastMessage.body}` : lead?.phone}
         </p>
         {/* Tags */}
         {lead?.tags && lead.tags.length > 0 && (
@@ -394,10 +435,14 @@ function MessageThread({ conversationId, wsConnected }: { conversationId: string
   return (
     <>
       {/* Thread Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-dark-700/50" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+      <div
+        className="flex items-center justify-between px-6 py-3 border-b border-dark-700/50"
+        style={{ backgroundColor: 'var(--bg-secondary)' }}
+      >
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-full bg-scl-600/20 flex items-center justify-center text-scl-400 text-sm font-semibold">
-            {conversation?.lead?.firstName?.[0]}{conversation?.lead?.lastName?.[0] || ''}
+            {conversation?.lead?.firstName?.[0]}
+            {conversation?.lead?.lastName?.[0] || ''}
           </div>
           <div>
             <p className="text-sm font-semibold text-dark-100">
@@ -414,10 +459,7 @@ function MessageThread({ conversationId, wsConnected }: { conversationId: string
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
-            <button
-              onClick={() => setShowThreadMenu(!showThreadMenu)}
-              className="btn-ghost p-2"
-            >
+            <button onClick={() => setShowThreadMenu(!showThreadMenu)} className="btn-ghost p-2">
               <MoreVertical className="w-4 h-4" />
             </button>
             {showThreadMenu && (
@@ -444,7 +486,9 @@ function MessageThread({ conversationId, wsConnected }: { conversationId: string
                   </button>
                   {showReassign && (
                     <div className="absolute left-full top-0 ml-1 w-48 bg-dark-800 border border-dark-700 rounded-lg shadow-xl z-50 py-1">
-                      <p className="px-3 py-1.5 text-[10px] text-dark-500 font-medium uppercase tracking-wider">Assign to Rep</p>
+                      <p className="px-3 py-1.5 text-[10px] text-dark-500 font-medium uppercase tracking-wider">
+                        Assign to Rep
+                      </p>
                       {(usersData?.users || []).map((user: any) => (
                         <button
                           key={user.id}
@@ -546,9 +590,7 @@ function MessageThread({ conversationId, wsConnected }: { conversationId: string
               rows={1}
               aria-label="Reply message"
             />
-            {replyText.length > 0 && (
-              <SmsCounter text={replyText} className="absolute -top-5 right-14" />
-            )}
+            {replyText.length > 0 && <SmsCounter text={replyText} className="absolute -top-5 right-14" />}
             <button
               type="submit"
               disabled={!replyText.trim() || sendMutation.isPending}
@@ -573,20 +615,12 @@ function MessageBubble({ message }: { message: Message }) {
           'max-w-[70%] rounded-2xl px-4 py-2.5',
           isOutbound
             ? 'bg-scl-600 text-white rounded-br-md'
-            : 'bg-dark-800 text-dark-200 rounded-bl-md border border-dark-700/50'
+            : 'bg-dark-800 text-dark-200 rounded-bl-md border border-dark-700/50',
         )}
       >
         <p className="text-sm whitespace-pre-wrap">{message.body}</p>
-        <div
-          className={clsx(
-            'flex items-center gap-1.5 mt-1',
-            isOutbound ? 'justify-end' : 'justify-start'
-          )}
-        >
-          <span className={clsx(
-            'text-[10px]',
-            isOutbound ? 'text-scl-200/70' : 'text-dark-500'
-          )}>
+        <div className={clsx('flex items-center gap-1.5 mt-1', isOutbound ? 'justify-end' : 'justify-start')}>
+          <span className={clsx('text-[10px]', isOutbound ? 'text-scl-200/70' : 'text-dark-500')}>
             {message.sentAt
               ? format(new Date(message.sentAt), 'h:mm a')
               : format(new Date(message.createdAt), 'h:mm a')}

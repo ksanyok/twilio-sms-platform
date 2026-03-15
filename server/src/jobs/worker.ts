@@ -183,6 +183,27 @@ async function processCampaignStart(campaignId: string, options: any): Promise<v
       sendingSpeed: campaign.sendingSpeed,
     });
 
+    // If no messages were queued, revert campaign to DRAFT
+    if (result.queued === 0) {
+      const reason =
+        result.errors.length > 0
+          ? result.errors.join('; ')
+          : result.skipped > 0
+            ? `All ${result.skipped} leads skipped (opted out / suppressed)`
+            : 'No messages could be queued';
+      await prisma.campaign.update({
+        where: { id: campaignId },
+        data: {
+          status: 'DRAFT',
+          startedAt: null,
+          totalLeads: leads.length,
+          totalSent: 0,
+        },
+      });
+      logger.warn(`Campaign ${campaignId} reverted to DRAFT: ${reason}`);
+      return;
+    }
+
     // Update campaign stats
     await prisma.campaign.update({
       where: { id: campaignId },

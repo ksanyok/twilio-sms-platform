@@ -1,9 +1,9 @@
 import prisma from '../config/database';
 import redis from '../config/redis';
-import getTwilioClient from '../config/twilio';
+import '../config/twilio';
 import { config } from '../config';
 import logger from '../config/logger';
-import { PhoneNumber, NumberStatus } from '@prisma/client';
+import { PhoneNumber } from '@prisma/client';
 
 /**
  * NumberService - Manages phone number pool, rotation, reputation & ramp-up
@@ -32,10 +32,10 @@ export class NumberService {
       numbers = JSON.parse(cached);
     } else {
       const now = new Date();
+      // Include ACTIVE numbers and COOLING numbers whose cooling period has expired
       numbers = await prisma.phoneNumber.findMany({
         where: {
-          status: 'ACTIVE',
-          OR: [{ coolingUntil: null }, { coolingUntil: { lt: now } }],
+          OR: [{ status: 'ACTIVE' }, { status: 'COOLING', coolingUntil: { lt: now } }],
           ...(poolId && {
             poolMemberships: {
               some: { poolId },
@@ -44,6 +44,14 @@ export class NumberService {
         },
         orderBy: [{ dailySentCount: 'asc' }, { deliveryRate: 'desc' }, { errorStreak: 'asc' }],
       });
+      // Auto-restore expired COOLING numbers back to ACTIVE
+      const expiredCooling = numbers.filter((n) => n.status === 'COOLING');
+      if (expiredCooling.length > 0) {
+        await prisma.phoneNumber.updateMany({
+          where: { id: { in: expiredCooling.map((n) => n.id) } },
+          data: { status: 'ACTIVE', coolingUntil: null, cooldownReason: null },
+        });
+      }
       await redis.setex(cacheKey, this.NUMBERS_CACHE_TTL, JSON.stringify(numbers));
     }
 
@@ -127,7 +135,11 @@ export class NumberService {
         where: { id: conversation.stickyNumberId },
       });
 
-      if (stickyNumber && stickyNumber.status === 'ACTIVE') {
+      if (
+        stickyNumber &&
+        (stickyNumber.status === 'ACTIVE' ||
+          (stickyNumber.status === 'COOLING' && stickyNumber.coolingUntil && stickyNumber.coolingUntil < new Date()))
+      ) {
         const limit = this.getDailyLimit(stickyNumber);
         if (stickyNumber.dailySentCount < limit) {
           return stickyNumber;
@@ -150,7 +162,13 @@ export class NumberService {
         orderBy: { phoneNumber: { dailySentCount: 'asc' } },
       });
 
-      if (assignment?.phoneNumber && assignment.phoneNumber.status === 'ACTIVE') {
+      if (
+        assignment?.phoneNumber &&
+        (assignment.phoneNumber.status === 'ACTIVE' ||
+          (assignment.phoneNumber.status === 'COOLING' &&
+            assignment.phoneNumber.coolingUntil &&
+            assignment.phoneNumber.coolingUntil < new Date()))
+      ) {
         return assignment.phoneNumber;
       }
     }
@@ -201,32 +219,33 @@ export class NumberService {
       });
     }
 
-    // Update daily stats
+    // Update daily stats — use raw SQL to avoid race condition on concurrent upserts
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const id = `dns_${phoneNumberId}_${today.toISOString().slice(0, 10)}`;
+    const deliveredInc = success ? 1 : 0;
+    const failedInc = !success && !blocked ? 1 : 0;
+    const blockedInc = blocked ? 1 : 0;
 
-    await prisma.dailyNumberStats.upsert({
-      where: {
-        phoneNumberId_date: {
-          phoneNumberId,
-          date: today,
-        },
-      },
-      create: {
-        phoneNumberId,
-        date: today,
-        sent: 1,
-        delivered: success ? 1 : 0,
-        failed: !success && !blocked ? 1 : 0,
-        blocked: blocked ? 1 : 0,
-      },
-      update: {
-        sent: { increment: 1 },
-        ...(success && { delivered: { increment: 1 } }),
-        ...(!success && !blocked && { failed: { increment: 1 } }),
-        ...(blocked && { blocked: { increment: 1 } }),
-      },
-    });
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO daily_number_stats (id, phoneNumberId, date, sent, delivered, failed, blocked, replies, optOuts, deliveryRate, createdAt, updatedAt)
+       VALUES (?, ?, ?, 1, ?, ?, ?, 0, 0, 100.0, NOW(), NOW())
+       ON DUPLICATE KEY UPDATE
+         sent = sent + 1,
+         delivered = delivered + ?,
+         failed = failed + ?,
+         blocked = blocked + ?,
+         updatedAt = NOW()`,
+      id,
+      phoneNumberId,
+      today,
+      deliveredInc,
+      failedInc,
+      blockedInc,
+      deliveredInc,
+      failedInc,
+      blockedInc,
+    );
   }
 
   /**

@@ -1,7 +1,18 @@
 import { z } from 'zod';
 
 // ─── Common ───
-const e164Phone = z.string().regex(/^\+1\d{10}$/, 'Must be E.164 US phone (+1XXXXXXXXXX)');
+const e164Phone = z
+  .string()
+  .transform((val) => {
+    const digits = val.replace(/\D/g, '');
+    // If it looks like a US number (10 digits without country code), add +1
+    if (digits.length === 10) return `+1${digits}`;
+    // If it starts with 1 and has 11 digits, it's US with country code
+    if (digits.startsWith('1') && digits.length === 11) return `+${digits}`;
+    // Otherwise treat as international — just prepend +
+    return `+${digits}`;
+  })
+  .pipe(z.string().regex(/^\+\d{7,15}$/, 'Must be a valid phone number in E.164 format'));
 const cuid = z.string().min(1);
 const paginationQuery = {
   page: z.coerce.number().int().min(1).default(1),
@@ -81,13 +92,13 @@ export const leadListQuery = z.object({
 export const bulkActionSchema = z.object({
   action: z.enum([
     'delete',
-    'assignRep',
-    'changeStatus',
-    'addTag',
-    'removeTag',
+    'assign_rep',
+    'change_status',
+    'add_tag',
+    'remove_tag',
     'suppress',
     'unsuppress',
-    'startAutomation',
+    'start_automation',
   ]),
   leadIds: z.array(cuid).min(1).max(10000),
   data: z.record(z.unknown()).optional(),
@@ -101,7 +112,12 @@ export const createCampaignSchema = z.object({
   numberPoolId: z.string().optional().nullable(),
   sendingSpeed: z.number().int().min(1).max(600).default(60),
   dailyLimit: z.number().int().min(0).max(100000).optional().nullable(),
-  scheduledAt: z.string().datetime().optional().nullable().or(z.literal('')),
+  scheduledAt: z
+    .string()
+    .refine((val) => !val || !isNaN(Date.parse(val)), { message: 'Invalid datetime' })
+    .optional()
+    .nullable()
+    .or(z.literal('')),
   leadIds: z.array(cuid).optional(),
   // Targeting filters
   targetStatuses: z.array(z.string()).optional(),

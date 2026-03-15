@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from '../hooks/useDebounce';
 import { useNavigate } from 'react-router-dom';
@@ -7,12 +7,9 @@ import {
   Search,
   Upload,
   Plus,
-  Tag,
-  UserPlus,
   Users,
   Trash2,
   MoreHorizontal,
-  ChevronDown,
   Phone,
   Mail,
   X,
@@ -20,7 +17,6 @@ import {
   ChevronRight,
   FileSpreadsheet,
   Copy,
-  ExternalLink,
   Ban,
   MessageSquare,
   ArrowRightLeft,
@@ -1062,7 +1058,7 @@ function CreateLeadModal({ onClose }: { onClose: () => void }) {
     lastName: '',
     phone: '',
     email: '',
-    city: '',
+    company: '',
     state: '',
     source: '',
   });
@@ -1134,8 +1130,12 @@ function CreateLeadModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">City</label>
-              <input className="input" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+              <label className="label">Company</label>
+              <input
+                className="input"
+                value={form.company}
+                onChange={(e) => setForm({ ...form, company: e.target.value })}
+              />
             </div>
             <div>
               <label className="label">State</label>
