@@ -26,6 +26,8 @@ export class SettingsController {
     'quietHoursStart',
     'quietHoursEnd',
     'quietHoursTimezone',
+    'businessHoursStart',
+    'businessHoursEnd',
     'maxDailySmsPerNumber',
     'globalDailyLimit',
     'defaultSendingSpeed',
