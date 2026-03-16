@@ -33,19 +33,20 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint-and-typecheck
     services:
-      postgres:
-        image: postgres:16-alpine
+      mysql:
+        image: mysql:8.0
         env:
-          POSTGRES_USER: scl
-          POSTGRES_PASSWORD: scl_secret_2024
-          POSTGRES_DB: scl_sms_test
+          MYSQL_ROOT_PASSWORD: test_root_pw
+          MYSQL_DATABASE: sms_test
+          MYSQL_USER: sms_test
+          MYSQL_PASSWORD: sms_test_pw
         ports:
-          - 5432:5432
+          - 3306:3306
         options: >-
-          --health-cmd "pg_isready -U scl"
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -u root -ptest_root_pw"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
       redis:
         image: redis:7-alpine
         ports:
@@ -68,11 +69,11 @@ jobs:
         run: cd server && npx prisma generate
       - name: Push database schema
         env:
-          DATABASE_URL: postgresql://scl:scl_secret_2024@localhost:5432/scl_sms_test
+          DATABASE_URL: mysql://sms_test:sms_test_pw@localhost:3306/sms_test
         run: cd server && npx prisma db push --skip-generate
       - name: Run tests
         env:
-          DATABASE_URL: postgresql://scl:scl_secret_2024@localhost:5432/scl_sms_test
+          DATABASE_URL: mysql://sms_test:sms_test_pw@localhost:3306/sms_test
           REDIS_URL: redis://localhost:6379
           JWT_SECRET: test-secret-ci-only
           JWT_REFRESH_SECRET: test-refresh-secret-ci-only

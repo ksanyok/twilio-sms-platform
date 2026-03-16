@@ -3,9 +3,10 @@ import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { SendingEngine, campaignQueue } from '../services/sendingEngine';
+import { ComplianceService } from '../services/complianceService';
+import { NumberService } from '../services/numberService';
 
 export class CampaignController {
-
   static async list(req: AuthRequest, res: Response): Promise<void> {
     const { status, search, page = '1', limit = '20' } = req.query;
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -187,11 +188,30 @@ export class CampaignController {
   static async start(req: AuthRequest, res: Response): Promise<void> {
     const { id } = req.params;
 
-    const campaign = await prisma.campaign.findUnique({ where: { id } });
+    const campaign = await prisma.campaign.findUnique({
+      where: { id },
+      include: { _count: { select: { leads: true } } },
+    });
     if (!campaign) throw new AppError('Campaign not found', 404);
 
     if (!['DRAFT', 'SCHEDULED', 'PAUSED'].includes(campaign.status)) {
       throw new AppError('Campaign cannot be started in current status', 400);
+    }
+
+    // Pre-validate: check quiet hours before queueing
+    if (await ComplianceService.isQuietHours()) {
+      throw new AppError('Cannot start campaign during quiet hours. Adjust quiet hours in Settings → Compliance.', 400);
+    }
+
+    // Pre-validate: check that leads exist
+    if (campaign._count.leads === 0) {
+      throw new AppError('Campaign has no leads. Add leads before starting.', 400);
+    }
+
+    // Pre-validate: check that at least one sending number is available
+    const availableNumber = await NumberService.getBestAvailableNumber([], campaign.numberPoolId || undefined);
+    if (!availableNumber) {
+      throw new AppError('No available phone numbers for sending. Check Numbers settings.', 400);
     }
 
     // Add to processing queue
@@ -267,12 +287,9 @@ export class CampaignController {
         status: s.status,
         count: s._count,
       })),
-      deliveryRate: campaign.totalSent > 0
-        ? ((campaign.totalDelivered / campaign.totalSent) * 100).toFixed(1)
-        : '0',
-      replyRate: campaign.totalDelivered > 0
-        ? ((campaign.totalReplied / campaign.totalDelivered) * 100).toFixed(1)
-        : '0',
+      deliveryRate: campaign.totalSent > 0 ? ((campaign.totalDelivered / campaign.totalSent) * 100).toFixed(1) : '0',
+      replyRate:
+        campaign.totalDelivered > 0 ? ((campaign.totalReplied / campaign.totalDelivered) * 100).toFixed(1) : '0',
     });
   }
 
