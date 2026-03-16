@@ -19,7 +19,6 @@ import { resetTwilioClients } from '../config/twilio';
  * All settings changes invalidate related Redis caches immediately.
  */
 export class SettingsController {
-
   // ── Allowed system settings keys (whitelist) ──
   private static readonly ALLOWED_KEYS = new Set([
     // Compliance & Sending
@@ -194,9 +193,7 @@ export class SettingsController {
     for (const s of settings) {
       if (!reveal && SettingsController.SENSITIVE_KEYS.has(s.key)) {
         const strVal = String(s.value || '');
-        settingsMap[s.key] = strVal.length > 4
-          ? '****' + strVal.slice(-4)
-          : '****';
+        settingsMap[s.key] = strVal.length > 4 ? '****' + strVal.slice(-4) : '****';
       } else {
         settingsMap[s.key] = s.value;
       }
@@ -214,6 +211,11 @@ export class SettingsController {
 
     if (!SettingsController.ALLOWED_KEYS.has(key)) {
       throw new AppError(`Unknown setting key: ${key}`, 400);
+    }
+
+    // Reject masked values — frontend accidentally sending back masked data
+    if (SettingsController.SENSITIVE_KEYS.has(key) && typeof value === 'string' && value.startsWith('****')) {
+      throw new AppError('Cannot save masked value. Please enter the actual credential.', 400);
     }
 
     // Validate specific settings
@@ -258,6 +260,12 @@ export class SettingsController {
       }
 
       try {
+        // Reject masked values
+        if (SettingsController.SENSITIVE_KEYS.has(key) && typeof value === 'string' && value.startsWith('****')) {
+          results.push({ key, success: false, error: 'Cannot save masked value' });
+          continue;
+        }
+
         SettingsController.validateSettingValue(key, value);
 
         await prisma.systemSetting.upsert({
@@ -275,12 +283,12 @@ export class SettingsController {
 
     await SettingsController.logActivity(req.user?.id, 'settings_bulk_updated', {
       keys: Object.keys(settings),
-      successCount: results.filter(r => r.success).length,
+      successCount: results.filter((r) => r.success).length,
     });
 
     logger.info('Bulk settings update', {
       count: results.length,
-      success: results.filter(r => r.success).length,
+      success: results.filter((r) => r.success).length,
       userId: req.user?.id,
     });
 
@@ -296,8 +304,8 @@ export class SettingsController {
 
     const exportData = {
       exportedAt: new Date().toISOString(),
-      settings: Object.fromEntries(settings.map(s => [s.key, s.value])),
-      tags: tags.map(t => ({ name: t.name, color: t.color })),
+      settings: Object.fromEntries(settings.map((s) => [s.key, s.value])),
+      tags: tags.map((t) => ({ name: t.name, color: t.color })),
     };
 
     res.setHeader('Content-Type', 'application/json');
@@ -390,9 +398,7 @@ export class SettingsController {
       throw new AppError('Maximum 10,000 phones per bulk import', 400);
     }
 
-    const cleanPhones = phones
-      .map((p: string) => p.trim())
-      .filter((p: string) => p.length > 0);
+    const cleanPhones = phones.map((p: string) => p.trim()).filter((p: string) => p.length > 0);
 
     const result = await prisma.suppressionEntry.createMany({
       data: cleanPhones.map((phone: string) => ({
@@ -454,9 +460,7 @@ export class SettingsController {
 
     const csv = [
       'phone,reason,source,createdAt',
-      ...entries.map(e =>
-        `${e.phone},${e.reason},${e.source},${e.createdAt.toISOString()}`
-      ),
+      ...entries.map((e) => `${e.phone},${e.reason},${e.source},${e.createdAt.toISOString()}`),
     ].join('\n');
 
     res.setHeader('Content-Type', 'text/csv');
@@ -511,10 +515,7 @@ export class SettingsController {
     if (numericKeys[key]) {
       const num = typeof value === 'string' ? parseInt(value, 10) : value;
       if (isNaN(num) || num < numericKeys[key].min || num > numericKeys[key].max) {
-        throw new AppError(
-          `${key} must be between ${numericKeys[key].min} and ${numericKeys[key].max}`,
-          400
-        );
+        throw new AppError(`${key} must be between ${numericKeys[key].min} and ${numericKeys[key].max}`, 400);
       }
     }
 
@@ -565,7 +566,7 @@ export class SettingsController {
   private static async logActivity(
     userId: string | undefined,
     action: string,
-    details: Record<string, any>
+    details: Record<string, any>,
   ): Promise<void> {
     try {
       await prisma.activityLog.create({

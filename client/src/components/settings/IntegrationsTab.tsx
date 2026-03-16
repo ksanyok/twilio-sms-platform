@@ -1,11 +1,82 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import {
-  Phone, Brain, Shield, Webhook, Eye, EyeOff, Save,
-} from 'lucide-react';
+import { Phone, Brain, Shield, Webhook, Eye, EyeOff, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { clsx } from 'clsx';
+
+const isMasked = (val: string) => typeof val === 'string' && val.startsWith('****');
+
+function IntegrationField({
+  label,
+  settingKey,
+  defaultValue = '',
+  isSecret = false,
+  showSecret = false,
+  onToggle,
+  settings,
+  local,
+  dirty,
+  getVal,
+  handleChange,
+  handleSave,
+  savePending,
+}: {
+  label: string;
+  settingKey: string;
+  defaultValue?: string;
+  isSecret?: boolean;
+  showSecret?: boolean;
+  onToggle?: () => void;
+  settings: Record<string, unknown>;
+  local: Record<string, string>;
+  dirty: Set<string>;
+  getVal: (key: string, def?: string, secret?: boolean) => string;
+  handleChange: (key: string, value: string) => void;
+  handleSave: (key: string) => void;
+  savePending: boolean;
+}) {
+  const serverVal = settings[settingKey] || '';
+  const hasExisting = isSecret && isMasked(String(serverVal));
+  return (
+    <div>
+      <label className="label">{label}</label>
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <input
+            className="input pr-10 font-mono text-sm"
+            type={isSecret && !showSecret ? 'password' : 'text'}
+            value={getVal(settingKey, defaultValue, isSecret)}
+            onChange={(e) => handleChange(settingKey, e.target.value)}
+            placeholder={
+              hasExisting && local[settingKey] === undefined
+                ? 'Saved ••••' + String(serverVal).slice(-4) + ' — enter new value to replace'
+                : `Enter ${label}...`
+            }
+          />
+          {isSecret && onToggle && (
+            <button
+              type="button"
+              onClick={onToggle}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-dark-400 hover:text-dark-200"
+            >
+              {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
+        {dirty.has(settingKey) && (
+          <button
+            onClick={() => handleSave(settingKey)}
+            disabled={savePending}
+            className="btn-primary py-2 px-3 text-xs"
+          >
+            <Save className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function IntegrationsTab() {
   const queryClient = useQueryClient();
@@ -32,51 +103,32 @@ export default function IntegrationsTab() {
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to save'),
   });
 
-  const settings = data?.settings || {};
+  const settings: Record<string, unknown> = data?.settings || {};
   const [local, setLocal] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState<Set<string>>(new Set());
 
-  const getVal = (key: string, def: string = '') =>
-    local[key] !== undefined ? local[key] : (settings[key] || def);
+  const getVal = (key: string, def: string = '', secret = false) => {
+    if (local[key] !== undefined) return local[key];
+    const serverVal = settings[key] || def;
+    if (secret && isMasked(String(serverVal))) return '';
+    return String(serverVal);
+  };
 
   const handleChange = (key: string, value: string) => {
-    setLocal(prev => ({ ...prev, [key]: value }));
-    setDirty(prev => new Set(prev).add(key));
+    setLocal((prev) => ({ ...prev, [key]: value }));
+    setDirty((prev) => new Set(prev).add(key));
   };
 
   const handleSave = (key: string) => {
     saveMutation.mutate({ key, value: getVal(key) });
-    setDirty(prev => { const next = new Set(prev); next.delete(key); return next; });
+    setDirty((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
   };
 
-  const IntegrationField = ({ label, settingKey, defaultValue = '', isSecret = false, showSecret = false, onToggle }: {
-    label: string; settingKey: string; defaultValue?: string; isSecret?: boolean; showSecret?: boolean; onToggle?: () => void;
-  }) => (
-    <div>
-      <label className="label">{label}</label>
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <input
-            className="input pr-10 font-mono text-sm"
-            type={isSecret && !showSecret ? 'password' : 'text'}
-            value={getVal(settingKey, defaultValue)}
-            onChange={(e) => handleChange(settingKey, e.target.value)}
-            placeholder={`Enter ${label}...`}
-          />
-          {isSecret && onToggle && (
-            <button type="button" onClick={onToggle} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-dark-400 hover:text-dark-200">
-              {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          )}
-        </div>
-        {dirty.has(settingKey) && (
-          <button onClick={() => handleSave(settingKey)} disabled={saveMutation.isPending} className="btn-primary py-2 px-3 text-xs">
-            <Save className="w-3 h-3" />
-          </button>
-        )}
-      </div>
-    </div>
-  );
+  const fieldProps = { settings, local, dirty, getVal, handleChange, handleSave, savePending: saveMutation.isPending };
 
   const smsMode = settings.smsMode || 'live';
 
@@ -94,19 +146,31 @@ export default function IntegrationsTab() {
           </div>
         </div>
         <div className="grid grid-cols-1 gap-4">
-          <IntegrationField label="Account SID" settingKey="twilioAccountSid" />
-          <IntegrationField label="Auth Token" settingKey="twilioAuthToken" isSecret showSecret={showTwilioToken} onToggle={() => setShowTwilioToken(!showTwilioToken)} />
-          <IntegrationField label="Messaging Service SID" settingKey="twilioMessagingServiceSid" />
-          <IntegrationField label="Webhook Base URL" settingKey="webhookBaseUrl" defaultValue="https://yourdomain.com" />
+          <IntegrationField {...fieldProps} label="Account SID" settingKey="twilioAccountSid" />
+          <IntegrationField
+            {...fieldProps}
+            label="Auth Token"
+            settingKey="twilioAuthToken"
+            isSecret
+            showSecret={showTwilioToken}
+            onToggle={() => setShowTwilioToken(!showTwilioToken)}
+          />
+          <IntegrationField {...fieldProps} label="Messaging Service SID" settingKey="twilioMessagingServiceSid" />
+          <IntegrationField
+            {...fieldProps}
+            label="Webhook Base URL"
+            settingKey="webhookBaseUrl"
+            defaultValue="https://yourdomain.com"
+          />
         </div>
 
         {/* Test Credentials */}
-        <div className={clsx(
-          'rounded-lg p-4 border transition-colors duration-200',
-          smsMode === 'twilio_test'
-            ? 'border-cyan-500/40 bg-cyan-500/5'
-            : 'border-dark-700/50 bg-dark-800/30'
-        )}>
+        <div
+          className={clsx(
+            'rounded-lg p-4 border transition-colors duration-200',
+            smsMode === 'twilio_test' ? 'border-cyan-500/40 bg-cyan-500/5' : 'border-dark-700/50 bg-dark-800/30',
+          )}
+        >
           <div className="flex items-center gap-2 mb-2">
             <Shield className={clsx('w-4 h-4', smsMode === 'twilio_test' ? 'text-cyan-400' : 'text-dark-400')} />
             <span className="text-sm font-medium text-dark-200">Test Credentials</span>
@@ -115,11 +179,19 @@ export default function IntegrationsTab() {
             )}
           </div>
           <p className="text-xs text-dark-400 mb-3">
-            Used when SMS Mode is set to "Twilio Test" in System settings. API calls work but no real SMS delivered.
+            Used when SMS Mode is set to &ldquo;Twilio Test&rdquo; in System settings. API calls work but no real SMS
+            delivered.
           </p>
           <div className="grid grid-cols-1 gap-3">
-            <IntegrationField label="Test Account SID" settingKey="twilioTestAccountSid" />
-            <IntegrationField label="Test Auth Token" settingKey="twilioTestAuthToken" isSecret showSecret={showTestToken} onToggle={() => setShowTestToken(!showTestToken)} />
+            <IntegrationField {...fieldProps} label="Test Account SID" settingKey="twilioTestAccountSid" />
+            <IntegrationField
+              {...fieldProps}
+              label="Test Auth Token"
+              settingKey="twilioTestAuthToken"
+              isSecret
+              showSecret={showTestToken}
+              onToggle={() => setShowTestToken(!showTestToken)}
+            />
           </div>
         </div>
       </div>
@@ -136,7 +208,14 @@ export default function IntegrationsTab() {
           </div>
         </div>
         <div className="grid grid-cols-1 gap-4">
-          <IntegrationField label="API Key" settingKey="openaiApiKey" isSecret showSecret={showOpenAIKey} onToggle={() => setShowOpenAIKey(!showOpenAIKey)} />
+          <IntegrationField
+            {...fieldProps}
+            label="API Key"
+            settingKey="openaiApiKey"
+            isSecret
+            showSecret={showOpenAIKey}
+            onToggle={() => setShowOpenAIKey(!showOpenAIKey)}
+          />
           <div>
             <label className="label">Model</label>
             <div className="flex items-center gap-2">
@@ -152,7 +231,11 @@ export default function IntegrationsTab() {
                 <option value="o4-mini">o4-mini (reasoning, latest)</option>
               </select>
               {dirty.has('openaiModel') && (
-                <button onClick={() => handleSave('openaiModel')} disabled={saveMutation.isPending} className="btn-primary py-2 px-3 text-xs">
+                <button
+                  onClick={() => handleSave('openaiModel')}
+                  disabled={saveMutation.isPending}
+                  className="btn-primary py-2 px-3 text-xs"
+                >
                   <Save className="w-3 h-3" />
                 </button>
               )}
@@ -176,10 +259,24 @@ export default function IntegrationsTab() {
         <div className="rounded-lg border border-dark-700/50 bg-dark-800/40 p-4 space-y-2">
           <p className="text-xs font-semibold text-dark-200">How Outbound Webhooks Work</p>
           <ul className="text-xs text-dark-400 space-y-1.5 list-disc list-inside">
-            <li>When an event fires, we send a <span className="text-dark-200 font-mono">POST</span> request to your URL with a JSON payload</li>
-            <li>Each payload includes <span className="text-dark-200 font-mono">event</span>, <span className="text-dark-200 font-mono">timestamp</span>, and <span className="text-dark-200 font-mono">source: "scl-sms-platform"</span></li>
-            <li>Requests timeout after <strong className="text-dark-200">10 seconds</strong>. Non-200 responses are logged but not retried</li>
-            <li>Use services like <strong className="text-dark-200">Zapier Webhooks</strong>, <strong className="text-dark-200">Make (Integromat)</strong>, <strong className="text-dark-200">n8n</strong>, or your own API endpoint</li>
+            <li>
+              When an event fires, we send a <span className="text-dark-200 font-mono">POST</span> request to your URL
+              with a JSON payload
+            </li>
+            <li>
+              Each payload includes <span className="text-dark-200 font-mono">event</span>,{' '}
+              <span className="text-dark-200 font-mono">timestamp</span>, and{' '}
+              <span className="text-dark-200 font-mono">{'source: "scl-sms-platform"'}</span>
+            </li>
+            <li>
+              Requests timeout after <strong className="text-dark-200">10 seconds</strong>. Non-200 responses are logged
+              but not retried
+            </li>
+            <li>
+              Use services like <strong className="text-dark-200">Zapier Webhooks</strong>,{' '}
+              <strong className="text-dark-200">Make (Integromat)</strong>,{' '}
+              <strong className="text-dark-200">n8n</strong>, or your own API endpoint
+            </li>
           </ul>
         </div>
 
@@ -246,10 +343,22 @@ export default function IntegrationsTab() {
         <div className="rounded-lg border border-dark-700/50 bg-dark-800/40 p-4 flex items-start gap-3">
           <Brain className="w-4 h-4 text-scl-400 mt-0.5 shrink-0" />
           <div className="text-xs text-dark-400 space-y-1">
-            <p><strong className="text-dark-200">Zapier:</strong> Create a "Webhooks by Zapier" trigger → "Catch Hook" and paste the URL here</p>
-            <p><strong className="text-dark-200">Make.com:</strong> Add a "Webhooks" module → "Custom webhook" and paste the generated URL</p>
-            <p><strong className="text-dark-200">n8n:</strong> Add a "Webhook" node, set method to POST, and use the production URL</p>
-            <p><strong className="text-dark-200">Custom API:</strong> Create a POST endpoint that accepts JSON body with Content-Type: application/json</p>
+            <p>
+              <strong className="text-dark-200">Zapier:</strong> Create a &ldquo;Webhooks by Zapier&rdquo; trigger
+              &rarr; &ldquo;Catch Hook&rdquo; and paste the URL here
+            </p>
+            <p>
+              <strong className="text-dark-200">Make.com:</strong> Add a &ldquo;Webhooks&rdquo; module &rarr;
+              &ldquo;Custom webhook&rdquo; and paste the generated URL
+            </p>
+            <p>
+              <strong className="text-dark-200">n8n:</strong> Add a &ldquo;Webhook&rdquo; node, set method to POST, and
+              use the production URL
+            </p>
+            <p>
+              <strong className="text-dark-200">Custom API:</strong> Create a POST endpoint that accepts JSON body with
+              Content-Type: application/json
+            </p>
           </div>
         </div>
       </div>
@@ -259,15 +368,27 @@ export default function IntegrationsTab() {
 
 /* ─── Webhook Field Sub-Component ─── */
 function WebhookField({
-  label, settingKey, description, examplePayload, exampleUrl,
-  getVal, handleChange, handleSave, dirty, isSaving,
+  label,
+  settingKey,
+  description,
+  examplePayload,
+  exampleUrl,
+  getVal,
+  handleChange,
+  handleSave,
+  dirty,
+  isSaving,
 }: {
-  label: string; settingKey: string; description: string;
-  examplePayload: string; exampleUrl: string;
+  label: string;
+  settingKey: string;
+  description: string;
+  examplePayload: string;
+  exampleUrl: string;
   getVal: (key: string, def?: string) => string;
   handleChange: (key: string, val: string) => void;
   handleSave: (key: string) => void;
-  dirty: Set<string>; isSaving: boolean;
+  dirty: Set<string>;
+  isSaving: boolean;
 }) {
   const [showPayload, setShowPayload] = useState(false);
   const currentVal = getVal(settingKey);
@@ -309,7 +430,9 @@ function WebhookField({
       </div>
       {showPayload && (
         <div className="rounded-md bg-dark-900/80 border border-dark-700/40 p-3 overflow-x-auto">
-          <p className="text-[10px] text-dark-500 uppercase tracking-wider mb-1.5 font-semibold">Example JSON Payload (POST)</p>
+          <p className="text-[10px] text-dark-500 uppercase tracking-wider mb-1.5 font-semibold">
+            Example JSON Payload (POST)
+          </p>
           <pre className="text-[11px] text-dark-300 font-mono leading-relaxed whitespace-pre">{examplePayload}</pre>
         </div>
       )}
