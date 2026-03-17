@@ -2,7 +2,6 @@ import { Worker, Job } from 'bullmq';
 import redis from '../config/redis';
 import prisma from '../config/database';
 import { SendingEngine } from '../services/sendingEngine';
-import { AutoTagService } from '../services/autoTagService';
 import logger from '../config/logger';
 
 /**
@@ -219,16 +218,6 @@ async function processCampaignStart(campaignId: string, options: any): Promise<v
         totalSent: result.queued,
       },
     });
-
-    // Auto-tag all leads with campaign name
-    try {
-      const tagName = `campaign:${campaign.name}`;
-      const leadIds = leadsToSend.map((l) => l.leadId);
-      await AutoTagService.tagLeads(leadIds, tagName, '#6366f1');
-      logger.info(`Campaign ${campaignId}: tagged ${leadIds.length} leads with "${tagName}"`);
-    } catch (tagError: any) {
-      logger.warn(`Campaign ${campaignId}: auto-tag failed: ${tagError.message}`);
-    }
 
     logger.info(`Campaign ${campaignId} started: ${result.queued} queued, ${result.skipped} skipped`);
   } catch (error: any) {
