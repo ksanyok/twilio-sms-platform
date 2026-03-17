@@ -218,9 +218,9 @@ export class AutomationService {
   static async onLeadReply(leadId: string): Promise<void> {
     await this.pauseAutomationsForLead(leadId, 'reply_detected');
 
-    // Update lead status if currently "CONTACTED"
+    // Update lead status if currently "NEW" or "CONTACTED"
     const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-    if (lead && lead.status === 'CONTACTED') {
+    if (lead && (lead.status === 'CONTACTED' || lead.status === 'NEW')) {
       await prisma.lead.update({
         where: { id: leadId },
         data: {

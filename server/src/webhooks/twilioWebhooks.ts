@@ -124,16 +124,34 @@ router.post('/inbound', async (req: Request, res: Response) => {
       });
 
       // Update campaign lead status if applicable
-      await prisma.campaignLead.updateMany({
+      const affectedCampaignLeads = await prisma.campaignLead.findMany({
         where: {
           leadId: lead.id,
           status: { in: ['SENT', 'DELIVERED'] },
         },
-        data: {
-          status: 'REPLIED',
-          repliedAt: new Date(),
-        },
+        select: { campaignId: true },
       });
+
+      if (affectedCampaignLeads.length > 0) {
+        await prisma.campaignLead.updateMany({
+          where: {
+            leadId: lead.id,
+            status: { in: ['SENT', 'DELIVERED'] },
+          },
+          data: {
+            status: 'REPLIED',
+            repliedAt: new Date(),
+          },
+        });
+
+        const campaignIds = [...new Set(affectedCampaignLeads.map(cl => cl.campaignId))];
+        for (const campaignId of campaignIds) {
+          await prisma.campaign.update({
+            where: { id: campaignId },
+            data: { totalReplied: { increment: 1 } },
+          });
+        }
+      }
 
       // Emit Socket.IO event for real-time inbox update
       const io = req.app.get('io');
