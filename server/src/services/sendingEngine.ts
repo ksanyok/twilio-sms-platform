@@ -408,6 +408,10 @@ export class SendingEngine {
               ...(isFirstContact && { status: 'CONTACTED' }),
             },
           });
+          await prisma.conversation.update({
+            where: { id: msg.conversationId },
+            data: { lastMessageAt: new Date(), lastDirection: 'outbound' },
+          });
 
           // Auto-move pipeline card to Contacted stage
           if (isFirstContact) {
@@ -468,6 +472,10 @@ export class SendingEngine {
             contactCount: { increment: 1 },
             ...(isFirstContact && { status: 'CONTACTED' }),
           },
+        });
+        await prisma.conversation.update({
+          where: { id: msg.conversationId },
+          data: { lastMessageAt: new Date(), lastDirection: 'outbound' },
         });
 
         // Auto-move pipeline card to Contacted stage
