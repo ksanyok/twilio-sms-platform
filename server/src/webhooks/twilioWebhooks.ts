@@ -316,7 +316,6 @@ const statusWorker = new Worker(
           where: { id: message.campaignId },
           data: {
             [updateField]: { increment: 1 },
-            totalSent: { increment: 1 },
           },
         });
       }
