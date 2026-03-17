@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import api from '../services/api';
+import toast from 'react-hot-toast';
 import {
   BarChart3,
   TrendingUp,
@@ -167,7 +168,7 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 lg:p-8 space-y-6 max-w-[1600px]">
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -177,8 +178,18 @@ export default function AnalyticsPage() {
           </p>
         </div>
         <button
-          onClick={() => {
-            window.open('/api/leads/export', '_blank');
+          onClick={async () => {
+            try {
+              const { data } = await api.get('/leads/export', { responseType: 'blob' });
+              const url = window.URL.createObjectURL(new Blob([data]));
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `leads-export-${new Date().toISOString().split('T')[0]}.csv`;
+              a.click();
+              window.URL.revokeObjectURL(url);
+            } catch {
+              toast.error('Failed to export leads');
+            }
           }}
           className="btn-secondary flex items-center gap-2 text-sm"
         >
