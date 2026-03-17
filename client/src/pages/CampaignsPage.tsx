@@ -629,7 +629,6 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
                         {lead.firstName} {lead.lastName || ''}
                       </span>
                       <span className="text-xs text-dark-500 font-mono">{lead.phone}</span>
-                      <span className="text-[10px] badge bg-dark-700 text-dark-400">{lead.status}</span>
                     </label>
                   ))}
                   {availableLeads.length === 0 && (

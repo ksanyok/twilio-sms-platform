@@ -451,9 +451,6 @@ function MessageThread({ conversationId, wsConnected }: { conversationId: string
             <p className="text-xs text-dark-500 flex items-center gap-1.5">
               <Phone className="w-3 h-3" />
               {conversation?.lead?.phone}
-              {conversation?.lead?.status && (
-                <span className="ml-2 badge-info text-[10px]">{conversation.lead.status}</span>
-              )}
             </p>
           </div>
         </div>
