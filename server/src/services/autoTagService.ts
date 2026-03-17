@@ -46,6 +46,25 @@ export class AutoTagService {
   }
 
   /**
+   * Tag multiple leads at once (for campaign auto-tagging)
+   */
+  static async tagLeads(leadIds: string[], tagName: string, color: string): Promise<void> {
+    const tagId = await this.ensureTag(tagName, color);
+    const existing = await prisma.leadTag.findMany({
+      where: { tagId, leadId: { in: leadIds } },
+      select: { leadId: true },
+    });
+    const existingSet = new Set(existing.map((e) => e.leadId));
+    const newLeadIds = leadIds.filter((id) => !existingSet.has(id));
+    if (newLeadIds.length > 0) {
+      await prisma.leadTag.createMany({
+        data: newLeadIds.map((leadId) => ({ leadId, tagId })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  /**
    * Called when a lead replies to an SMS
    */
   static async onReply(leadId: string): Promise<void> {
