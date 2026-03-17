@@ -69,7 +69,10 @@ smsWorker.on('completed', async (job: Job) => {
           });
           const delivered = stats.find((s) => s.status === 'DELIVERED')?._count ?? 0;
           const sent = stats.find((s) => s.status === 'SENT')?._count ?? 0;
-          const failed = stats.find((s) => s.status === 'FAILED')?._count ?? 0;
+          const failed =
+            (stats.find((s) => s.status === 'FAILED')?._count ?? 0) +
+            (stats.find((s) => s.status === 'UNDELIVERED')?._count ?? 0);
+          const blocked = stats.find((s) => s.status === 'BLOCKED')?._count ?? 0;
 
           await prisma.campaign.update({
             where: { id: campaignId },
@@ -78,10 +81,13 @@ smsWorker.on('completed', async (job: Job) => {
               completedAt: new Date(),
               totalDelivered: delivered,
               totalFailed: failed,
-              totalSent: sent + delivered,
+              totalBlocked: blocked,
+              totalSent: sent + delivered + failed + blocked,
             },
           });
-          logger.info(`Campaign ${campaignId} auto-completed: ${delivered} delivered, ${failed} failed`);
+          logger.info(
+            `Campaign ${campaignId} auto-completed: ${sent + delivered + failed + blocked} sent, ${delivered} delivered, ${failed} failed, ${blocked} blocked`,
+          );
         }
       }
     } catch (err: any) {

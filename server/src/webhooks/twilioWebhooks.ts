@@ -314,7 +314,10 @@ const statusWorker = new Worker(
       if (updateField) {
         await prisma.campaign.update({
           where: { id: message.campaignId },
-          data: { [updateField]: { increment: 1 } },
+          data: {
+            [updateField]: { increment: 1 },
+            totalSent: { increment: 1 },
+          },
         });
       }
 
