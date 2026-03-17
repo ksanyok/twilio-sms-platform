@@ -162,7 +162,7 @@ export class LeadController {
         company,
         state,
         source,
-        assignedRepId,
+        assignedRepId: assignedRepId || (req.user?.role === 'REP' ? req.user.id : undefined),
         isSuppressed: !!suppressed,
         suppressReason: suppressed?.reason,
       },

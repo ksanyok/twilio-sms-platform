@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from '../hooks/useDebounce';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { useAuthStore } from '../stores/authStore';
 import {
   Search,
   Upload,
@@ -169,6 +170,8 @@ export default function LeadsPage() {
     },
   });
   const allTags = tagsData?.tags || [];
+  const { user } = useAuthStore();
+  const canManage = user?.role === 'ADMIN' || user?.role === 'MANAGER';
 
   return (
     <div className="p-6 space-y-6">
@@ -179,10 +182,12 @@ export default function LeadsPage() {
           <p className="text-sm text-dark-400 mt-1">{total} total leads</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setShowImport(true)} className="btn-ghost flex items-center gap-2">
-            <Upload className="w-4 h-4" />
-            Import CSV
-          </button>
+          {canManage && (
+            <button onClick={() => setShowImport(true)} className="btn-ghost flex items-center gap-2">
+              <Upload className="w-4 h-4" />
+              Import CSV
+            </button>
+          )}
           <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
             <Plus className="w-4 h-4" />
             Add Lead
@@ -339,12 +344,14 @@ export default function LeadsPage() {
                         >
                           <Plus className="w-3.5 h-3.5" /> Add Lead
                         </button>
-                        <button
-                          onClick={() => setShowImport(true)}
-                          className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
-                        >
-                          <Upload className="w-3.5 h-3.5" /> Import CSV
-                        </button>
+                        {canManage && (
+                          <button
+                            onClick={() => setShowImport(true)}
+                            className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                          >
+                            <Upload className="w-3.5 h-3.5" /> Import CSV
+                          </button>
+                        )}
                       </div>
                     </div>
                   </td>
