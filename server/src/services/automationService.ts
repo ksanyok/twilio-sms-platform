@@ -218,9 +218,13 @@ export class AutomationService {
   static async onLeadReply(leadId: string): Promise<void> {
     await this.pauseAutomationsForLead(leadId, 'reply_detected');
 
-    // Update lead status if currently "NEW" or "CONTACTED"
     const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-    if (lead && (lead.status === 'CONTACTED' || lead.status === 'NEW')) {
+    if (!lead) return;
+
+    // Terminal statuses that should not regress to REPLIED
+    const terminalStatuses = ['FUNDED', 'DNC'];
+
+    if (!terminalStatuses.includes(lead.status)) {
       await prisma.lead.update({
         where: { id: leadId },
         data: {
@@ -238,7 +242,7 @@ export class AutomationService {
           await prisma.pipelineCard.create({ data: { leadId, stageId: repliedStage.id } });
         }
       }
-    } else if (lead) {
+    } else {
       await prisma.lead.update({
         where: { id: leadId },
         data: { lastRepliedAt: new Date() },
