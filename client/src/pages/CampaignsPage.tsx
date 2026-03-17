@@ -424,7 +424,7 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
   const [formData, setFormData] = useState({
     name: '',
     messageTemplate: '',
-    sendingSpeed: 60,
+    sendingSpeed: 4,
     dailyLimit: 0,
     scheduledAt: '',
   });
@@ -648,6 +648,10 @@ function CreateCampaignModal({ onClose }: { onClose: () => void }) {
                 value={formData.sendingSpeed}
                 onChange={(e) => setFormData({ ...formData, sendingSpeed: parseInt(e.target.value) })}
               >
+                <option value="1">1 / min (Safest)</option>
+                <option value="2">2 / min</option>
+                <option value="4">4 / min</option>
+                <option value="10">10 / min</option>
                 <option value="30">30 / min (Slow)</option>
                 <option value="60">60 / min (Normal)</option>
                 <option value="120">120 / min (Fast)</option>
