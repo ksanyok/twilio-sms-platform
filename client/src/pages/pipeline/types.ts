@@ -11,6 +11,7 @@ export interface PipelineStage {
   order: number;
   mappedStatus?: string | null;
   cards: PipelineCard[];
+  _count?: { cards: number };
 }
 
 export interface PipelineCard {

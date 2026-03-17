@@ -12,14 +12,7 @@ interface Props {
 }
 
 export default function SortableCard({ card, stageColor, onContextMenu }: Props) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
     data: { type: 'card', card },
   });
@@ -34,10 +27,10 @@ export default function SortableCard({ card, stageColor, onContextMenu }: Props)
       ref={setNodeRef}
       style={style}
       className={clsx(
-        'bg-dark-850 rounded-lg p-3 border border-dark-700/50 hover:border-dark-600',
+        'bg-dark-850 rounded-lg p-3 border border-dark-700/50 hover:border-dark-600 overflow-hidden',
         'transition-all duration-150 cursor-grab active:cursor-grabbing group/card',
         'hover:shadow-lg hover:shadow-black/20 hover:-translate-y-[1px]',
-        isDragging && 'opacity-30 scale-[0.97] shadow-none'
+        isDragging && 'opacity-30 scale-[0.97] shadow-none',
       )}
       onContextMenu={(e) => onContextMenu(e, 'card', card)}
       {...listeners}
@@ -52,7 +45,8 @@ export default function SortableCard({ card, stageColor, onContextMenu }: Props)
               color: stageColor,
             }}
           >
-            {card.lead.firstName[0]}{card.lead.lastName?.[0] || ''}
+            {card.lead.firstName[0]}
+            {card.lead.lastName?.[0] || ''}
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-dark-200 leading-tight truncate">
@@ -67,9 +61,7 @@ export default function SortableCard({ card, stageColor, onContextMenu }: Props)
         <GripVertical className="w-4 h-4 text-dark-600 opacity-0 group-hover/card:opacity-100 transition-opacity shrink-0" />
       </div>
 
-      {card.lead.company && (
-        <p className="text-[11px] text-dark-500 mt-1.5 truncate">{card.lead.company}</p>
-      )}
+      {card.lead.company && <p className="text-[11px] text-dark-500 mt-1.5 truncate">{card.lead.company}</p>}
 
       {card.lead.tags && card.lead.tags.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-2">

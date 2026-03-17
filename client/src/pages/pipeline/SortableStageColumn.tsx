@@ -1,18 +1,8 @@
 import { useMemo } from 'react';
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  useSortable,
-} from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import {
-  GripHorizontal,
-  MoreVertical,
-  Edit3,
-  Palette,
-  Trash2,
-} from 'lucide-react';
+import { GripHorizontal, MoreVertical, Edit3, Palette, Trash2 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { PipelineStage, PipelineCard, ViewMode } from './types';
 import { hexToRgba } from './utils';
@@ -31,17 +21,17 @@ interface Props {
 }
 
 export default function SortableStageColumn({
-  stage, isMenuOpen, onToggleMenu, menuRef, onEdit, onDelete,
-  onContextMenu, isAnyDragging, viewMode,
+  stage,
+  isMenuOpen,
+  onToggleMenu,
+  menuRef,
+  onEdit,
+  onDelete,
+  onContextMenu,
+  isAnyDragging,
+  viewMode,
 }: Props) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `stage-${stage.id}`,
     data: { type: 'stage', stage },
   });
@@ -70,16 +60,13 @@ export default function SortableStageColumn({
         'flex flex-col rounded-xl transition-opacity duration-200 border',
         viewMode === 'board' ? 'w-[300px] shrink-0' : 'w-full',
         viewMode !== 'board' && 'min-h-[250px] max-h-[600px]',
-        isDragging && 'opacity-30 scale-[0.98]'
+        isDragging && 'opacity-30 scale-[0.98]',
       )}
       onContextMenu={(e) => onContextMenu(e, 'stage', stage)}
     >
       {/* Stage Header */}
       <div className="relative">
-        <div
-          className="absolute top-0 left-0 right-0 h-1 rounded-t-xl"
-          style={{ backgroundColor: stage.color }}
-        />
+        <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl" style={{ backgroundColor: stage.color }} />
         <div
           className="flex items-center justify-between px-3 py-2.5 rounded-t-xl group/header"
           style={{ backgroundColor: hexToRgba(stage.color, 0.1) }}
@@ -94,7 +81,10 @@ export default function SortableStageColumn({
             </button>
             <div
               className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: stage.color, boxShadow: `0 0 0 2px var(--color-dark-900), 0 0 0 3px ${stage.color}` }}
+              style={{
+                backgroundColor: stage.color,
+                boxShadow: `0 0 0 2px var(--color-dark-900), 0 0 0 3px ${stage.color}`,
+              }}
             />
             <h3 className="text-sm font-semibold text-dark-200">{stage.name}</h3>
             <span
@@ -104,11 +94,14 @@ export default function SortableStageColumn({
                 color: stage.color,
               }}
             >
-              {stage.cards.length}
+              {stage._count?.cards ?? stage.cards.length}
             </span>
           </div>
           <div className="relative">
-            <button onClick={onToggleMenu} className="btn-ghost p-1 opacity-0 group-hover/header:opacity-100 transition-opacity">
+            <button
+              onClick={onToggleMenu}
+              className="btn-ghost p-1 opacity-0 group-hover/header:opacity-100 transition-opacity"
+            >
               <MoreVertical className="w-4 h-4" />
             </button>
             {isMenuOpen && (
@@ -116,14 +109,23 @@ export default function SortableStageColumn({
                 ref={menuRef as React.RefObject<HTMLDivElement>}
                 className="absolute right-0 top-full mt-1 w-44 bg-dark-800 border border-dark-700 rounded-lg shadow-xl z-50 py-1"
               >
-                <button onClick={onEdit} className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2">
+                <button
+                  onClick={onEdit}
+                  className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+                >
                   <Edit3 className="w-3.5 h-3.5" /> Rename Stage
                 </button>
-                <button onClick={onEdit} className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2">
+                <button
+                  onClick={onEdit}
+                  className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+                >
                   <Palette className="w-3.5 h-3.5" /> Change Color
                 </button>
                 <div className="border-t border-dark-700 my-1" />
-                <button onClick={onDelete} className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2">
+                <button
+                  onClick={onDelete}
+                  className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
+                >
                   <Trash2 className="w-3.5 h-3.5" /> Delete Stage
                 </button>
               </div>
@@ -136,9 +138,9 @@ export default function SortableStageColumn({
       <div
         ref={setDroppableRef}
         className={clsx(
-          'flex-1 rounded-b-xl p-2 space-y-2 overflow-y-auto transition-all duration-200',
+          'flex-1 rounded-b-xl p-2 space-y-2 overflow-y-auto overflow-x-hidden transition-all duration-200',
           isOver ? 'ring-2 ring-offset-2 ring-offset-dark-900' : '',
-          isAnyDragging && !isOver && 'bg-dark-800/10'
+          isAnyDragging && !isOver && 'bg-dark-800/10',
         )}
         style={{
           backgroundColor: isOver ? hexToRgba(stage.color, 0.12) : hexToRgba(stage.color, 0.03),
@@ -150,12 +152,7 @@ export default function SortableStageColumn({
       >
         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
           {stage.cards.map((card) => (
-            <SortableCard
-              key={card.id}
-              card={card}
-              stageColor={stage.color}
-              onContextMenu={onContextMenu}
-            />
+            <SortableCard key={card.id} card={card} stageColor={stage.color} onContextMenu={onContextMenu} />
           ))}
         </SortableContext>
         {stage.cards.length === 0 && (

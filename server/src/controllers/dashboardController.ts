@@ -66,7 +66,7 @@ export class DashboardController {
       // Pipeline snapshot
       prisma.pipelineStage.findMany({
         include: {
-          _count: { select: { cards: true } },
+          _count: { select: { cards: { where: { lead: { deletedAt: null } } } } },
         },
         orderBy: { order: 'asc' },
       }),
@@ -119,7 +119,7 @@ export class DashboardController {
 
     // Convert BigInt values from raw SQL to Number
     const safeDailyVolume = (dailyVolume as any[]).map((row: any) => ({
-      date: row.date,
+      date: row.date instanceof Date ? row.date.toISOString().split('T')[0] : String(row.date).split('T')[0],
       sent: Number(row.sent || 0),
       delivered: Number(row.delivered || 0),
       failed: Number(row.failed || 0),
