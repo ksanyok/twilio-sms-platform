@@ -177,7 +177,7 @@ export class AnalyticsController {
         CAST(SUM(CASE WHEN direction = 'INBOUND' THEN 1 ELSE 0 END) AS SIGNED) as inbound
       FROM messages
       WHERE createdAt >= ${since}
-      GROUP BY hour
+      GROUP BY HOUR(createdAt)
       ORDER BY hour
     `) as Array<{ hour: number; outbound: number; inbound: number }>,
     );
@@ -191,7 +191,7 @@ export class AnalyticsController {
         CAST(SUM(CASE WHEN direction = 'INBOUND' THEN 1 ELSE 0 END) AS SIGNED) as inbound
       FROM messages
       WHERE createdAt >= ${since}
-      GROUP BY dow
+      GROUP BY (DAYOFWEEK(createdAt) - 1)
       ORDER BY dow
     `) as Array<{ dow: number; outbound: number; inbound: number }>,
     );
@@ -222,15 +222,12 @@ export class AnalyticsController {
       FROM (
         SELECT 
           om.conversationId,
-          TIMESTAMPDIFF(SECOND, om.sent_at, im.createdAt) as response_seconds
-        FROM (
-          SELECT id, conversationId, createdAt as sent_at
-          FROM messages
-          WHERE direction = 'OUTBOUND' AND createdAt >= ${since}
-        ) om
+          CAST(MIN(TIMESTAMPDIFF(SECOND, om.createdAt, im.createdAt)) AS SIGNED) as response_seconds
+        FROM messages om
         JOIN messages im ON im.conversationId = om.conversationId
           AND im.direction = 'INBOUND'
-          AND im.createdAt > om.sent_at
+          AND im.createdAt > om.createdAt
+        WHERE om.direction = 'OUTBOUND' AND om.createdAt >= ${since}
         GROUP BY om.conversationId
       ) first_reply
       WHERE response_seconds > 0 AND response_seconds < 86400 * 7

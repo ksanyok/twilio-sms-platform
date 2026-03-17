@@ -223,14 +223,22 @@ export class InboxController {
 
     if (!conversation) throw new AppError('Conversation not found', 404);
 
-    const messageId = await SendingEngine.queueMessage({
-      toNumber: conversation.lead.phone,
-      body: body.trim(),
-      leadId: conversation.lead.id,
-      sentByUserId: req.user!.id,
-      preferredNumberId: conversation.stickyNumberId || undefined,
-      priority: 10, // High priority for manual replies
-    });
+    let messageId: string;
+    try {
+      messageId = await SendingEngine.queueMessage({
+        toNumber: conversation.lead.phone,
+        body: body.trim(),
+        leadId: conversation.lead.id,
+        sentByUserId: req.user!.id,
+        preferredNumberId: conversation.stickyNumberId || undefined,
+        priority: 10, // High priority for manual replies
+      });
+    } catch (err: any) {
+      if (err.message?.startsWith('Cannot send:')) {
+        throw new AppError(err.message, 422);
+      }
+      throw err;
+    }
 
     // Update conversation
     await prisma.conversation.update({
