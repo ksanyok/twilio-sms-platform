@@ -25,8 +25,11 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import { useAuthStore } from '../stores/authStore';
 
 export default function CampaignsPage() {
+  const { user } = useAuthStore();
+  const canManage = user?.role === 'ADMIN' || user?.role === 'MANAGER';
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebounce(search, 300);
@@ -110,10 +113,12 @@ export default function CampaignsPage() {
           <h1 className="text-2xl font-bold text-dark-50">Campaigns</h1>
           <p className="text-sm text-dark-400 mt-1">Manage your SMS campaigns</p>
         </div>
-        <button onClick={() => setShowCreateModal(true)} className="btn-primary">
-          <Plus className="w-4 h-4" />
-          New Campaign
-        </button>
+        {canManage && (
+          <button onClick={() => setShowCreateModal(true)} className="btn-primary">
+            <Plus className="w-4 h-4" />
+            New Campaign
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -161,7 +166,7 @@ export default function CampaignsPage() {
               <th className="table-header text-center">Replied</th>
               <th className="table-header text-center">Rate</th>
               <th className="table-header">Created</th>
-              <th className="table-header">Actions</th>
+              {canManage && <th className="table-header">Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -248,50 +253,52 @@ export default function CampaignsPage() {
                   <td className="table-cell text-dark-500 text-xs">
                     {format(new Date(campaign.createdAt), 'MMM d, yyyy')}
                   </td>
-                  <td className="table-cell">
-                    <div className="flex items-center gap-1">
-                      {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(campaign.status) && (
-                        <button
-                          onClick={() => startMutation.mutate(campaign.id)}
-                          className="p-1.5 hover:bg-green-600/20 rounded text-dark-400 hover:text-green-400 transition-colors"
-                          title="Start"
-                        >
-                          <Play className="w-4 h-4" />
-                        </button>
-                      )}
-                      {campaign.status === 'SENDING' && (
-                        <button
-                          onClick={() => pauseMutation.mutate(campaign.id)}
-                          className="p-1.5 hover:bg-yellow-600/20 rounded text-dark-400 hover:text-yellow-400 transition-colors"
-                          title="Pause"
-                        >
-                          <Pause className="w-4 h-4" />
-                        </button>
-                      )}
-                      {['SENDING', 'PAUSED', 'SCHEDULED'].includes(campaign.status) && (
-                        <button
-                          onClick={() => {
-                            if (window.confirm('Cancel this campaign?')) cancelMutation.mutate(campaign.id);
-                          }}
-                          className="p-1.5 hover:bg-red-600/20 rounded text-dark-400 hover:text-red-400 transition-colors"
-                          title="Cancel"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </button>
-                      )}
-                      {['DRAFT', 'COMPLETED', 'CANCELLED'].includes(campaign.status) && (
-                        <button
-                          onClick={() => {
-                            if (window.confirm('Delete this campaign?')) deleteMutation.mutate(campaign.id);
-                          }}
-                          className="p-1.5 hover:bg-red-600/20 rounded text-dark-400 hover:text-red-400 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
+                  {canManage && (
+                    <td className="table-cell">
+                      <div className="flex items-center gap-1">
+                        {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(campaign.status) && (
+                          <button
+                            onClick={() => startMutation.mutate(campaign.id)}
+                            className="p-1.5 hover:bg-green-600/20 rounded text-dark-400 hover:text-green-400 transition-colors"
+                            title="Start"
+                          >
+                            <Play className="w-4 h-4" />
+                          </button>
+                        )}
+                        {campaign.status === 'SENDING' && (
+                          <button
+                            onClick={() => pauseMutation.mutate(campaign.id)}
+                            className="p-1.5 hover:bg-yellow-600/20 rounded text-dark-400 hover:text-yellow-400 transition-colors"
+                            title="Pause"
+                          >
+                            <Pause className="w-4 h-4" />
+                          </button>
+                        )}
+                        {['SENDING', 'PAUSED', 'SCHEDULED'].includes(campaign.status) && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm('Cancel this campaign?')) cancelMutation.mutate(campaign.id);
+                            }}
+                            className="p-1.5 hover:bg-red-600/20 rounded text-dark-400 hover:text-red-400 transition-colors"
+                            title="Cancel"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        {['DRAFT', 'COMPLETED', 'CANCELLED'].includes(campaign.status) && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm('Delete this campaign?')) deleteMutation.mutate(campaign.id);
+                            }}
+                            className="p-1.5 hover:bg-red-600/20 rounded text-dark-400 hover:text-red-400 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -351,52 +358,56 @@ export default function CampaignsPage() {
           >
             <Copy className="w-3.5 h-3.5" /> Copy Name
           </button>
-          <div className="border-t border-dark-700 my-1" />
-          {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(ctxMenu.campaign.status) && (
-            <button
-              onClick={() => {
-                startMutation.mutate(ctxMenu.campaign.id);
-                setCtxMenu(null);
-              }}
-              className="w-full text-left px-3 py-2 text-sm text-green-400 hover:bg-dark-700/50 flex items-center gap-2"
-            >
-              <Play className="w-3.5 h-3.5" /> Start Campaign
-            </button>
-          )}
-          {ctxMenu.campaign.status === 'SENDING' && (
-            <button
-              onClick={() => {
-                pauseMutation.mutate(ctxMenu.campaign.id);
-                setCtxMenu(null);
-              }}
-              className="w-full text-left px-3 py-2 text-sm text-yellow-400 hover:bg-dark-700/50 flex items-center gap-2"
-            >
-              <Pause className="w-3.5 h-3.5" /> Pause Campaign
-            </button>
-          )}
-          {['SENDING', 'PAUSED', 'SCHEDULED'].includes(ctxMenu.campaign.status) && (
-            <button
-              onClick={() => {
-                setCtxMenu(null);
-                if (window.confirm('Cancel this campaign?')) cancelMutation.mutate(ctxMenu.campaign.id);
-              }}
-              className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
-            >
-              <XCircle className="w-3.5 h-3.5" /> Cancel Campaign
-            </button>
-          )}
-          {['DRAFT', 'COMPLETED', 'CANCELLED'].includes(ctxMenu.campaign.status) && (
+          {canManage && (
             <>
               <div className="border-t border-dark-700 my-1" />
-              <button
-                onClick={() => {
-                  setCtxMenu(null);
-                  if (window.confirm('Delete this campaign?')) deleteMutation.mutate(ctxMenu.campaign.id);
-                }}
-                className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Delete Campaign
-              </button>
+              {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(ctxMenu.campaign.status) && (
+                <button
+                  onClick={() => {
+                    startMutation.mutate(ctxMenu.campaign.id);
+                    setCtxMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-green-400 hover:bg-dark-700/50 flex items-center gap-2"
+                >
+                  <Play className="w-3.5 h-3.5" /> Start Campaign
+                </button>
+              )}
+              {ctxMenu.campaign.status === 'SENDING' && (
+                <button
+                  onClick={() => {
+                    pauseMutation.mutate(ctxMenu.campaign.id);
+                    setCtxMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-yellow-400 hover:bg-dark-700/50 flex items-center gap-2"
+                >
+                  <Pause className="w-3.5 h-3.5" /> Pause Campaign
+                </button>
+              )}
+              {['SENDING', 'PAUSED', 'SCHEDULED'].includes(ctxMenu.campaign.status) && (
+                <button
+                  onClick={() => {
+                    setCtxMenu(null);
+                    if (window.confirm('Cancel this campaign?')) cancelMutation.mutate(ctxMenu.campaign.id);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
+                >
+                  <XCircle className="w-3.5 h-3.5" /> Cancel Campaign
+                </button>
+              )}
+              {['DRAFT', 'COMPLETED', 'CANCELLED'].includes(ctxMenu.campaign.status) && (
+                <>
+                  <div className="border-t border-dark-700 my-1" />
+                  <button
+                    onClick={() => {
+                      setCtxMenu(null);
+                      if (window.confirm('Delete this campaign?')) deleteMutation.mutate(ctxMenu.campaign.id);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Campaign
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>
