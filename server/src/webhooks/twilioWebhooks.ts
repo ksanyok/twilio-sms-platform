@@ -58,16 +58,14 @@ router.post('/inbound', async (req: Request, res: Response) => {
     // Process compliance keywords first
     const keywordResult = await ComplianceService.processInboundKeywords(From, Body);
 
+    // Determine TwiML response — keyword auto-reply or empty
+    let twimlResponse = '<Response></Response>';
     if (keywordResult.isKeyword && keywordResult.response) {
-      // Auto-reply for compliance keywords
-      res.type('text/xml');
-      res.send(`
-        <Response>
-          <Message>${keywordResult.response}</Message>
-        </Response>
-      `);
-      return;
+      twimlResponse = `<Response><Message>${keywordResult.response}</Message></Response>`;
     }
+
+    // Always save the inbound message to the database (even keyword messages)
+    // so reps can see all replies in the inbox
 
     // Find the lead by phone number
     const lead = await prisma.lead.findUnique({
@@ -144,7 +142,7 @@ router.post('/inbound', async (req: Request, res: Response) => {
           },
         });
 
-        const campaignIds = [...new Set(affectedCampaignLeads.map(cl => cl.campaignId))];
+        const campaignIds = [...new Set(affectedCampaignLeads.map((cl) => cl.campaignId))];
         for (const campaignId of campaignIds) {
           await prisma.campaign.update({
             where: { id: campaignId },
@@ -219,9 +217,9 @@ router.post('/inbound', async (req: Request, res: Response) => {
       });
     }
 
-    // Return empty TwiML (no auto-reply for regular messages)
+    // Return TwiML (auto-reply for keywords, empty for regular messages)
     res.type('text/xml');
-    res.send('<Response></Response>');
+    res.send(twimlResponse);
   } catch (error: any) {
     logger.error('Inbound webhook error:', { error: error.message });
     res.type('text/xml');

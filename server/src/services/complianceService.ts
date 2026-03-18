@@ -7,23 +7,22 @@ import { WebhookService } from './webhookService';
 
 /**
  * ComplianceService - STOP/HELP handling, suppression, quiet hours
- * 
+ *
  * Critical for A2P 10DLC compliance:
  * - STOP keyword immediately opts out
  * - HELP keyword returns help info
  * - Suppression list prevents messaging
  * - Quiet hours enforcement
  * - DNC list checking
- * 
+ *
  * Performance: Redis caching reduces DB queries by ~90% for compliance checks
  */
 export class ComplianceService {
-  
   // Standard opt-out keywords
   static readonly OPT_OUT_KEYWORDS = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT'];
   static readonly HELP_KEYWORDS = ['HELP', 'INFO'];
   private static readonly CACHE_TTL = 300; // 5 minutes
-  
+
   /**
    * Check if we can send to a number (with Redis caching)
    */
@@ -86,7 +85,7 @@ export class ComplianceService {
    */
   static async processInboundKeywords(
     fromNumber: string,
-    body: string
+    body: string,
   ): Promise<{ isKeyword: boolean; action?: string; response?: string }> {
     const normalizedBody = body.trim().toUpperCase();
 
@@ -109,8 +108,8 @@ export class ComplianceService {
       };
     }
 
-    // Check START (re-subscribe)
-    if (normalizedBody === 'START' || normalizedBody === 'YES') {
+    // Check START (re-subscribe) — only explicit opt-in keywords, NOT "YES" (common conversational reply)
+    if (normalizedBody === 'START' || normalizedBody === 'UNSTOP' || normalizedBody === 'SUBSCRIBE') {
       await this.handleOptIn(fromNumber);
       return {
         isKeyword: true,
@@ -238,12 +237,7 @@ export class ComplianceService {
         }
 
         // Cache for 60s
-        await redis.set(
-          cacheKey,
-          JSON.stringify({ start: quietHoursStart, end: quietHoursEnd, timezone }),
-          'EX',
-          60
-        );
+        await redis.set(cacheKey, JSON.stringify({ start: quietHoursStart, end: quietHoursEnd, timezone }), 'EX', 60);
       }
     } catch (err) {
       logger.warn('Failed to read quiet hours from DB, using env config', { error: (err as Error).message });
@@ -268,11 +262,7 @@ export class ComplianceService {
   /**
    * Bulk add to suppression list (CSV import)
    */
-  static async bulkSuppress(
-    phones: string[],
-    reason: string,
-    source: string
-  ): Promise<number> {
+  static async bulkSuppress(phones: string[], reason: string, source: string): Promise<number> {
     const entries = phones.map((phone) => ({
       phone,
       reason,
