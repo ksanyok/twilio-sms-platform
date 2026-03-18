@@ -221,22 +221,22 @@ export default function DashboardPage() {
           label="Sent (24h)"
           value={stats?.overview.sentLast24h || 0}
           icon={Send}
-          color="indigo"
+          color="blue"
           sub={d24.sent > 0 ? `${d24.deliveryRate}% delivered` : undefined}
         />
         <StatCard
           label="Delivered (24h)"
           value={stats?.overview.deliveredLast24h || 0}
           icon={CheckCircle2}
-          color="green"
+          color="blue"
           sub={d24.failed > 0 ? `${d24.failed} failed` : 'No failures'}
         />
-        <StatCard label="Total Leads" value={stats?.overview.totalLeads || 0} icon={Users} color="blue" />
+        <StatCard label="Total Leads" value={stats?.overview.totalLeads || 0} icon={Users} color="amber" />
         <StatCard
           label="Reply Rate (7d)"
           value={`${stats?.overview.replyRate || 0}%`}
           icon={TrendingUp}
-          color="yellow"
+          color="green"
           sub={d7.sent > 0 ? `${d7.sent.toLocaleString()} sent in 7d` : undefined}
         />
         <StatCard
@@ -611,6 +611,7 @@ function StatCard({
     blue: '#2B7FE8',
     green: '#1A8A5A',
     purple: '#8A5ACA',
+    amber: '#D4820A',
     yellow: '#D4820A',
     red: '#C0392B',
   };

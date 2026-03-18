@@ -10,6 +10,7 @@ import SortableCard from './SortableCard';
 
 interface Props {
   stage: PipelineStage;
+  allStages?: PipelineStage[];
   isMenuOpen: boolean;
   onToggleMenu: () => void;
   menuRef?: React.RefObject<HTMLDivElement | null>;
@@ -22,6 +23,7 @@ interface Props {
 
 export default function SortableStageColumn({
   stage,
+  allStages,
   isMenuOpen,
   onToggleMenu,
   menuRef,
@@ -144,7 +146,7 @@ export default function SortableStageColumn({
           </div>
         </div>
         {/* Metrics row */}
-        <ColumnMetrics stage={stage} />
+        <ColumnMetrics stage={stage} allStages={allStages} />
       </div>
 
       {/* Cards Container */}
@@ -185,7 +187,7 @@ export default function SortableStageColumn({
 }
 
 /** Compute & display per-column metrics based on stage name */
-function ColumnMetrics({ stage }: { stage: PipelineStage }) {
+function ColumnMetrics({ stage, allStages }: { stage: PipelineStage; allStages?: PipelineStage[] }) {
   const nameLower = stage.name.toLowerCase();
   const metricStyle = { fontSize: 8, color: 'var(--scl-text-g)' } as const;
   const valStyle = { color: 'var(--scl-text-m)' } as const;
@@ -224,13 +226,17 @@ function ColumnMetrics({ stage }: { stage: PipelineStage }) {
   }
 
   if (nameLower.includes('contact')) {
+    const repliedStage = allStages?.find((s) => s.name.toLowerCase().includes('repl'));
+    const repliedCount = repliedStage?.cards.length || 0;
+    const total = stage.cards.length + repliedCount;
+    const convPct = total > 0 ? Math.round((repliedCount / total) * 100) : 0;
     return (
       <div className="flex gap-2 px-3" style={metricStyle}>
         <span>
-          Avg age: <span style={valStyle}>{avgAge}d</span>
+          Conv: <span style={valStyle}>{convPct}%</span>
         </span>
         <span>
-          Leads: <span style={valStyle}>{stage.cards.length}</span>
+          Avg age: <span style={valStyle}>{avgAge}d</span>
         </span>
       </div>
     );

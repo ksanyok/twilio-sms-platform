@@ -13,12 +13,7 @@ import {
   MeasuringStrategy,
   UniqueIdentifier,
 } from '@dnd-kit/core';
-import {
-  SortableContext,
-  horizontalListSortingStrategy,
-  rectSortingStrategy,
-  arrayMove,
-} from '@dnd-kit/sortable';
+import { SortableContext, horizontalListSortingStrategy, rectSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import api from '../services/api';
 import {
   Plus,
@@ -103,9 +98,7 @@ export default function PipelinePage() {
     };
   }, []);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const { data, isLoading } = useQuery({
     queryKey: ['pipeline'],
@@ -118,11 +111,17 @@ export default function PipelinePage() {
   // Tags + Users for filters
   const { data: tagsData } = useQuery({
     queryKey: ['tags'],
-    queryFn: async () => { const { data } = await api.get('/settings/tags'); return data; },
+    queryFn: async () => {
+      const { data } = await api.get('/settings/tags');
+      return data;
+    },
   });
   const { data: usersData } = useQuery({
     queryKey: ['users'],
-    queryFn: async () => { const { data } = await api.get('/auth/users'); return data; },
+    queryFn: async () => {
+      const { data } = await api.get('/auth/users');
+      return data;
+    },
   });
   const allTags: { id: string; name: string; color: string }[] = tagsData?.tags || [];
   const allUsers: { id: string; firstName: string; lastName: string }[] = usersData?.users || [];
@@ -132,15 +131,16 @@ export default function PipelinePage() {
   // Apply filters
   const stages = useMemo(() => {
     if (!filterTag && !filterRep && !filterSearch) return rawStages;
-    return rawStages.map(stage => ({
+    return rawStages.map((stage) => ({
       ...stage,
-      cards: stage.cards.filter(card => {
-        if (filterTag && !card.lead.tags?.some(t => t.tag.id === filterTag)) return false;
+      cards: stage.cards.filter((card) => {
+        if (filterTag && !card.lead.tags?.some((t) => t.tag.id === filterTag)) return false;
         if (filterRep && card.lead.assignedRepId !== filterRep) return false;
         if (filterSearch) {
           const q = filterSearch.toLowerCase();
           const name = `${card.lead.firstName} ${card.lead.lastName || ''}`.toLowerCase();
-          if (!name.includes(q) && !card.lead.phone.includes(q) && !(card.lead.company || '').toLowerCase().includes(q)) return false;
+          if (!name.includes(q) && !card.lead.phone.includes(q) && !(card.lead.company || '').toLowerCase().includes(q))
+            return false;
         }
         return true;
       }),
@@ -157,8 +157,7 @@ export default function PipelinePage() {
   });
 
   const reorderStagesMutation = useMutation({
-    mutationFn: (stageOrder: { id: string; order: number }[]) =>
-      api.put('/pipeline/stages/reorder', { stageOrder }),
+    mutationFn: (stageOrder: { id: string; order: number }[]) => api.put('/pipeline/stages/reorder', { stageOrder }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pipeline'] }),
     onError: (err: any) => toast.error(err.response?.data?.error || 'Failed to reorder stages'),
   });
@@ -191,8 +190,7 @@ export default function PipelinePage() {
   });
 
   const saveNoteMutation = useMutation({
-    mutationFn: ({ leadId, notes }: { leadId: string; notes: string }) =>
-      api.put(`/leads/${leadId}`, { notes }),
+    mutationFn: ({ leadId, notes }: { leadId: string; notes: string }) => api.put(`/leads/${leadId}`, { notes }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pipeline'] });
       toast.success('Note saved');
@@ -252,7 +250,7 @@ export default function PipelinePage() {
         overStageId = overIdStr.replace('stage-', '');
       } else {
         // Check if over a raw stage droppable zone
-        const directStage = stages.find(s => s.id === overIdStr);
+        const directStage = stages.find((s) => s.id === overIdStr);
         if (directStage) {
           overStageId = directStage.id;
         } else {
@@ -283,7 +281,7 @@ export default function PipelinePage() {
         targetStageId = overIdStr.replace('stage-', '');
       } else {
         // Check if dropped on a stage droppable zone (raw stage ID without prefix)
-        const droppedOnStage = stages.find(s => s.id === overIdStr);
+        const droppedOnStage = stages.find((s) => s.id === overIdStr);
         if (droppedOnStage) {
           targetStageId = droppedOnStage.id;
         } else {
@@ -326,14 +324,12 @@ export default function PipelinePage() {
         setContextMenu({ x: e.clientX, y: e.clientY, type: 'stage', stage: item as PipelineStage });
       }
     },
-    []
+    [],
   );
 
   /* ─── Active items for overlay ─── */
   const activeCard = activeType === 'card' && activeId ? findCard(activeId as string) : null;
-  const activeStage = activeType === 'stage' && activeId
-    ? stages.find((s) => `stage-${s.id}` === activeId)
-    : null;
+  const activeStage = activeType === 'stage' && activeId ? stages.find((s) => `stage-${s.id}` === activeId) : null;
 
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 0px)' }}>
@@ -342,21 +338,17 @@ export default function PipelinePage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-dark-50">Pipeline</h1>
-            <p className="text-sm text-dark-400 mt-1">
-              Drag leads between stages · Right-click for actions
-            </p>
+            <p className="text-sm text-dark-400 mt-1">Drag leads between stages · Right-click for actions</p>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-dark-500">
-              {stages.reduce((sum, s) => sum + s.cards.length, 0)} leads
-            </span>
+            <span className="text-sm text-dark-500">{stages.reduce((sum, s) => sum + s.cards.length, 0)} leads</span>
             {/* View Mode Toggle */}
             <div className="flex items-center bg-dark-800 rounded-lg p-0.5 border border-dark-700/50">
               <button
                 onClick={() => handleViewModeChange('board')}
                 className={clsx(
                   'p-1.5 rounded-md transition-all duration-150',
-                  viewMode === 'board' ? 'bg-scl-600 text-white shadow-sm' : 'text-dark-400 hover:text-dark-200'
+                  viewMode === 'board' ? 'bg-scl-600 text-white shadow-sm' : 'text-dark-400 hover:text-dark-200',
                 )}
                 title="Board (horizontal)"
               >
@@ -366,7 +358,7 @@ export default function PipelinePage() {
                 onClick={() => handleViewModeChange('grid-2')}
                 className={clsx(
                   'p-1.5 rounded-md transition-all duration-150',
-                  viewMode === 'grid-2' ? 'bg-scl-600 text-white shadow-sm' : 'text-dark-400 hover:text-dark-200'
+                  viewMode === 'grid-2' ? 'bg-scl-600 text-white shadow-sm' : 'text-dark-400 hover:text-dark-200',
                 )}
                 title="Grid 2 columns"
               >
@@ -376,17 +368,14 @@ export default function PipelinePage() {
                 onClick={() => handleViewModeChange('grid-3')}
                 className={clsx(
                   'p-1.5 rounded-md transition-all duration-150',
-                  viewMode === 'grid-3' ? 'bg-scl-600 text-white shadow-sm' : 'text-dark-400 hover:text-dark-200'
+                  viewMode === 'grid-3' ? 'bg-scl-600 text-white shadow-sm' : 'text-dark-400 hover:text-dark-200',
                 )}
                 title="Grid 3 columns"
               >
                 <LayoutList className="w-4 h-4" />
               </button>
             </div>
-            <button
-              onClick={() => setShowAddStage(true)}
-              className="btn-primary text-sm"
-            >
+            <button onClick={() => setShowAddStage(true)} className="btn-primary text-sm">
               <Plus className="w-4 h-4" />
               Add Stage
             </button>
@@ -408,8 +397,10 @@ export default function PipelinePage() {
             className="input py-1.5 px-3 text-sm w-40"
           >
             <option value="">All Tags</option>
-            {allTags.map(t => (
-              <option key={t.id} value={t.id}>{t.name}</option>
+            {allTags.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
             ))}
           </select>
           <select
@@ -418,13 +409,19 @@ export default function PipelinePage() {
             className="input py-1.5 px-3 text-sm w-40"
           >
             <option value="">All Reps</option>
-            {allUsers.map(u => (
-              <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+            {allUsers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.firstName} {u.lastName}
+              </option>
             ))}
           </select>
           {(filterTag || filterRep || filterSearch) && (
             <button
-              onClick={() => { setFilterTag(''); setFilterRep(''); setFilterSearch(''); }}
+              onClick={() => {
+                setFilterTag('');
+                setFilterRep('');
+                setFilterSearch('');
+              }}
               className="btn-ghost text-xs text-dark-400 hover:text-dark-200"
             >
               <X className="w-3.5 h-3.5 mr-1" /> Clear
@@ -434,21 +431,23 @@ export default function PipelinePage() {
       </div>
 
       {/* Board */}
-      <div className={clsx(
-        'flex-1 p-6',
-        viewMode === 'board' ? 'overflow-x-auto' : 'overflow-y-auto'
-      )}>
+      <div className={clsx('flex-1 p-6', viewMode === 'board' ? 'overflow-x-auto' : 'overflow-y-auto')}>
         {isLoading ? (
-          <div className={clsx(
-            viewMode === 'board'
-              ? 'flex gap-4 h-full'
-              : `grid gap-4 ${viewMode === 'grid-2' ? 'grid-cols-2' : 'grid-cols-3'}`
-          )}>
+          <div
+            className={clsx(
+              viewMode === 'board'
+                ? 'flex gap-4 h-full'
+                : `grid gap-4 ${viewMode === 'grid-2' ? 'grid-cols-2' : 'grid-cols-3'}`,
+            )}
+          >
             {[...Array(5)].map((_, i) => (
-              <div key={i} className={clsx(
-                'bg-dark-800/50 rounded-xl animate-pulse',
-                viewMode === 'board' ? 'w-[300px] shrink-0 h-[400px]' : 'h-[300px]'
-              )} />
+              <div
+                key={i}
+                className={clsx(
+                  'bg-dark-800/50 rounded-xl animate-pulse',
+                  viewMode === 'board' ? 'w-[300px] shrink-0 h-[400px]' : 'h-[300px]',
+                )}
+              />
             ))}
           </div>
         ) : (
@@ -465,26 +464,38 @@ export default function PipelinePage() {
               items={stageIds}
               strategy={viewMode === 'board' ? horizontalListSortingStrategy : rectSortingStrategy}
             >
-              <div className={clsx(
-                viewMode === 'board'
-                  ? 'flex gap-4 h-full min-h-[500px]'
-                  : `grid gap-4 auto-rows-min ${
-                      viewMode === 'grid-2' ? 'grid-cols-1 md:grid-cols-2' :
-                      'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
-                    }`
-              )}>
+              <div
+                className={clsx(
+                  viewMode === 'board'
+                    ? 'flex gap-4 h-full min-h-[500px]'
+                    : `grid gap-4 auto-rows-min ${
+                        viewMode === 'grid-2'
+                          ? 'grid-cols-1 md:grid-cols-2'
+                          : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3'
+                      }`,
+                )}
+              >
                 {stages.map((stage) => (
                   <SortableStageColumn
                     key={stage.id}
                     stage={stage}
+                    allStages={stages}
                     isMenuOpen={openMenuStageId === stage.id}
                     onToggleMenu={() => setOpenMenuStageId(openMenuStageId === stage.id ? null : stage.id)}
                     menuRef={openMenuStageId === stage.id ? menuRef : undefined}
-                    onEdit={() => { setOpenMenuStageId(null); setEditingStage(stage); }}
+                    onEdit={() => {
+                      setOpenMenuStageId(null);
+                      setEditingStage(stage);
+                    }}
                     onDelete={() => {
                       setOpenMenuStageId(null);
                       if (stage.cards.length > 0) {
-                        if (!window.confirm(`Delete "${stage.name}"? ${stage.cards.length} cards will be moved to the first stage.`)) return;
+                        if (
+                          !window.confirm(
+                            `Delete "${stage.name}"? ${stage.cards.length} cards will be moved to the first stage.`,
+                          )
+                        )
+                          return;
                       }
                       deleteStMutation.mutate(stage.id);
                     }}
@@ -498,7 +509,7 @@ export default function PipelinePage() {
                   onClick={() => setShowAddStage(true)}
                   className={clsx(
                     'flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-dark-700 hover:border-scl-600/50 hover:bg-dark-800/20 transition-all duration-200 gap-2 text-dark-500 hover:text-scl-400',
-                    viewMode === 'board' ? 'w-[300px] shrink-0 min-h-[200px]' : 'min-h-[150px]'
+                    viewMode === 'board' ? 'w-[300px] shrink-0 min-h-[200px]' : 'min-h-[150px]',
                   )}
                 >
                   <Plus className="w-6 h-6" />
@@ -507,10 +518,12 @@ export default function PipelinePage() {
               </div>
             </SortableContext>
 
-            <DragOverlay dropAnimation={{
-              duration: 200,
-              easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
-            }}>
+            <DragOverlay
+              dropAnimation={{
+                duration: 200,
+                easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+              }}
+            >
               {activeCard && <CardOverlay card={activeCard} />}
               {activeStage && <StageOverlay stage={activeStage} />}
             </DragOverlay>
@@ -619,7 +632,10 @@ export default function PipelinePage() {
               <button
                 onClick={() => {
                   const st = contextMenu.stage!;
-                  if (st.cards.length > 0 && !window.confirm(`Delete "${st.name}"? ${st.cards.length} cards will be moved.`)) {
+                  if (
+                    st.cards.length > 0 &&
+                    !window.confirm(`Delete "${st.name}"? ${st.cards.length} cards will be moved.`)
+                  ) {
                     setContextMenu(null);
                     return;
                   }
@@ -653,9 +669,7 @@ export default function PipelinePage() {
           onClose={() => setShowNoteModal(null)}
         />
       )}
-      {detailLeadId && (
-        <LeadDetailDrawer leadId={detailLeadId} onClose={() => setDetailLeadId(null)} />
-      )}
+      {detailLeadId && <LeadDetailDrawer leadId={detailLeadId} onClose={() => setDetailLeadId(null)} />}
     </div>
   );
 }
