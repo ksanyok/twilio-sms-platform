@@ -27,19 +27,37 @@ import { useState, useEffect, useRef } from 'react';
 import { clsx } from 'clsx';
 import ThemeToggle from '../ThemeToggle';
 
-// Navigation v2 — all features enabled
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Campaigns', href: '/campaigns', icon: Send },
-  { name: 'Inbox', href: '/inbox', icon: MessageSquare },
-  { name: 'Pipeline', href: '/pipeline', icon: Kanban },
-  { name: 'Leads', href: '/leads', icon: Users },
-  { name: 'Numbers', href: '/numbers', icon: Phone, roles: ['ADMIN', 'MANAGER'] },
-  { name: 'Automation', href: '/automation', icon: Bot },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'Twilio', href: '/twilio', icon: Radio, roles: ['ADMIN'] },
-  { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'] },
+// Navigation v2 — grouped by section
+const navGroups = [
+  {
+    label: 'CORE',
+    items: [
+      { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+      { name: 'Pipeline', href: '/pipeline', icon: Kanban },
+      { name: 'Leads', href: '/leads', icon: Users },
+    ],
+  },
+  {
+    label: 'OUTREACH',
+    items: [
+      { name: 'Campaigns', href: '/campaigns', icon: Send },
+      { name: 'Inbox', href: '/inbox', icon: MessageSquare },
+      { name: 'Automation', href: '/automation', icon: Bot },
+    ],
+  },
+  {
+    label: 'SYSTEM',
+    items: [
+      { name: 'Numbers', href: '/numbers', icon: Phone, roles: ['ADMIN', 'MANAGER'] as string[] },
+      { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+      { name: 'Twilio', href: '/twilio', icon: Radio, roles: ['ADMIN'] as string[] },
+      { name: 'Settings', href: '/settings', icon: Settings, roles: ['ADMIN'] as string[] },
+    ],
+  },
 ];
+
+// Flat list for command palette
+const navigation = navGroups.flatMap((g) => g.items);
 
 const SMS_MODE_CONFIG: Record<string, { label: string; color: string; bg: string; dot: string; icon: any }> = {
   live: { label: 'Live', color: 'text-green-400', bg: 'bg-green-500/10', dot: 'bg-green-500', icon: Radio },
@@ -137,6 +155,14 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
 
   const filteredNav = navigation.filter((item) => !item.roles || (user && item.roles.includes(user.role)));
 
+  // Filtered nav groups (respecting roles)
+  const filteredNavGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.roles || (user && item.roles.includes(user.role))),
+    }))
+    .filter((group) => group.items.length > 0);
+
   // Command palette filtered items
   const commandItems = filteredNav.filter((item) => item.name.toLowerCase().includes(commandQuery.toLowerCase()));
 
@@ -148,27 +174,40 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
 
   const sidebarContent = (
     <>
-      {/* Logo */}
+      {/* Brand Header */}
       <div
-        className={clsx('flex items-center h-16 border-b', collapsed ? 'justify-center px-2' : 'gap-3 px-4')}
-        style={{ borderColor: 'var(--border-subtle)' }}
+        className={clsx('flex items-center h-16', collapsed ? 'justify-center px-2' : 'gap-2 px-3.5')}
+        style={{ borderBottom: '1px solid var(--scl-border)' }}
       >
         <div
-          className="flex items-center justify-center w-9 h-9 rounded-lg shrink-0"
+          className="flex items-center justify-center shrink-0"
           style={{
-            background: 'linear-gradient(135deg, #4c63e6 0%, #2f3fb3 100%)',
-            boxShadow: '0 2px 8px rgba(76, 99, 230, 0.3)',
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            background: 'linear-gradient(135deg, #1A5FC8, #2B7FE8)',
+            fontSize: 12,
+            fontWeight: 700,
+            color: '#FFFFFF',
           }}
         >
-          <Shield className="w-5 h-5 text-white" />
+          S
         </div>
         {!collapsed && (
           <div className="flex flex-col min-w-0">
-            <span className="text-sm font-bold tracking-tight truncate" style={{ color: 'var(--text-primary)' }}>
-              Secure Credit Lines
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--scl-white)', letterSpacing: '0.04em' }}>
+              SCL Capital
             </span>
-            <span className="text-[10px] uppercase tracking-widest font-medium" style={{ color: 'var(--text-faint)' }}>
-              SMS Platform
+            <span
+              style={{
+                fontSize: 8,
+                color: 'var(--scl-text-g)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.10em',
+                marginTop: 2,
+              }}
+            >
+              Secure Credit Lines
             </span>
           </div>
         )}
@@ -178,14 +217,16 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
               setCollapsed(!collapsed);
               setMobileOpen(false);
             }}
-            className="ml-auto p-1 text-dark-500 hover:text-dark-300 transition-colors hidden lg:block"
+            className="ml-auto p-1 transition-colors hidden lg:block"
+            style={{ color: 'var(--scl-text-m)' }}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
         )}
         <button
           onClick={() => setMobileOpen(false)}
-          className="ml-auto p-1 text-dark-500 hover:text-dark-300 transition-colors lg:hidden"
+          className="ml-auto p-1 transition-colors lg:hidden"
+          style={{ color: 'var(--scl-text-m)' }}
         >
           <X className="w-5 h-5" />
         </button>
@@ -228,36 +269,59 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
         </div>
       )}
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" data-nav-version="2">
-        {filteredNav.map((item) => (
-          <NavLink
-            key={item.name}
-            to={item.href}
-            end={item.href === '/'}
-            className={({ isActive }) =>
-              clsx('sidebar-link relative', isActive && 'active', collapsed && 'justify-center px-2')
-            }
-            title={collapsed ? item.name : undefined}
-          >
-            <item.icon className="w-5 h-5 shrink-0" />
-            {!collapsed && <span className="text-sm font-medium">{item.name}</span>}
-            {item.name === 'Inbox' && unreadCount > 0 && (
-              <span
-                className={clsx(
-                  'absolute bg-scl-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center',
-                  collapsed ? 'top-0 right-0 w-4 h-4' : 'right-2 top-1/2 -translate-y-1/2 w-5 h-5',
-                )}
+      {/* Navigation — grouped with section labels */}
+      <nav className="flex-1 px-3 py-4 overflow-y-auto" data-nav-version="2">
+        {filteredNavGroups.map((group) => (
+          <div key={group.label}>
+            {!collapsed && (
+              <div
+                style={{
+                  fontSize: 8,
+                  fontWeight: 500,
+                  color: 'var(--scl-text-g)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.14em',
+                  padding: '14px 14px 4px',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                }}
               >
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
+                {group.label}
+              </div>
             )}
-          </NavLink>
+            <div className="space-y-1">
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.name}
+                  to={item.href}
+                  end={item.href === '/'}
+                  className={({ isActive }) =>
+                    clsx('sidebar-link relative', isActive && 'active', collapsed && 'justify-center px-2')
+                  }
+                  title={collapsed ? item.name : undefined}
+                >
+                  <item.icon className="w-5 h-5 shrink-0" />
+                  {!collapsed && <span className="text-sm font-medium">{item.name}</span>}
+                  {item.name === 'Inbox' && unreadCount > 0 && (
+                    <span
+                      className={clsx(
+                        'absolute text-white text-[10px] font-bold rounded-full flex items-center justify-center',
+                        collapsed ? 'top-0 right-0 w-4 h-4' : 'right-2 top-1/2 -translate-y-1/2 w-5 h-5',
+                      )}
+                      style={{ backgroundColor: 'var(--scl-blue)' }}
+                    >
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
       {/* SMS Mode Indicator + User section */}
-      <div className="border-t p-3 space-y-2" style={{ borderColor: 'var(--border-subtle)' }}>
+      <div className="p-3 space-y-2" style={{ borderTop: '1px solid var(--scl-border)' }}>
         {/* SMS Mode pill */}
         <NavLink
           to="/settings?tab=system"
@@ -292,7 +356,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
             style={{
-              background: 'linear-gradient(135deg, #4c63e6 0%, #2f3fb3 100%)',
+              background: 'linear-gradient(135deg, #1A5FC8 0%, #2B7FE8 100%)',
             }}
           >
             {user?.firstName?.[0]}
@@ -338,8 +402,8 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
           collapsed ? 'w-[72px]' : 'w-[260px]',
         )}
         style={{
-          backgroundColor: 'var(--bg-secondary)',
-          borderColor: 'var(--border-subtle)',
+          backgroundColor: 'var(--scl-sidebar)',
+          borderColor: 'var(--scl-border)',
         }}
       >
         {sidebarContent}
@@ -352,8 +416,8 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
         )}
         style={{
-          backgroundColor: 'var(--bg-secondary)',
-          borderColor: 'var(--border-subtle)',
+          backgroundColor: 'var(--scl-sidebar)',
+          borderColor: 'var(--scl-border)',
         }}
       >
         {sidebarContent}
@@ -365,8 +429,8 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
         <div
           className="sticky top-0 z-30 flex items-center gap-3 px-4 h-14 border-b lg:hidden"
           style={{
-            backgroundColor: 'var(--bg-secondary)',
-            borderColor: 'var(--border-subtle)',
+            backgroundColor: 'var(--scl-sidebar)',
+            borderColor: 'var(--scl-border)',
           }}
         >
           <button onClick={() => setMobileOpen(true)} className="p-1.5 -ml-1" style={{ color: 'var(--text-muted)' }}>

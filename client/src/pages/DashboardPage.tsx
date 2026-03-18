@@ -360,24 +360,24 @@ export default function DashboardPage() {
               <AreaChart data={stats?.dailyVolume || []}>
                 <defs>
                   <linearGradient id="colorDelivered" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#2B7FE8" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#2B7FE8" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#1e293b' : '#e2e8f0'} />
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#1A3050' : '#e2e8f0'} />
                 <XAxis
                   dataKey="date"
-                  stroke={isDark ? '#475569' : '#94a3b8'}
+                  stroke={isDark ? '#5A80A8' : '#94a3b8'}
                   fontSize={12}
                   tickFormatter={(val) => format(new Date(val + 'T12:00:00'), 'MMM d')}
                 />
-                <YAxis stroke={isDark ? '#475569' : '#94a3b8'} fontSize={12} />
+                <YAxis stroke={isDark ? '#5A80A8' : '#94a3b8'} fontSize={12} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: isDark ? '#1e293b' : '#ffffff',
-                    border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                    backgroundColor: isDark ? '#0D1E35' : '#ffffff',
+                    border: isDark ? '1px solid #1A3050' : '1px solid #e2e8f0',
                     borderRadius: '8px',
-                    color: isDark ? '#e2e8f0' : '#1e293b',
+                    color: isDark ? '#B8D4F0' : '#1e293b',
                     boxShadow: isDark ? undefined : '0 4px 12px rgba(0,0,0,0.08)',
                   }}
                   labelFormatter={(val) => format(new Date(val + 'T12:00:00'), 'MMM d, yyyy')}
@@ -385,7 +385,7 @@ export default function DashboardPage() {
                 <Area
                   type="monotone"
                   dataKey="delivered"
-                  stroke="#6366f1"
+                  stroke="#2B7FE8"
                   fill="url(#colorDelivered)"
                   strokeWidth={2}
                 />
@@ -606,18 +606,33 @@ function StatCard({
   sub?: string;
   trend?: number;
 }) {
-  const colorMap: Record<string, string> = {
-    indigo: 'bg-scl-600/20 text-scl-400',
-    blue: 'bg-blue-600/20 text-blue-400',
-    green: 'bg-green-600/20 text-green-400',
-    purple: 'bg-purple-600/20 text-purple-400',
-    yellow: 'bg-yellow-600/20 text-yellow-400',
+  const accentMap: Record<string, string> = {
+    indigo: '#2B7FE8',
+    blue: '#2B7FE8',
+    green: '#1A8A5A',
+    purple: '#8A5ACA',
+    yellow: '#D4820A',
+    red: '#C0392B',
   };
 
+  const accent = accentMap[color] || '#2B7FE8';
+
   return (
-    <div className="stat-card group hover:border-dark-600/80 transition-all duration-200">
+    <div
+      className="group transition-all duration-200"
+      style={{
+        background: 'var(--scl-surface)',
+        border: '1px solid var(--scl-border)',
+        borderTop: `2px solid ${accent}`,
+        borderRadius: '0 0 6px 6px',
+        padding: '11px 14px',
+      }}
+    >
       <div className="flex items-center justify-between">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorMap[color]}`}>
+        <div
+          className="w-10 h-10 rounded-lg flex items-center justify-center"
+          style={{ backgroundColor: `${accent}20`, color: accent }}
+        >
           <Icon className="w-5 h-5" />
         </div>
         {trend !== undefined && (
@@ -633,9 +648,30 @@ function StatCard({
         )}
       </div>
       <div className="mt-3">
-        <p className="stat-value">{typeof value === 'number' ? value.toLocaleString() : value}</p>
-        <p className="stat-label mt-0.5">{label}</p>
-        {sub && <p className="text-[10px] text-dark-500 mt-1">{sub}</p>}
+        <p
+          style={{
+            fontSize: 26,
+            fontWeight: 500,
+            color: color === 'red' ? 'var(--scl-red)' : 'var(--scl-white)',
+            fontVariantNumeric: 'tabular-nums',
+            lineHeight: 1,
+            marginBottom: 4,
+          }}
+        >
+          {typeof value === 'number' ? value.toLocaleString() : value}
+        </p>
+        <p
+          style={{
+            fontSize: 8,
+            color: 'var(--scl-text-g)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.10em',
+            marginBottom: 6,
+          }}
+        >
+          {label}
+        </p>
+        {sub && <p style={{ fontSize: 9, color: 'var(--scl-text-m)' }}>{sub}</p>}
       </div>
     </div>
   );

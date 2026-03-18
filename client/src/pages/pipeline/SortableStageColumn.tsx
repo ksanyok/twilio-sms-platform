@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -64,74 +64,87 @@ export default function SortableStageColumn({
       )}
       onContextMenu={(e) => onContextMenu(e, 'stage', stage)}
     >
-      {/* Stage Header */}
-      <div className="relative">
-        <div className="absolute top-0 left-0 right-0 h-1 rounded-t-xl" style={{ backgroundColor: stage.color }} />
-        <div
-          className="flex items-center justify-between px-3 py-2.5 rounded-t-xl group/header"
-          style={{ backgroundColor: hexToRgba(stage.color, 0.1) }}
-        >
+      {/* Stage Header — two-row with metrics */}
+      <div style={{ padding: '0 0 8px', marginBottom: 6, borderBottom: `2px solid ${stage.color}` }}>
+        <div className="flex items-center justify-between px-3 pt-2 group/header">
           <div className="flex items-center gap-2">
             <button
-              className="cursor-grab active:cursor-grabbing text-dark-500 hover:text-dark-300 transition-colors touch-none"
+              className="cursor-grab active:cursor-grabbing transition-colors touch-none"
+              style={{ color: 'var(--scl-text-g)' }}
               {...listeners}
               {...attributes}
             >
               <GripHorizontal className="w-4 h-4" />
             </button>
-            <div
-              className="w-3 h-3 rounded-full"
-              style={{
-                backgroundColor: stage.color,
-                boxShadow: `0 0 0 2px var(--color-dark-900), 0 0 0 3px ${stage.color}`,
-              }}
-            />
-            <h3 className="text-sm font-semibold text-dark-200">{stage.name}</h3>
-            <span
-              className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-              style={{
-                backgroundColor: hexToRgba(stage.color, 0.15),
-                color: stage.color,
-              }}
-            >
-              {stage._count?.cards ?? stage.cards.length}
-            </span>
-          </div>
-          <div className="relative">
-            <button
-              onClick={onToggleMenu}
-              className="btn-ghost p-1 opacity-0 group-hover/header:opacity-100 transition-opacity"
-            >
-              <MoreVertical className="w-4 h-4" />
-            </button>
-            {isMenuOpen && (
-              <div
-                ref={menuRef as React.RefObject<HTMLDivElement>}
-                className="absolute right-0 top-full mt-1 w-44 bg-dark-800 border border-dark-700 rounded-lg shadow-xl z-50 py-1"
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span
+                style={{
+                  fontSize: 8,
+                  fontWeight: 500,
+                  letterSpacing: '0.10em',
+                  textTransform: 'uppercase',
+                  color: 'var(--scl-text-m)',
+                }}
               >
-                <button
-                  onClick={onEdit}
-                  className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
+                {stage.name}
+              </span>
+              <span
+                style={{
+                  fontSize: 17,
+                  fontWeight: 500,
+                  color: 'var(--scl-text-b)',
+                  fontVariantNumeric: 'tabular-nums',
+                  lineHeight: 1,
+                }}
+              >
+                {stage._count?.cards ?? stage.cards.length}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="relative">
+              <button
+                onClick={onToggleMenu}
+                className="p-1 opacity-0 group-hover/header:opacity-100 transition-opacity"
+                style={{ color: 'var(--scl-text-g)' }}
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+              {isMenuOpen && (
+                <div
+                  ref={menuRef as React.RefObject<HTMLDivElement>}
+                  className="absolute right-0 top-full mt-1 w-44 rounded-lg shadow-xl z-50 py-1"
+                  style={{ backgroundColor: 'var(--scl-card)', border: '1px solid var(--scl-border)' }}
                 >
-                  <Edit3 className="w-3.5 h-3.5" /> Rename Stage
-                </button>
-                <button
-                  onClick={onEdit}
-                  className="w-full text-left px-3 py-2 text-sm text-dark-200 hover:bg-dark-700/50 flex items-center gap-2"
-                >
-                  <Palette className="w-3.5 h-3.5" /> Change Color
-                </button>
-                <div className="border-t border-dark-700 my-1" />
-                <button
-                  onClick={onDelete}
-                  className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-dark-700/50 flex items-center gap-2"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Delete Stage
-                </button>
-              </div>
-            )}
+                  <button
+                    onClick={onEdit}
+                    className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:opacity-80"
+                    style={{ color: 'var(--scl-text-b)' }}
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Rename Stage
+                  </button>
+                  <button
+                    onClick={onEdit}
+                    className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:opacity-80"
+                    style={{ color: 'var(--scl-text-b)' }}
+                  >
+                    <Palette className="w-3.5 h-3.5" /> Change Color
+                  </button>
+                  <div style={{ borderTop: '1px solid var(--scl-border)', margin: '4px 0' }} />
+                  <button
+                    onClick={onDelete}
+                    className="w-full text-left px-3 py-2 text-sm flex items-center gap-2 hover:opacity-80"
+                    style={{ color: 'var(--scl-red)' }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Stage
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
+        {/* Metrics row */}
+        <ColumnMetrics stage={stage} />
       </div>
 
       {/* Cards Container */}
@@ -167,6 +180,94 @@ export default function SortableStageColumn({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Compute & display per-column metrics based on stage name */
+function ColumnMetrics({ stage }: { stage: PipelineStage }) {
+  const nameLower = stage.name.toLowerCase();
+  const metricStyle = { fontSize: 8, color: 'var(--scl-text-g)' } as const;
+  const valStyle = { color: 'var(--scl-text-m)' } as const;
+
+  // Calculate average age in days from leads (using card creation as proxy)
+  const [now] = useState(() => Date.now());
+
+  const avgAge = useMemo(() => {
+    if (stage.cards.length === 0) return 0;
+    const totalDays = stage.cards.reduce((sum, c) => {
+      const created = (c as any).createdAt ? new Date((c as any).createdAt).getTime() : now;
+      return sum + (now - created) / 86400000;
+    }, 0);
+    return Math.round(totalDays / stage.cards.length);
+  }, [stage.cards, now]);
+
+  // Stale count (7d+)
+  const staleCount = useMemo(() => {
+    return stage.cards.filter((c) => {
+      const created = (c as any).createdAt ? new Date((c as any).createdAt).getTime() : now;
+      return (now - created) / 86400000 >= 7;
+    }).length;
+  }, [stage.cards, now]);
+
+  if (nameLower.includes('new')) {
+    return (
+      <div className="flex gap-2 px-3" style={metricStyle}>
+        <span>
+          Avg age: <span style={valStyle}>{avgAge}d</span>
+        </span>
+        <span>
+          Stale: <span style={{ color: staleCount > 0 ? 'var(--scl-red)' : 'var(--scl-text-m)' }}>{staleCount}</span>
+        </span>
+      </div>
+    );
+  }
+
+  if (nameLower.includes('contact')) {
+    return (
+      <div className="flex gap-2 px-3" style={metricStyle}>
+        <span>
+          Avg age: <span style={valStyle}>{avgAge}d</span>
+        </span>
+        <span>
+          Leads: <span style={valStyle}>{stage.cards.length}</span>
+        </span>
+      </div>
+    );
+  }
+
+  if (nameLower.includes('repl')) {
+    return (
+      <div className="flex gap-2 px-3" style={metricStyle}>
+        <span style={{ color: 'var(--scl-green)' }}>Same-day action req.</span>
+      </div>
+    );
+  }
+
+  if (nameLower.includes('interest')) {
+    return (
+      <div className="flex gap-2 px-3" style={metricStyle}>
+        <span>
+          Leads: <span style={valStyle}>{stage.cards.length}</span>
+        </span>
+      </div>
+    );
+  }
+
+  if (nameLower.includes('doc')) {
+    return (
+      <div className="flex gap-2 px-3" style={metricStyle}>
+        <span style={{ color: 'var(--scl-green)' }}>Ready to fund</span>
+      </div>
+    );
+  }
+
+  // Fallback for custom stages
+  return (
+    <div className="flex gap-2 px-3" style={metricStyle}>
+      <span>
+        Leads: <span style={valStyle}>{stage.cards.length}</span>
+      </span>
     </div>
   );
 }

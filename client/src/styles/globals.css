@@ -5,24 +5,43 @@
 @layer base {
   /* ─── Theme CSS Variables ─── */
   :root {
-    --bg-primary: #060d1b;
-    --bg-secondary: #0d1729;
-    --bg-tertiary: #142038;
-    --bg-card: #142038;
-    --bg-input: #1a2744;
-    --bg-hover: rgba(26, 39, 68, 0.6);
-    --border-color: #283b52;
-    --border-subtle: rgba(40, 59, 82, 0.5);
-    --text-primary: #dce4ef;
-    --text-secondary: #b8c9df;
-    --text-muted: #6b87a8;
-    --text-faint: #4e6a8a;
-    --scrollbar-track: #0d1729;
-    --scrollbar-thumb: #3a526d;
-    --scrollbar-hover: #4e6a8a;
-    --accent-primary: #4c63e6;
-    --accent-hover: #3b4fd4;
-    --accent-glow: rgba(76, 99, 230, 0.25);
+    /* SCL Brand Token System — dark navy + electric blue */
+    --scl-shell:     #0A1628;
+    --scl-sidebar:   #07101E;
+    --scl-surface:   #0D1E35;
+    --scl-card:      #0F2240;
+    --scl-card-hi:   #132848;
+    --scl-border:    #1A3050;
+    --scl-border-hi: #2A4870;
+    --scl-blue:      #2B7FE8;
+    --scl-blue-br:   #4A9FFF;
+    --scl-blue-dim:  #1A4A8A;
+    --scl-white:     #FFFFFF;
+    --scl-text-b:    #B8D4F0;
+    --scl-text-m:    #5A80A8;
+    --scl-text-g:    #2A4060;
+    --scl-red:       #C0392B;
+    --scl-amber:     #D4820A;
+    --scl-green:     #1A8A5A;
+
+    --bg-primary: #0A1628;
+    --bg-secondary: #07101E;
+    --bg-tertiary: #0D1E35;
+    --bg-card: #0F2240;
+    --bg-input: #132848;
+    --bg-hover: rgba(19, 40, 72, 0.6);
+    --border-color: #1A3050;
+    --border-subtle: rgba(26, 48, 80, 0.5);
+    --text-primary: #FFFFFF;
+    --text-secondary: #B8D4F0;
+    --text-muted: #5A80A8;
+    --text-faint: #2A4060;
+    --scrollbar-track: #07101E;
+    --scrollbar-thumb: #1A3050;
+    --scrollbar-hover: #2A4870;
+    --accent-primary: #2B7FE8;
+    --accent-hover: #4A9FFF;
+    --accent-glow: rgba(43, 127, 232, 0.25);
   }
 
   .light {
@@ -78,11 +97,20 @@
 
 @layer components {
   .sidebar-link {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-dark-400 hover:text-dark-100 hover:bg-dark-800/60 transition-all duration-200;
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200;
+    color: var(--scl-text-m);
+  }
+
+  .sidebar-link:hover {
+    color: var(--scl-text-b);
+    background: rgba(43, 127, 232, 0.08);
   }
 
   .sidebar-link.active {
-    @apply bg-scl-600/20 text-scl-300 border-l-2 border-scl-500;
+    color: var(--scl-blue-br);
+    background: rgba(43, 127, 232, 0.12);
+    border-right: 2px solid var(--scl-blue);
+    border-left: none;
   }
 
   .card {
