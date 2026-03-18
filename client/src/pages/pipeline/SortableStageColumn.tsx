@@ -81,7 +81,7 @@ export default function SortableStageColumn({
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span
                 style={{
-                  fontSize: 8,
+                  fontSize: 10,
                   fontWeight: 500,
                   letterSpacing: '0.10em',
                   textTransform: 'uppercase',
@@ -189,7 +189,7 @@ export default function SortableStageColumn({
 /** Compute & display per-column metrics based on stage name */
 function ColumnMetrics({ stage, allStages }: { stage: PipelineStage; allStages?: PipelineStage[] }) {
   const nameLower = stage.name.toLowerCase();
-  const metricStyle = { fontSize: 8, color: 'var(--scl-text-g)' } as const;
+  const metricStyle = { fontSize: 10, color: 'var(--scl-text-g)' } as const;
   const valStyle = { color: 'var(--scl-text-m)' } as const;
 
   // Calculate average age in days from leads (using card creation as proxy)

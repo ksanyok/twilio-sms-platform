@@ -663,8 +663,8 @@ function StatCard({
         </p>
         <p
           style={{
-            fontSize: 8,
-            color: 'var(--scl-text-g)',
+            fontSize: 10,
+            color: 'var(--scl-text-m)',
             textTransform: 'uppercase',
             letterSpacing: '0.10em',
             marginBottom: 6,
@@ -672,7 +672,7 @@ function StatCard({
         >
           {label}
         </p>
-        {sub && <p style={{ fontSize: 9, color: 'var(--scl-text-m)' }}>{sub}</p>}
+        {sub && <p style={{ fontSize: 10, color: 'var(--scl-text-b)' }}>{sub}</p>}
       </div>
     </div>
   );

@@ -200,7 +200,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
             </span>
             <span
               style={{
-                fontSize: 8,
+                fontSize: 10,
                 color: 'var(--scl-text-g)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.10em',
@@ -276,7 +276,7 @@ export default function AppLayout({ children }: { children?: React.ReactNode }) 
             {!collapsed && (
               <div
                 style={{
-                  fontSize: 8,
+                  fontSize: 10,
                   fontWeight: 500,
                   color: 'var(--scl-text-g)',
                   textTransform: 'uppercase',
