@@ -86,3 +86,61 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// ─── Phase 2: Deal API helpers ───
+
+export const dealApi = {
+  getBoard: (params?: Record<string, string>) => api.get('/deals/board', { params }),
+  getDeals: (params?: Record<string, string>) => api.get('/deals', { params }),
+  getDeal: (id: string) => api.get(`/deals/${id}`),
+  getStats: (params?: Record<string, string>) => api.get('/deals/stats', { params }),
+  getReviveQueue: () => api.get('/deals/revive-queue'),
+  createDeal: (data: any) => api.post('/deals', data),
+  updateDeal: (id: string, data: any) => api.put(`/deals/${id}`, data),
+  moveDeal: (id: string, data: any) => api.put(`/deals/${id}/move`, data),
+  addOffer: (id: string, data: any) => api.post(`/deals/${id}/offers`, data),
+  markFunded: (id: string, data: any) => api.post(`/deals/${id}/fund`, data),
+  completeAction: (id: string, data: any) => api.post(`/deals/${id}/complete-action`, data),
+  shareDeal: (id: string, data: any) => api.put(`/deals/${id}/share`, data),
+  logCall: (id: string, data: any) => api.post(`/deals/${id}/call-log`, data),
+  getSms: (id: string) => api.get(`/deals/${id}/sms`),
+  sendSms: (id: string, body: string) => api.post(`/deals/${id}/sms/send`, { body }),
+  importCSV: (file: File, assignToRepId?: string) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (assignToRepId) form.append('assignToRepId', assignToRepId);
+    return api.post('/deals/import-csv', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  getImportBatches: () => api.get('/deals/import-batches'),
+  deleteImportBatch: (batchId: string) => api.delete(`/deals/import-batch/${encodeURIComponent(batchId)}`),
+  deleteDeal: (id: string) => api.delete(`/deals/${id}`),
+  completeRenewalTask: (taskId: string, data?: { note?: string }) => api.put(`/deals/renewal-tasks/${taskId}/complete`, data || {}),
+};
+
+export const commandCenterApi = {
+  getMetrics: (params?: Record<string, string>) => api.get('/command-center/metrics', { params }),
+  getOperatorQueue: (params?: Record<string, string>) => api.get('/command-center/operator-queue', { params }),
+  getHotLeads: (params?: Record<string, string>) => api.get('/command-center/hot-leads', { params }),
+  getStaleDeals: (params?: Record<string, string>) => api.get('/command-center/stale-deals', { params }),
+  getOverdueTasks: () => api.get('/command-center/overdue-tasks'),
+  getIntelligence: () => api.get('/command-center/intelligence'),
+  getExecutionScores: () => api.get('/command-center/execution-scores'),
+  getProductMix: (params?: Record<string, string>) => api.get('/command-center/product-mix', { params }),
+  getActivityFeed: (params?: Record<string, string>) => api.get('/command-center/activity-feed', { params }),
+  getSmsMetrics: () => api.get('/command-center/sms-metrics'),
+};
+
+export const repApi = {
+  getReps: (params?: Record<string, string>) => api.get('/reps', { params }),
+  getRep: (id: string) => api.get(`/reps/${id}`),
+  createRep: (data: any) => api.post('/reps', data),
+  updateRep: (id: string, data: any) => api.put(`/reps/${id}`, data),
+  updateGoals: (id: string, data: any) => api.put(`/reps/${id}/goals`, data),
+  updateTeamGoals: (data: any) => api.put('/reps/team-goals', data),
+};
+
+export const importApi = {
+  importCsv: (data: any) => api.post('/import/csv', data),
+  getBatches: () => api.get('/import/batches'),
+  rollbackBatch: (batchId: string) => api.delete(`/import/batches/${batchId}`),
+};

@@ -2,7 +2,7 @@ import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { subDays, subHours, startOfDay } from 'date-fns';
-import getTwilioClient, { getSmsMode } from '../config/twilio';
+import { getActiveTwilioClient, getSmsMode } from '../config/twilio';
 import redis from '../config/redis';
 import { config } from '../config';
 import logger from '../config/logger';
@@ -63,12 +63,10 @@ export class DashboardController {
         },
       }),
 
-      // Pipeline snapshot
-      prisma.pipelineStage.findMany({
-        include: {
-          _count: { select: { cards: { where: { lead: { deletedAt: null } } } } },
-        },
-        orderBy: { order: 'asc' },
+      // Pipeline snapshot (deals-based)
+      prisma.deal.groupBy({
+        by: ['stage'],
+        _count: true,
       }),
 
       // Recent campaigns
@@ -134,12 +132,26 @@ export class DashboardController {
         replyRate: parseFloat(replyRate),
         activeAutomations,
       },
-      pipelineSnapshot: pipelineSnapshot.map((stage) => ({
-        id: stage.id,
-        name: stage.name,
-        color: stage.color,
-        count: stage._count.cards,
-      })),
+      pipelineSnapshot: (() => {
+        const DEAL_STAGES = [
+          { key: 'NEW_LEAD', label: 'New Lead', color: '#4A9EE8' },
+          { key: 'ENGAGED_INTERESTED', label: 'Engaged / Interested', color: '#9B72E8' },
+          { key: 'QUALIFIED', label: 'Qualified', color: '#C9952A' },
+          { key: 'SUBMITTED_IN_REVIEW', label: 'Submitted (In Review)', color: '#4A9EE8' },
+          { key: 'APPROVED_OFFERS', label: 'Approved / Offers', color: '#FF8C00' },
+          { key: 'COMMITTED_FUNDING', label: 'Committed (Funding)', color: '#3AB97A' },
+          { key: 'FUNDED', label: 'Funded', color: '#3AB97A' },
+          { key: 'NURTURE', label: 'Nurture', color: '#4A9EE8' },
+          { key: 'CLOSED', label: 'Closed', color: '#536070' },
+        ];
+        const countMap = new Map(pipelineSnapshot.map((s: any) => [s.stage, s._count]));
+        return DEAL_STAGES.map((s) => ({
+          id: s.key,
+          name: s.label,
+          color: s.color,
+          count: countMap.get(s.key) || 0,
+        }));
+      })(),
       recentCampaigns,
       numberHealth: numberHealth.map((g) => ({
         status: g.status,
@@ -399,7 +411,7 @@ export class DashboardController {
    * messaging services, phone numbers, usage records
    */
   static async getTwilioDiagnostics(req: AuthRequest, res: Response): Promise<void> {
-    const client = getTwilioClient();
+    const client = await getActiveTwilioClient();
     if (!client) {
       res.status(503).json({ error: 'Twilio client not configured' });
       return;
