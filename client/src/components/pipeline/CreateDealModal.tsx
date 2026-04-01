@@ -27,6 +27,7 @@ export default function CreateDealModal({ onClose, prefill }: CreateDealModalPro
   const [email, setEmail] = useState(prefill?.email || '');
   const [productType, setProductType] = useState<ProductType | ''>('');
   const [dealAmount, setDealAmount] = useState('');
+  const [notes, setNotes] = useState('');
   const [assignedRepId, setAssignedRepId] = useState(user?.id || '');
   const [nextAction, setNextAction] = useState('');
   const [nextActionDue, setNextActionDue] = useState('');
@@ -55,16 +56,28 @@ export default function CreateDealModal({ onClose, prefill }: CreateDealModalPro
       toast.error('Business name is required');
       return;
     }
+    if (!productType) {
+      toast.error('Product type is required');
+      return;
+    }
+    const longCycle = ['SBA', 'CRE', 'EQUIPMENT'].includes(productType);
+    if (longCycle && !dealAmount) {
+      toast.error('Submitted amount is required for this product type');
+      return;
+    }
+    const parsedAmount = dealAmount ? parseFloat(dealAmount) : undefined;
     mutation.mutate({
       businessName,
       contactName: contactName || undefined,
       phone: phone || undefined,
       email: email || undefined,
       productType: productType || undefined,
-      dealAmount: dealAmount ? parseFloat(dealAmount) : undefined,
+      dealAmount: !longCycle ? parsedAmount : undefined,
+      submittedAmount: longCycle ? parsedAmount : undefined,
       assignedRepId: assignedRepId || undefined,
       nextAction: nextAction || undefined,
       nextActionDue: nextActionDue || undefined,
+      notes: notes.trim() || undefined,
     });
   };
 
@@ -75,7 +88,9 @@ export default function CreateDealModal({ onClose, prefill }: CreateDealModalPro
         className="bg-[var(--bg-primary)] border border-[var(--border-primary)] rounded-xl w-full max-w-lg p-5 shadow-xl"
       >
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-base font-semibold text-[var(--text-primary)]">{prefill ? `New Deal — ${prefill.businessName || 'Client'}` : 'New Deal'}</h3>
+          <h3 className="text-base font-semibold text-[var(--text-primary)]">
+            {prefill ? `New Deal — ${prefill.businessName || 'Client'}` : 'New Deal'}
+          </h3>
           <button onClick={onClose} className="p-1 rounded hover:bg-[var(--bg-tertiary)]">
             <X className="w-4 h-4 text-[var(--text-muted)]" />
           </button>
@@ -133,14 +148,24 @@ export default function CreateDealModal({ onClose, prefill }: CreateDealModalPro
             </select>
           </div>
           <div>
-            <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">Deal Amount</label>
+            <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">
+              {['SBA', 'CRE', 'EQUIPMENT'].includes(productType)
+                ? 'Submitted Amount *'
+                : ['MCA', 'LOC', 'HELOC', 'BRIDGE'].includes(productType)
+                  ? 'Requested Amount'
+                  : 'Amount'}
+            </label>
             <input
               type="number"
               value={dealAmount}
               onChange={(e) => setDealAmount(e.target.value)}
               className="w-full text-sm bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg p-2 text-[var(--text-primary)]"
-              placeholder="50000"
+              placeholder=""
+              disabled={!productType}
             />
+            {['SBA', 'CRE', 'EQUIPMENT'].includes(productType) && (
+              <p className="text-xs text-blue-400 mt-1">This deal will be created in Submitted (In Review)</p>
+            )}
           </div>
           {isAdmin && reps && (
             <div>
@@ -176,11 +201,20 @@ export default function CreateDealModal({ onClose, prefill }: CreateDealModalPro
               className="w-full text-sm bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg p-2 text-[var(--text-primary)]"
             />
           </div>
+          <div className="col-span-2">
+            <label className="text-xs font-medium text-[var(--text-muted)] block mb-1">Quick note (optional)</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full text-sm bg-[var(--bg-tertiary)] border border-[var(--border-primary)] rounded-lg p-2 text-[var(--text-primary)] min-h-[72px] resize-none"
+              placeholder="e.g. 6 trucks, needs $400k, call after 4pm"
+            />
+          </div>
         </div>
 
         <button
           onClick={handleSubmit}
-          disabled={!businessName || mutation.isPending}
+          disabled={!businessName || !productType || mutation.isPending}
           className="w-full mt-4 py-2.5 rounded-lg bg-scl-500 text-white text-sm font-medium hover:bg-scl-600 disabled:opacity-50 transition"
         >
           {mutation.isPending ? 'Creating...' : 'Create Deal'}

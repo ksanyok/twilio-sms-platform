@@ -10,7 +10,7 @@ const LEAD_TO_DEAL: Record<LeadStatus, DealStage> = {
   NEW: DealStage.NEW_LEAD,
   CONTACTED: DealStage.ENGAGED_INTERESTED,
   REPLIED: DealStage.ENGAGED_INTERESTED,
-  INTERESTED: DealStage.QUALIFIED,
+  INTERESTED: DealStage.ENGAGED_INTERESTED,
   DOCS_REQUESTED: DealStage.QUALIFIED,
   SUBMITTED: DealStage.SUBMITTED_IN_REVIEW,
   FUNDED: DealStage.FUNDED,
@@ -29,6 +29,16 @@ const STAGE_LABELS: Record<DealStage, string> = {
   NURTURE: 'Nurture',
   CLOSED: 'Closed',
 };
+
+const BUSINESS_NAME_PLACEHOLDERS = new Set(['n/a', 'na', 'none', 'unknown', 'unknown business', 'null', '-']);
+
+function normalizeBusinessName(rawCompany: string | null | undefined, fallbackName: string): string {
+  const fallback = fallbackName.trim() || 'Unknown Business';
+  const company = String(rawCompany || '').trim();
+  if (!company) return fallback;
+  if (BUSINESS_NAME_PLACEHOLDERS.has(company.toLowerCase())) return fallback;
+  return company;
+}
 
 export class LeadController {
   static async list(req: AuthRequest, res: Response): Promise<void> {
@@ -307,27 +317,38 @@ export class LeadController {
       },
     });
 
-    // Sync lead status → deal stage when status changes
-    if (status && status !== existing.status) {
-      const newDealStage = LEAD_TO_DEAL[status as LeadStatus];
-      if (newDealStage) {
-        // Find linked deal (via leadId FK or by phone match)
-        let linkedDeal = lead.deal;
-        if (!linkedDeal) {
-          const client = await prisma.client.findUnique({ where: { phone: existing.phone } });
-          if (client) {
-            linkedDeal = await prisma.deal.findFirst({
-              where: { clientId: client.id },
-              select: { id: true, stage: true },
-              orderBy: { createdAt: 'desc' },
-            });
-            // Link for future syncs
-            if (linkedDeal) {
-              await prisma.deal.update({ where: { id: linkedDeal.id }, data: { leadId: id } });
-            }
+    // Sync lead status → deal stage when status changes (or when no deal exists yet)
+    const effectiveStatus = status || existing.status;
+    const statusChanged = status && status !== existing.status;
+    const newDealStage = LEAD_TO_DEAL[effectiveStatus as LeadStatus];
+    console.log('[LeadUpdate]', {
+      leadId: id,
+      status,
+      existingStatus: existing.status,
+      effectiveStatus,
+      statusChanged,
+      newDealStage,
+      hasDeal: !!lead.deal,
+    });
+    if (newDealStage) {
+      // Find linked deal (via leadId FK or by phone match)
+      let linkedDeal = lead.deal;
+      if (!linkedDeal) {
+        const client = await prisma.client.findUnique({ where: { phone: existing.phone } });
+        if (client) {
+          linkedDeal = await prisma.deal.findFirst({
+            where: { clientId: client.id },
+            select: { id: true, stage: true },
+            orderBy: { createdAt: 'desc' },
+          });
+          // Link for future syncs
+          if (linkedDeal) {
+            await prisma.deal.update({ where: { id: linkedDeal.id }, data: { leadId: id } });
           }
         }
-        if (linkedDeal && linkedDeal.stage !== newDealStage) {
+      }
+      if (linkedDeal) {
+        if (statusChanged && linkedDeal.stage !== newDealStage) {
           await prisma.deal.update({
             where: { id: linkedDeal.id },
             data: {
@@ -338,9 +359,60 @@ export class LeadController {
             },
           });
         }
-      }
+      } else {
+        // No deal exists — create one from the lead
+        console.log('[LeadUpdate] Creating new deal for lead', id, 'stage:', newDealStage);
 
-      // Legacy: auto-move pipeline card
+        const contactName = `${existing.firstName} ${existing.lastName || ''}`.trim();
+        const businessName = normalizeBusinessName(existing.company, contactName);
+
+        const leadConversation = await prisma.conversation.findUnique({
+          where: { leadId: id },
+          select: { assignedRepId: true },
+        });
+        const dealRepId = lead.assignedRepId || existing.assignedRepId || leadConversation?.assignedRepId || req.user!.id;
+
+        if (!lead.assignedRepId && dealRepId) {
+          await prisma.lead.update({
+            where: { id },
+            data: { assignedRepId: dealRepId },
+          });
+        }
+
+        let client = await prisma.client.findUnique({ where: { phone: existing.phone } });
+        if (!client) {
+          client = await prisma.client.create({
+            data: {
+              businessName,
+              contactName,
+              phone: existing.phone,
+              email: existing.email || undefined,
+              state: existing.state || undefined,
+            },
+          });
+        } else if (BUSINESS_NAME_PLACEHOLDERS.has(String(client.businessName || '').trim().toLowerCase())) {
+          client = await prisma.client.update({
+            where: { id: client.id },
+            data: { businessName },
+          });
+        }
+
+        const newDeal = await prisma.deal.create({
+          data: {
+            clientId: client.id,
+            assignedRepId: dealRepId,
+            leadId: id,
+            stage: newDealStage,
+            stageLabel: STAGE_LABELS[newDealStage],
+            lastActivityAt: new Date(),
+          },
+        });
+        console.log('[LeadUpdate] Created deal', newDeal.id, 'for rep', newDeal.assignedRepId);
+      }
+    }
+
+    // Legacy: auto-move pipeline card (only when status explicitly changed)
+    if (status && status !== existing.status) {
       const targetStage = await prisma.pipelineStage.findFirst({
         where: { mappedStatus: status },
       });

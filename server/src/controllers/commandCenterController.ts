@@ -4,13 +4,17 @@ import prisma from '../config/database';
 import { DealStage, RenewalTaskStatus } from '@prisma/client';
 
 // Helper: rep filter
+function isAdminLike(user: AuthRequest['user']) {
+  return user?.role === 'ADMIN' || user?.role === 'MANAGER';
+}
+
 function repFilter(user: AuthRequest['user']) {
-  if (user?.role === 'ADMIN') return {};
+  if (isAdminLike(user)) return {};
   return { assignedRepId: user!.id };
 }
 
 function repFundingFilter(user: AuthRequest['user']) {
-  if (user?.role === 'ADMIN') return {};
+  if (isAdminLike(user)) return {};
   return { repId: user!.id };
 }
 
@@ -24,7 +28,7 @@ export class CommandCenterController {
     // Admin viewing specific rep
     const effectiveFilter: any = { ...filter };
     const effectiveFundingFilter: any = { ...fundingFilter };
-    if (req.user?.role === 'ADMIN' && repId) {
+    if (isAdminLike(req.user) && repId) {
       effectiveFilter.assignedRepId = repId as string;
       effectiveFundingFilter.repId = repId as string;
     }
@@ -58,7 +62,14 @@ export class CommandCenterController {
       // Pipeline deals (Approved + Committed)
       prisma.deal.findMany({
         where: { ...effectiveFilter, stage: { in: [DealStage.APPROVED_OFFERS, DealStage.COMMITTED_FUNDING] } },
-        select: { dealAmount: true, stage: true, nextActionDue: true, nextAction: true, lastActivityAt: true, offers: { select: { amount: true } } },
+        select: {
+          dealAmount: true,
+          stage: true,
+          nextActionDue: true,
+          nextAction: true,
+          lastActivityAt: true,
+          offers: { select: { amount: true } },
+        },
       }),
       // Nurture with prevOffer > 0 only (per spec: Pipeline Value includes nurture ONLY with prevOffer > 0)
       prisma.deal.findMany({
@@ -123,10 +134,12 @@ export class CommandCenterController {
         where: { ...effectiveFundingFilter, fundedDate: { gte: startOfMonth } },
       }),
       // Funded rep count MTD (distinct reps)
-      prisma.fundingEvent.groupBy({
-        by: ['repId'],
-        where: { ...effectiveFundingFilter, fundedDate: { gte: startOfMonth } },
-      }).then((r) => r.length),
+      prisma.fundingEvent
+        .groupBy({
+          by: ['repId'],
+          where: { ...effectiveFundingFilter, fundedDate: { gte: startOfMonth } },
+        })
+        .then((r) => r.length),
       // Future 7d value
       prisma.deal.aggregate({
         where: {
@@ -213,7 +226,7 @@ export class CommandCenterController {
 
     // Get goal for progress
     let monthlyGoal = 0;
-    if (req.user?.role === 'ADMIN' && !repId) {
+    if (isAdminLike(req.user) && !repId) {
       // Team goal
       const goal = await prisma.goal.findUnique({
         where: { entityType_entityId: { entityType: 'team', entityId: 'team' } },
@@ -233,7 +246,14 @@ export class CommandCenterController {
       prisma.deal.count({
         where: {
           ...effectiveFilter,
-          stage: { in: [DealStage.SUBMITTED_IN_REVIEW, DealStage.APPROVED_OFFERS, DealStage.COMMITTED_FUNDING, DealStage.FUNDED] },
+          stage: {
+            in: [
+              DealStage.SUBMITTED_IN_REVIEW,
+              DealStage.APPROVED_OFFERS,
+              DealStage.COMMITTED_FUNDING,
+              DealStage.FUNDED,
+            ],
+          },
         },
       }),
       prisma.deal.count({
@@ -279,7 +299,7 @@ export class CommandCenterController {
     });
   }
 
-  // GET /api/command-center/operator-queue - Operator Queue
+  // GET /api/command-center/operator-queue - Top 5 to Close Today (DPS scored)
   static async getOperatorQueue(req: AuthRequest, res: Response) {
     const filter = repFilter(req.user);
     const { repId } = req.query;
@@ -287,18 +307,11 @@ export class CommandCenterController {
     const where: any = {
       ...filter,
       stage: {
-        in: [
-          DealStage.APPROVED_OFFERS,
-          DealStage.COMMITTED_FUNDING,
-          DealStage.QUALIFIED,
-          DealStage.SUBMITTED_IN_REVIEW,
-          DealStage.ENGAGED_INTERESTED,
-          DealStage.NEW_LEAD,
-        ],
+        in: [DealStage.APPROVED_OFFERS, DealStage.COMMITTED_FUNDING],
       },
     };
 
-    if (req.user?.role === 'ADMIN' && repId) {
+    if (isAdminLike(req.user) && repId) {
       where.assignedRepId = repId as string;
     }
 
@@ -307,31 +320,85 @@ export class CommandCenterController {
       include: {
         client: true,
         assignedRep: { select: { id: true, firstName: true, lastName: true, initials: true, avatarColor: true } },
-        offers: { take: 1, orderBy: { createdAt: 'desc' } },
+        offers: { orderBy: { createdAt: 'desc' } },
       },
-      orderBy: [{ dealAmount: 'desc' }],
-      take: 20,
+      take: 100,
     });
 
-    // Determine primary action for each deal
+    const now = Date.now();
+    const fortyEightHours = 48 * 60 * 60 * 1000;
+    const today = new Date().toDateString();
+
+    // Compute Deal Priority Score (DPS) for each deal
     const enriched = deals.map((deal) => {
-      let primaryAction = 'Follow Up';
-      if (deal.stage === DealStage.APPROVED_OFFERS) primaryAction = 'Call Now';
-      else if (deal.stage === DealStage.COMMITTED_FUNDING) primaryAction = 'Request Docs';
-      else if (deal.stage === DealStage.NEW_LEAD || deal.stage === DealStage.ENGAGED_INTERESTED)
-        primaryAction = 'Follow Up';
-      else if (deal.stage === DealStage.QUALIFIED) primaryAction = 'Send Offer';
-      else if (deal.stage === DealStage.SUBMITTED_IN_REVIEW) primaryAction = 'Follow Up';
+      let dps = 0;
+      const reasons: string[] = [];
+
+      // +50: Has a lender offer
+      if (deal.offers && deal.offers.length > 0) {
+        dps += 50;
+        reasons.push('Has offer');
+      }
+
+      // +30: Offer expires soon (<=3 days)
+      if (deal.offers?.some((o) => o.expiryDays && o.expiryDays <= 3)) {
+        dps += 30;
+        const minExp = Math.min(...deal.offers.filter((o) => o.expiryDays).map((o) => o.expiryDays!));
+        reasons.push(`Expiring in ${minExp}d`);
+      }
+
+      // +20: Client recently engaged (last reply within 48h)
+      if (deal.lastReplyAt && now - new Date(deal.lastReplyAt).getTime() < fortyEightHours) {
+        dps += 20;
+        reasons.push('Client replied today');
+      }
+
+      // -10: Already touched today
+      if (deal.lastActivityAt && new Date(deal.lastActivityAt).toDateString() === today) {
+        dps -= 10;
+        reasons.push('Touched today');
+      }
+
+      // -40: Stale — no activity 5+ days
+      if ((deal.staleDays || 0) >= 5) {
+        dps -= 40;
+        reasons.push(`${deal.staleDays}d stale`);
+      }
+
+      const suggestNurture = (deal.staleDays || 0) >= 5;
+      let primaryAction = suggestNurture
+        ? 'Suggest Nurture'
+        : deal.stage === DealStage.APPROVED_OFFERS
+          ? dps >= 60
+            ? 'CLOSE NOW'
+            : 'Call Now'
+          : 'Request Docs';
+
+      if (suggestNurture) {
+        reasons.push('Stale 5+ days — suggest nurture');
+      }
 
       return {
         ...deal,
+        priorityScore: dps,
+        scoreColor: dps >= 60 ? 'green' : dps >= 35 ? 'amber' : 'red',
+        scoreReason: reasons.join(' · ') || 'No signals',
         primaryAction,
+        suggestNurture,
         isHot: computeIsHot(deal),
         stageLabel: STAGE_LABELS[deal.stage],
       };
     });
 
-    res.json(enriched);
+    const bestAmount = (d: any) => {
+      const best = (d.offers || []).reduce((acc: any, o: any) => (!acc || o.amount > acc.amount ? o : acc), null);
+      return best?.amount || d.dealAmount || 0;
+    };
+
+    // Sort by DPS descending, then by expected close value descending
+    enriched.sort((a, b) => b.priorityScore - a.priorityScore || bestAmount(b) - bestAmount(a));
+
+    res.json(enriched.slice(0, 5));
   }
 
   // GET /api/command-center/hot-leads
@@ -340,7 +407,7 @@ export class CommandCenterController {
     const { repId } = req.query;
 
     const where: any = { ...filter, stage: { notIn: [DealStage.FUNDED, DealStage.CLOSED, DealStage.NURTURE] } };
-    if (req.user?.role === 'ADMIN' && repId) where.assignedRepId = repId as string;
+    if (isAdminLike(req.user) && repId) where.assignedRepId = repId as string;
 
     const deals = await prisma.deal.findMany({
       where,
@@ -358,32 +425,42 @@ export class CommandCenterController {
   // GET /api/command-center/stale-deals
   static async getStaleDeals(req: AuthRequest, res: Response) {
     const filter = repFilter(req.user);
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
+    // Stale = 5+ days without activity (per Item 12 spec)
     const deals = await prisma.deal.findMany({
       where: {
         ...filter,
         stage: { notIn: [DealStage.FUNDED, DealStage.CLOSED] },
-        lastActivityAt: { lt: twentyFourHoursAgo },
+        staleDays: { gte: 5 },
       },
       include: {
         client: true,
         assignedRep: { select: { id: true, firstName: true, lastName: true, initials: true, avatarColor: true } },
       },
-      orderBy: { lastActivityAt: 'asc' },
+      orderBy: { staleDays: 'desc' },
       take: 20,
     });
 
-    res.json(deals.map((d) => ({ ...d, stageLabel: STAGE_LABELS[d.stage] })));
+    res.json(
+      deals.map((d) => ({
+        ...d,
+        stageLabel: STAGE_LABELS[d.stage],
+        suggestNurture: (d.staleDays || 0) >= 5,
+      })),
+    );
   }
 
   // GET /api/command-center/overdue-tasks
   static async getOverdueTasks(req: AuthRequest, res: Response) {
     const filter = repFilter(req.user);
+    const { repId } = req.query;
     const now = new Date();
 
+    const where: any = { ...filter, stage: { notIn: [DealStage.FUNDED, DealStage.CLOSED] }, nextActionDue: { lt: now } };
+    if (isAdminLike(req.user) && repId) where.assignedRepId = repId as string;
+
     const deals = await prisma.deal.findMany({
-      where: { ...filter, stage: { notIn: [DealStage.FUNDED, DealStage.CLOSED] }, nextActionDue: { lt: now } },
+      where,
       include: {
         client: true,
         assignedRep: { select: { id: true, firstName: true, lastName: true, initials: true, avatarColor: true } },
@@ -397,7 +474,7 @@ export class CommandCenterController {
 
   // GET /api/command-center/intelligence - Admin Intelligence Zone
   static async getIntelligence(req: AuthRequest, res: Response) {
-    if (req.user?.role !== 'ADMIN') {
+    if (!isAdminLike(req.user)) {
       return res.status(403).json({ error: 'Admin only' });
     }
 
@@ -567,7 +644,13 @@ export class CommandCenterController {
             const best = (d.offers || []).reduce((b: any, o: any) => (!b || o.amount > b.amount ? o : b), null);
             return sum + (best?.amount || d.dealAmount || 0);
           }, 0);
-          return { stage, label: STAGE_LABELS[stage as keyof typeof STAGE_LABELS], count: deals.length, volume, hideDollar: false };
+          return {
+            stage,
+            label: STAGE_LABELS[stage as keyof typeof STAGE_LABELS],
+            count: deals.length,
+            volume,
+            hideDollar: false,
+          };
         }
         // Nurture: use prevOffer with dealAmount fallback
         if (stage === DealStage.NURTURE) {
@@ -576,7 +659,13 @@ export class CommandCenterController {
             select: { prevOffer: true, dealAmount: true },
           });
           const volume = deals.reduce((sum, d) => sum + (d.prevOffer || d.dealAmount || 0), 0);
-          return { stage, label: STAGE_LABELS[stage as keyof typeof STAGE_LABELS], count: deals.length, volume, hideDollar: false };
+          return {
+            stage,
+            label: STAGE_LABELS[stage as keyof typeof STAGE_LABELS],
+            count: deals.length,
+            volume,
+            hideDollar: false,
+          };
         }
         // All other stages: use dealAmount aggregate
         const [count, sumResult] = await Promise.all([
@@ -679,10 +768,12 @@ export class CommandCenterController {
               stage: { notIn: [DealStage.FUNDED, DealStage.CLOSED] },
             },
           }),
-          prisma.dealEvent.groupBy({
-            by: ['dealId'],
-            where: { repId: rep.id, createdAt: { gte: today } },
-          }).then((r) => r.length),
+          prisma.dealEvent
+            .groupBy({
+              by: ['dealId'],
+              where: { repId: rep.id, createdAt: { gte: today } },
+            })
+            .then((r) => r.length),
         ]);
 
         const totalAssigned = assignedDeals;
@@ -711,7 +802,7 @@ export class CommandCenterController {
     const filter: any = {};
 
     if (repId) filter.repId = repId as string;
-    else if (req.user?.role !== 'ADMIN') filter.repId = req.user!.id;
+    else if (!isAdminLike(req.user)) filter.repId = req.user!.id;
 
     if (period === '30d') {
       filter.fundedDate = { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
@@ -744,10 +835,10 @@ export class CommandCenterController {
 
     // If admin, also get rep breakdown
     let repBreakdown: any[] = [];
-    if (req.user?.role === 'ADMIN' && !repId) {
+    if (isAdminLike(req.user) && !repId) {
       const reps = await prisma.user.findMany({
         where: { isActive: true },
-        select: { id: true, firstName: true, lastName: true, initials: true },
+        select: { id: true, firstName: true, lastName: true, initials: true, avatarColor: true },
       });
 
       repBreakdown = await Promise.all(
@@ -772,6 +863,7 @@ export class CommandCenterController {
             id: rep.id,
             name: `${rep.firstName} ${rep.lastName}`,
             initials: rep.initials,
+            avatarColor: rep.avatarColor,
             funded: repTotal,
             mix: Object.entries(repMix).map(([type, amount]) => ({
               type,
@@ -794,9 +886,9 @@ export class CommandCenterController {
   static async getActivityFeed(req: AuthRequest, res: Response) {
     const filter: any = {};
     const { repId } = req.query;
-    if (req.user?.role === 'ADMIN' && repId) {
+    if (isAdminLike(req.user) && repId) {
       filter.repId = repId as string;
-    } else if (req.user?.role !== 'ADMIN') {
+    } else if (!isAdminLike(req.user)) {
       filter.repId = req.user!.id;
     }
 
@@ -821,7 +913,7 @@ export class CommandCenterController {
 
     // Get user's assigned numbers
     let numberFilter: any = {};
-    if (req.user?.role !== 'ADMIN') {
+    if (!isAdminLike(req.user)) {
       const assignments = await prisma.numberAssignment.findMany({
         where: { userId: req.user!.id, isActive: true },
         select: { phoneNumber: { select: { phoneNumber: true } } },
