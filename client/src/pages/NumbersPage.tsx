@@ -1293,6 +1293,7 @@ function AssignModal({ numberId, onClose }: { numberId: string; onClose: () => v
       toast.success('Number assigned');
       onClose();
     },
+    onError: (err: any) => toast.error(err.response?.data?.error || 'Assignment failed'),
   });
 
   const users = usersData?.users || [];

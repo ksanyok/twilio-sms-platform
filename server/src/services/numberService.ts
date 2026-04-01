@@ -394,30 +394,53 @@ export class NumberService {
    * Assign numbers to a rep for the day
    */
   static async assignNumbersToRep(repId: string, phoneNumberIds: string[]): Promise<void> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(todayStart.getDate() + 1);
 
-    // Deactivate old assignments
-    await prisma.numberAssignment.updateMany({
-      where: {
-        userId: repId,
-        isActive: true,
-      },
-      data: { isActive: false },
+    const uniquePhoneNumberIds = Array.from(new Set(phoneNumberIds));
+
+    await prisma.$transaction(async (tx) => {
+      // 1) Ensure selected rep has a clean active slate.
+      await tx.numberAssignment.updateMany({
+        where: {
+          userId: repId,
+          isActive: true,
+        },
+        data: { isActive: false },
+      });
+
+      // 2) Enforce one-owner semantics for selected numbers.
+      await tx.numberAssignment.updateMany({
+        where: {
+          phoneNumberId: { in: uniquePhoneNumberIds },
+          isActive: true,
+        },
+        data: { isActive: false },
+      });
+
+      // 3) Remove today's rows for this rep/these numbers to avoid unique key collisions
+      // when re-assigning within the same business day.
+      await tx.numberAssignment.deleteMany({
+        where: {
+          assignedDate: { gte: todayStart, lt: tomorrowStart },
+          OR: [{ userId: repId }, { phoneNumberId: { in: uniquePhoneNumberIds } }],
+        },
+      });
+
+      // 4) Create today's active assignments.
+      await tx.numberAssignment.createMany({
+        data: uniquePhoneNumberIds.map((phoneNumberId) => ({
+          userId: repId,
+          phoneNumberId,
+          assignedDate: todayStart,
+          isActive: true,
+        })),
+      });
     });
 
-    // Create new assignments
-    await prisma.numberAssignment.createMany({
-      data: phoneNumberIds.map((phoneNumberId) => ({
-        userId: repId,
-        phoneNumberId,
-        assignedDate: today,
-        isActive: true,
-      })),
-      skipDuplicates: true,
-    });
-
-    logger.info(`Assigned ${phoneNumberIds.length} numbers to rep ${repId}`);
+    logger.info(`Assigned ${uniquePhoneNumberIds.length} numbers to rep ${repId}`);
   }
 
   /**
@@ -425,6 +448,8 @@ export class NumberService {
    */
   static async getNumberHealthOverview() {
     const todayStart = this.getBusinessDayStart();
+    const assignmentDayStart = new Date();
+    assignmentDayStart.setHours(0, 0, 0, 0);
 
     // Get actual send-attempt counts (exclude queued/sending to avoid inflated "Sent Today")
     const sentTodayCounts = await prisma.message.groupBy({
@@ -467,10 +492,11 @@ export class NumberService {
         createdAt: true,
         lastSentAt: true,
         assignments: {
-          where: { isActive: true },
+          where: { isActive: true, assignedDate: { gte: assignmentDayStart } },
           select: {
             user: { select: { id: true, firstName: true, lastName: true } },
           },
+          orderBy: { assignedDate: 'desc' },
           take: 1,
         },
       },
