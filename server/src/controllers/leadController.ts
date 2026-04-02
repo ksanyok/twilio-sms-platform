@@ -31,6 +31,7 @@ const STAGE_LABELS: Record<DealStage, string> = {
 };
 
 const BUSINESS_NAME_PLACEHOLDERS = new Set(['n/a', 'na', 'none', 'unknown', 'unknown business', 'null', '-']);
+const LEAD_VARCHAR_MAX = 191;
 
 function normalizeBusinessName(rawCompany: string | null | undefined, fallbackName: string): string {
   const fallback = fallbackName.trim() || 'Unknown Business';
@@ -38,6 +39,17 @@ function normalizeBusinessName(rawCompany: string | null | undefined, fallbackNa
   if (!company) return fallback;
   if (BUSINESS_NAME_PLACEHOLDERS.has(company.toLowerCase())) return fallback;
   return company;
+}
+
+function normalizeOptionalVarchar(value: unknown, maxLength = LEAD_VARCHAR_MAX): string | null {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim();
+  if (!normalized) return null;
+  return normalized.slice(0, maxLength);
+}
+
+function normalizeRequiredVarchar(value: unknown, fallback: string, maxLength = LEAD_VARCHAR_MAX): string {
+  return normalizeOptionalVarchar(value, maxLength) ?? fallback;
 }
 
 export class LeadController {
@@ -370,7 +382,8 @@ export class LeadController {
           where: { leadId: id },
           select: { assignedRepId: true },
         });
-        const dealRepId = lead.assignedRepId || existing.assignedRepId || leadConversation?.assignedRepId || req.user!.id;
+        const dealRepId =
+          lead.assignedRepId || existing.assignedRepId || leadConversation?.assignedRepId || req.user!.id;
 
         if (!lead.assignedRepId && dealRepId) {
           await prisma.lead.update({
@@ -390,7 +403,13 @@ export class LeadController {
               state: existing.state || undefined,
             },
           });
-        } else if (BUSINESS_NAME_PLACEHOLDERS.has(String(client.businessName || '').trim().toLowerCase())) {
+        } else if (
+          BUSINESS_NAME_PLACEHOLDERS.has(
+            String(client.businessName || '')
+              .trim()
+              .toLowerCase(),
+          )
+        ) {
           client = await prisma.client.update({
             where: { id: client.id },
             data: { businessName },
@@ -445,6 +464,7 @@ export class LeadController {
       columns: true,
       skip_empty_lines: true,
       trim: true,
+      bom: true,
     });
 
     let imported = 0;
@@ -483,17 +503,23 @@ export class LeadController {
         }
 
         const e164Phone = phone.startsWith('1') ? `+${phone}` : `+1${phone}`;
-        const firstName = record.firstName || record.first_name || record.FirstName || record.FIRST_NAME || 'Unknown';
-        const lastName = record.lastName || record.last_name || record.LastName || record.LAST_NAME || '';
+        const firstName = normalizeRequiredVarchar(
+          record.firstName || record.first_name || record.FirstName || record.FIRST_NAME,
+          'Unknown',
+        );
+        const lastName = normalizeOptionalVarchar(
+          record.lastName || record.last_name || record.LastName || record.LAST_NAME,
+        );
+        const source = normalizeRequiredVarchar(record.source || record.Source, 'csv_import');
 
         leadsToUpsert.push({
           phone: e164Phone,
           firstName,
-          lastName,
-          email: record.email || record.Email || record.EMAIL || null,
-          company: record.company || record.Company || record.COMPANY || null,
-          state: record.state || record.State || record.STATE || null,
-          source: record.source || record.Source || 'csv_import',
+          lastName: lastName || '',
+          email: normalizeOptionalVarchar(record.email || record.Email || record.EMAIL),
+          company: normalizeOptionalVarchar(record.company || record.Company || record.COMPANY),
+          state: normalizeOptionalVarchar(record.state || record.State || record.STATE),
+          source,
         });
       }
 
@@ -582,6 +608,7 @@ export class LeadController {
       columns: true,
       skip_empty_lines: true,
       trim: true,
+      bom: true,
     });
 
     if (records.length === 0) {
@@ -664,6 +691,7 @@ export class LeadController {
       columns: true,
       skip_empty_lines: true,
       trim: true,
+      bom: true,
     });
 
     let imported = 0;
@@ -703,16 +731,17 @@ export class LeadController {
         // Combine city+state into state field (Lead model has no city column)
         const city = mapping.city ? record[mapping.city] || '' : '';
         const state = mapping.state ? record[mapping.state] || '' : '';
-        const combinedState = [city, state].filter(Boolean).join(', ') || null;
+        const combinedState = normalizeOptionalVarchar([city, state].filter(Boolean).join(', '));
+        const source = normalizeRequiredVarchar(mapping.source ? record[mapping.source] : null, 'csv_import');
 
         leadsToUpsert.push({
           phone: e164Phone,
-          firstName: mapping.firstName ? record[mapping.firstName] || 'Unknown' : 'Unknown',
-          lastName: mapping.lastName ? record[mapping.lastName] || '' : '',
-          email: mapping.email ? record[mapping.email] || null : null,
-          company: mapping.company ? record[mapping.company] || null : null,
+          firstName: normalizeRequiredVarchar(mapping.firstName ? record[mapping.firstName] : null, 'Unknown'),
+          lastName: normalizeOptionalVarchar(mapping.lastName ? record[mapping.lastName] : null) || '',
+          email: normalizeOptionalVarchar(mapping.email ? record[mapping.email] : null),
+          company: normalizeOptionalVarchar(mapping.company ? record[mapping.company] : null),
           state: combinedState,
-          source: mapping.source ? record[mapping.source] || 'csv_import' : 'csv_import',
+          source,
         });
       }
 

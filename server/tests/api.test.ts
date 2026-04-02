@@ -13,6 +13,8 @@ let testLeadId: string;
 let testCampaignId: string;
 let testStageId: string;
 let testUserId: string | undefined;
+let importedMappedLeadId: string | undefined;
+const importMappedTestPhone = '+12025550991';
 
 describe('API Routes', () => {
   beforeAll(async () => {
@@ -47,6 +49,13 @@ describe('API Routes', () => {
       await prisma.pipelineCard.deleteMany({ where: { leadId: testLeadId } });
       await prisma.conversation.deleteMany({ where: { leadId: testLeadId } });
       await prisma.lead.deleteMany({ where: { id: testLeadId } });
+    }
+    if (importedMappedLeadId) {
+      await prisma.leadTag.deleteMany({ where: { leadId: importedMappedLeadId } });
+      await prisma.campaignLead.deleteMany({ where: { leadId: importedMappedLeadId } });
+      await prisma.pipelineCard.deleteMany({ where: { leadId: importedMappedLeadId } });
+      await prisma.conversation.deleteMany({ where: { leadId: importedMappedLeadId } });
+      await prisma.lead.deleteMany({ where: { id: importedMappedLeadId } });
     }
     if (testCampaignId) {
       await prisma.campaignLead.deleteMany({ where: { campaignId: testCampaignId } });
@@ -100,6 +109,42 @@ describe('API Routes', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.lead.status).toBe('CONTACTED');
+    });
+
+    it('POST /api/leads/import-mapped — handles long company values without 500', async () => {
+      const existing = await prisma.lead.findUnique({
+        where: { phone: importMappedTestPhone },
+        select: { id: true },
+      });
+      if (existing) {
+        await prisma.leadTag.deleteMany({ where: { leadId: existing.id } });
+        await prisma.campaignLead.deleteMany({ where: { leadId: existing.id } });
+        await prisma.pipelineCard.deleteMany({ where: { leadId: existing.id } });
+        await prisma.conversation.deleteMany({ where: { leadId: existing.id } });
+        await prisma.lead.deleteMany({ where: { id: existing.id } });
+      }
+
+      const csv = `phone,company,firstName,lastName\n${importMappedTestPhone},${'A'.repeat(260)},Import,Test`;
+      const mapping = { phone: 'phone', company: 'company', firstName: 'firstName', lastName: 'lastName' };
+
+      const res = await request(app)
+        .post('/api/leads/import-mapped')
+        .set('Authorization', `Bearer ${token}`)
+        .field('mapping', JSON.stringify(mapping))
+        .attach('file', Buffer.from(csv), 'long-company.csv');
+
+      expect(res.status).toBe(200);
+      expect(res.body.imported).toBeGreaterThanOrEqual(1);
+
+      const imported = await prisma.lead.findUnique({
+        where: { phone: importMappedTestPhone },
+        select: { id: true, company: true },
+      });
+
+      expect(imported).toBeTruthy();
+      expect(imported!.company).toBeTruthy();
+      expect(imported!.company!.length).toBeLessThanOrEqual(191);
+      importedMappedLeadId = imported!.id;
     });
   });
 
